@@ -21,7 +21,8 @@ export interface LogEntry {
   id: string;
   timestamp: string;
   agentId: number;
-  cycleId: number; // Added for grouping
+  cycleId: number; 
+  phaseId?: number; // Added to override default agent-to-phase mapping
   level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS';
   message: string;
 }

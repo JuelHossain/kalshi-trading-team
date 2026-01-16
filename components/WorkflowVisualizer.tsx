@@ -8,33 +8,57 @@ interface WorkflowVisualizerProps {
   completedAgents: number[];
 }
 
-// Fluid Topology - Coordinates in Percentages (0-100)
+// Funnel Topology: Wide Left -> Narrow Center -> Execution Right
 const NODES = [
-  { id: 1, x: 10, y: 50 },  // Orchestrator (Center Left)
-  { id: 2, x: 25, y: 20 },  // Scout (Top Left)
-  { id: 3, x: 25, y: 80 },  // Interceptor (Bottom Left)
-  { id: 4, x: 45, y: 35 },  // Analyst (Mid Top)
-  { id: 5, x: 45, y: 65 },  // Sim Scientist (Mid Bot)
-  { id: 6, x: 65, y: 20 },  // Auditor
-  { id: 7, x: 65, y: 80 },  // Sniper
-  { id: 8, x: 80, y: 50 },  // Executioner (Center Right)
-  { id: 9, x: 92, y: 20 },  // Accountant
-  { id: 10, x: 92, y: 80 }, // Historian
-  { id: 11, x: 50, y: 95 }, // Mechanic (Bottom Center)
-  { id: 12, x: 50, y: 5 },  // Visualist (Top Center)
-  { id: 13, x: 50, y: 50 }, // The Fixer (Dead Center, usually hidden)
+  { id: 1, x: 10, y: 50 },  // Orchestrator (Far Left Start)
+  { id: 11, x: 10, y: 85 }, // Mechanic (Below Start)
+  
+  // Phase 2: Wide Net (Scout & Interceptor)
+  { id: 2, x: 25, y: 25 },  // Scout (Top Left)
+  { id: 3, x: 25, y: 75 },  // Interceptor (Bottom Left)
+  
+  // Phase 3: The Filter (Analyst) - Central Hub
+  { id: 4, x: 45, y: 50 },  // Analyst (Center)
+  { id: 5, x: 45, y: 20 },  // Sim Scientist (Satellite Top - Standby)
+  { id: 6, x: 45, y: 80 },  // Auditor (Satellite Bottom - Standby)
+
+  // Phase 4: Sequential Execution Loop
+  { id: 8, x: 70, y: 50 },  // Executioner (Center Right Hub)
+  { id: 9, x: 70, y: 20 },  // Accountant (Risk Check - Top)
+  { id: 7, x: 70, y: 80 },  // Sniper (Order Book - Bottom)
+  
+  // End State
+  { id: 10, x: 90, y: 50 }, // Historian (Far Right End)
+  
+  { id: 12, x: 50, y: 5 },  // Visualist (Header)
+  { id: 13, x: 50, y: 50 }, // Fixer (Hidden Layer)
 ];
 
+// Connections reflecting the "Funnel" Logic
 const CONNECTIONS = [
-    { from: 1, to: 2 }, { from: 1, to: 3 },
-    { from: 2, to: 4 }, { from: 3, to: 5 },
-    { from: 4, to: 6 }, { from: 5, to: 6 }, // Converge on Auditor
-    { from: 6, to: 7 }, // Auditor -> Sniper
-    { from: 7, to: 8 }, // Sniper -> Executioner
-    { from: 8, to: 9 }, { from: 8, to: 10 },
-    { from: 1, to: 11 }, { from: 1, to: 12 },
-    // Fixer connects to everything centrally
-    { from: 13, to: 4 }, { from: 13, to: 5 }, { from: 13, to: 8 }
+    // Phase 1 -> 2
+    { from: 1, to: 11 }, // Init Check
+    { from: 1, to: 2 },  // Start Scout
+    { from: 1, to: 3 },  // Start Interceptor
+    
+    // Phase 2 -> 3 (Convergence)
+    { from: 2, to: 4 },  // Scout data to Analyst
+    { from: 3, to: 4 },  // Odds data to Analyst
+    
+    // Optional Standby Paths (Visual completeness)
+    { from: 4, to: 5 }, { from: 5, to: 4 },
+    { from: 4, to: 6 }, { from: 6, to: 4 },
+
+    // Phase 3 -> 4 (Handoff to Execution)
+    { from: 4, to: 8 }, 
+    
+    // Phase 4: The Loop (Star Topology around Executioner)
+    { from: 8, to: 9 }, { from: 9, to: 8 }, // Balance Check
+    { from: 8, to: 7 }, { from: 7, to: 8 }, // Depth Check
+    { from: 8, to: 10 }, // Log Result
+
+    // Error Handling
+    { from: 13, to: 4 }, { from: 13, to: 8 }, { from: 13, to: 1 }
 ];
 
 const WorkflowVisualizer: React.FC<WorkflowVisualizerProps> = ({ agents, activeAgentId, completedAgents }) => {
@@ -66,7 +90,7 @@ const WorkflowVisualizer: React.FC<WorkflowVisualizerProps> = ({ agents, activeA
 
             // Bezier Control Point (Simple curve effect)
             const cpX = (start.x + end.x) / 2;
-            const cpY = (start.y + end.y) / 2 + (i % 2 === 0 ? 10 : -10); // Alternating curve direction
+            const cpY = (start.y + end.y) / 2 + (i % 2 === 0 ? 15 : -15); // Alternating curve direction
 
             return (
                 <g key={`link-${i}`}>

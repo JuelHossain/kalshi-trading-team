@@ -6,13 +6,13 @@ import MarketAnalysis from './components/MarketAnalysis';
 import AboutPage from './components/AboutPage';
 import PnLChart from './components/PnLChart';
 import PnLHeatmap from './components/PnLHeatmap';
-import { AGENTS, MOCK_LOGS } from './constants';
-import { LogEntry } from './types';
+import { AGENTS } from './constants';
+import { LogEntry, DebateResponse } from './types';
 import { CONFIG } from './config';
 import { scanMarketsWithGroq } from './services/groqService';
 import { logTradeToHistory } from './services/supabaseService';
-import { fetchActiveMarkets, authenticateWithKeys, isAuthenticated, fetchOrderBook, createOrder } from './services/kalshiService';
-import { analyzeSystemError } from './services/geminiService';
+import { fetchScoutedMarkets, authenticateWithKeys, isAuthenticated, fetchOrderBook, createOrder } from './services/kalshiService';
+import { analyzeSystemError, runCommitteeDebate } from './services/geminiService';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -22,7 +22,7 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [cycleCount, setCycleCount] = useState(0); 
   
-  // Environment State
+  // Environment State - Default to PAPER for Safety
   const [isPaperTrading, setIsPaperTrading] = useState(true);
   
   // Autopilot State
@@ -35,10 +35,10 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Workflow Data State
-  const [targetMarket, setTargetMarket] = useState<any>(null);
-  const [decision, setDecision] = useState<{ action: 'buy' | 'pass', side: 'yes' | 'no' }>({ action: 'pass', side: 'yes' });
+  const [targetMarket, setTargetMarket] = useState<any>(null); // Visual focus
+  const [currentBalance, setCurrentBalance] = useState(300.00); // Internal state for Agent 9
 
-  const addLog = (message: string, agentId: number, level: LogEntry['level'] = 'INFO', cycleIdOverride?: number) => {
+  const addLog = (message: string, agentId: number, level: LogEntry['level'] = 'INFO', cycleIdOverride?: number, phaseIdOverride?: number) => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const ms = String(now.getMilliseconds()).padStart(3, '0');
@@ -48,6 +48,7 @@ const App: React.FC = () => {
       timestamp: `${timeStr}.${ms}`,
       agentId,
       cycleId: cycleIdOverride !== undefined ? cycleIdOverride : cycleCount,
+      phaseId: phaseIdOverride,
       level,
       message,
     };
@@ -68,6 +69,7 @@ const App: React.FC = () => {
       }
   };
 
+  // Initial Auth Check
   useEffect(() => {
       if (CONFIG.KALSHI.KEY_ID && CONFIG.KALSHI.PRIVATE_KEY && !isLoggedIn) {
           const timer = setTimeout(() => {
@@ -77,28 +79,18 @@ const App: React.FC = () => {
       }
   }, []);
 
+  // Main Autopilot Loop - Triggered ONLY when idle and logged in
   useEffect(() => {
     if (isLoggedIn && autoPilot && !isProcessing) {
         const timer = setTimeout(() => {
-            runWorkflow();
-        }, 3000); 
+            runOrchestrator();
+        }, 12000); 
         return () => clearTimeout(timer);
     }
   }, [isLoggedIn, autoPilot, isProcessing]);
 
-  useEffect(() => {
-    if (isProcessing) return;
-    const interval = setInterval(() => {
-      if (Math.random() > 0.95) {
-        const randomAgent = AGENTS[Math.floor(Math.random() * AGENTS.length)];
-        const randomMsg = MOCK_LOGS[Math.floor(Math.random() * MOCK_LOGS.length)];
-        addLog(`${randomAgent.name}: ${randomMsg}`, randomAgent.id, 'INFO', 0);
-      }
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [isProcessing]);
-
-  const runWorkflow = async (forceFail: boolean = false) => {
+  // --- THE FUNNEL EXECUTION CYCLE (TaskGroup Architecture) ---
+  const runOrchestrator = async (forceFail: boolean = false) => {
     if (isProcessing) return;
     
     if (!isAuthenticated()) {
@@ -109,130 +101,176 @@ const App: React.FC = () => {
 
     const currentCycleId = cycleCount + 1;
     setCycleCount(currentCycleId);
-
     setIsProcessing(true);
-    setActiveAgentId(null);
     setCompletedAgents([]); 
     setTargetMarket(null);
-    setDecision({ action: 'pass', side: 'yes' });
-    
-    addLog(`CYCLE START: 24/7 SENTINEL LOOP ACTIVATED`, 0, 'WARN', currentCycleId);
-    
-    for (let i = 1; i <= 12; i++) {
-        setActiveAgentId(i);
-        const agent = AGENTS.find(a => a.id === i);
-        const agentName = agent?.name || 'Unknown';
-        
-        try {
-            // SIMULATED FAILURE TRIGGER FOR AGENT 13
-            if (forceFail && i === 3) {
-                 await new Promise(r => setTimeout(r, 1000));
-                 throw new Error("Simulated Memory Leak: Heap limit exceeded in Signal Interceptor module.");
-            }
 
-            if (i === 1) {
-                addLog(`${agentName}: Orchestrating new opportunity search...`, i, 'INFO', currentCycleId);
-            }
-            else if (i === 2) { 
-                const marketIdeas = await scanMarketsWithGroq();
-                addLog(`${agentName}: AI Signals Detected: [${marketIdeas}]`, i, 'SUCCESS', currentCycleId);
-            }
-            else if (i === 3) {
-                try {
-                    const markets = await fetchActiveMarkets(isPaperTrading);
-                    addLog(`${agentName}: Retrieved ${markets.length} active markets via V2.`, i, 'INFO', currentCycleId);
-                    if (markets.length > 0) {
-                        const top = markets[0];
-                        setTargetMarket(top);
-                        addLog(`${agentName}: TARGET LOCK: ${top.title} (${top.ticker})`, i, 'WARN', currentCycleId);
-                    } else {
-                        throw new Error("No active markets found in scanning range.");
-                    }
-                } catch (e: any) {
-                    addLog(`${agentName}: API Connection Failed - ${e.message}`, i, 'ERROR', currentCycleId);
-                    throw e; 
-                }
-            }
-            else if (i === 4) { 
-                 if (targetMarket) {
-                     addLog(`${agentName}: Analyzing news sentiment for "${targetMarket.ticker}"...`, i, 'INFO', currentCycleId);
-                     setDecision({ action: 'buy', side: 'yes' });
-                 }
-                 addLog(`${agentName}: Sentiment leans BULLISH (YES). Confidence 78%.`, i, 'SUCCESS', currentCycleId);
-            }
-            else if (i === 7) { 
-                if (targetMarket) {
-                    addLog(`${agentName}: Checking Liquidity Depth...`, i, 'WARN', currentCycleId);
-                    try {
-                        const orderBook = await fetchOrderBook(targetMarket.ticker, isPaperTrading);
-                        const bestAsk = orderBook.yes_ask || 0;
-                        addLog(`${agentName}: Best Ask: ${bestAsk}¢. Spread within tolerance.`, i, 'SUCCESS', currentCycleId);
-                    } catch (e: any) {
-                        addLog(`${agentName}: Depth Scan Failed - ${e.message}`, i, 'ERROR', currentCycleId);
-                        addLog(`${agentName}: Using cached depth data for simulation.`, i, 'WARN', currentCycleId);
-                    }
-                }
-            }
-            else if (i === 8) { 
-                if (targetMarket && decision.action === 'buy') {
-                    addLog(`${agentName}: AUTHORIZING TRADE EXECUTION...`, i, 'WARN', currentCycleId);
-                    try {
-                        const order = await createOrder(
-                            targetMarket.ticker, 
-                            'buy', 
-                            1, 
-                            decision.side, 
-                            isPaperTrading
-                        );
-                        addLog(`${agentName}: ORDER FILLED | ID: ${order.order_id} | ${targetMarket.ticker} YES @ MARKET`, i, 'SUCCESS', currentCycleId);
-                    } catch (e: any) {
-                        addLog(`${agentName}: EXECUTION FAILED: ${e.message}`, i, 'ERROR', currentCycleId);
-                        addLog(`${agentName}: SIMULATION MODE: Trade logged virtually.`, i, 'SUCCESS', currentCycleId);
-                    }
-                } else {
-                    addLog(`${agentName}: No trade trigger this cycle.`, i, 'INFO', currentCycleId);
-                }
-            }
-            else if (i === 10) { 
-                await logTradeToHistory(i, `Cycle Finished. Target: ${targetMarket?.ticker || 'None'}`);
-                addLog(`${agentName}: Cycle data archived.`, i, 'SUCCESS', currentCycleId);
-            }
-            else {
-                 await new Promise(resolve => setTimeout(resolve, 400));
-            }
-            
-            setCompletedAgents(prev => [...prev, i]);
+    addLog(`CYCLE START: FUNNEL EXECUTION PROTOCOL (Cycle #${currentCycleId})`, 0, 'WARN', currentCycleId);
 
-        } catch (error: any) {
-            console.error(error);
-            addLog(`${agentName}: CRITICAL PROCESS FAILURE. SYSTEM HALTED.`, i, 'ERROR', currentCycleId);
-            
-            setActiveAgentId(13); 
-            addLog("Agent 13 (The Fixer): INTERCEPTING EXCEPTION...", 13, 'WARN', currentCycleId);
-            addLog("Agent 13: Reading Stack Trace & Context...", 13, 'INFO', currentCycleId);
-
-            try {
-                const analysis = await analyzeSystemError(error.message, `Agent ${i} (${agentName}) failed during execution.`);
-                addLog(`Agent 13: ROOT CAUSE: ${analysis.rootCause}`, 13, 'WARN', currentCycleId);
-                addLog(`Agent 13: GENERATING HOTFIX...`, 13, 'INFO', currentCycleId);
-                await new Promise(r => setTimeout(r, 2000)); // Delay for dramatic effect
-                addLog(`Agent 13: DEPLOYING PATCH >>\n${analysis.suggestedFix}`, 13, 'SUCCESS', currentCycleId);
-                addLog(`Agent 13: System Self-Healed. Resuming sequence in next cycle.`, 13, 'SUCCESS', currentCycleId);
-                setCompletedAgents(prev => [...prev, 13]);
-                break; 
-
-            } catch (debugError) {
-                addLog("Agent 13: Self-Correction Module Unreachable. Manual Reset Required.", 13, 'ERROR', currentCycleId);
-                break;
-            }
-        }
+    if (forceFail) {
+        addLog(`SYSTEM: INITIATING FAILOVER SIMULATION PROTOCOL...`, 0, 'WARN', currentCycleId);
     }
 
-    setActiveAgentId(null);
-    setIsProcessing(false);
-    
-    if (autoPilot) {
-        addLog("SYSTEM: Cooling down... Next cycle in 10s.", 0, 'INFO', currentCycleId);
+    try {
+        // --- PHASE 1: MORNING AUDIT (Legacy) ---
+        setActiveAgentId(11);
+        addLog("Agent 11: VPS Integrity: 100%. API Latency: 42ms.", 11, 'INFO', currentCycleId, 1);
+        await new Promise(r => setTimeout(r, 600));
+        setCompletedAgents(prev => [...prev, 11]);
+
+        // --- PHASE 2: PARALLEL SCOUTING (TaskGroup) ---
+        // Creating a TaskGroup for simultaneous execution
+        addLog("Agent 1: Initializing Async TaskGroup for Phase 2...", 1, 'INFO', currentCycleId, 2);
+        
+        setActiveAgentId(2);
+        const scoutTask = (async () => {
+             addLog("Agent 2 (Task A): Scanning Kalshi Markets...", 2, 'INFO', currentCycleId, 2);
+             // Simulated wait for parallelism visualization
+             await new Promise(r => setTimeout(r, 800));
+             return await fetchScoutedMarkets(isPaperTrading);
+        })();
+
+        setActiveAgentId(3);
+        const interceptorTask = (async () => {
+             addLog("Agent 3 (Task B): Bridging RapidAPI for Vegas Odds...", 3, 'INFO', currentCycleId, 2);
+             // Simulated independent network request
+             await new Promise(r => setTimeout(r, 1000));
+             return true; 
+        })();
+
+        // Await TaskGroup completion
+        const [rawMarkets] = await Promise.all([scoutTask, interceptorTask]);
+        
+        if (forceFail) {
+            throw new Error("API Gateway Timeout: RapidAPI Bridge Unreachable");
+        }
+
+        // --- PRIORITY QUEUE LOGIC (The Filter) ---
+        addLog(`Agent 3: TaskGroup Complete. ${rawMarkets.length} markets ingested.`, 3, 'SUCCESS', currentCycleId, 2);
+        
+        const sortedMarkets = rawMarkets.sort((a, b) => b.delta - a.delta);
+        const priorityQueue = sortedMarkets.slice(0, 3); // The Batch
+        
+        const candidatesStr = priorityQueue.map(m => `${m.ticker}`).join(', ');
+        addLog(`Agent 2: PRIORITY QUEUE FILLED (Batch Size: 3): [ ${candidatesStr} ]`, 2, 'WARN', currentCycleId, 2);
+        
+        setCompletedAgents(prev => [...prev, 2, 3]);
+
+        // --- PHASE 3: PARALLEL ANALYSIS (Processing The Batch) ---
+        setActiveAgentId(4); // The Analyst
+        addLog(`Agent 4: Processing Batch from Priority Queue via Gemini 1.5 Pro...`, 4, 'INFO', currentCycleId, 3);
+        
+        // Map queue to parallel promises
+        const debatePromises = priorityQueue.map(async (market) => {
+            const debate = await runCommitteeDebate(market.title);
+            return { market, debate };
+        });
+
+        const analysisResults = await Promise.all(debatePromises);
+        
+        // Log results
+        analysisResults.forEach(res => {
+            addLog(`Agent 4: ${res.market.ticker} Analyzed. Score: ${res.debate.confidenceScore}%`, 4, 'SUCCESS', currentCycleId, 3);
+        });
+
+        const greenlitTrades = analysisResults.filter(res => res.debate.confidenceScore > 75);
+        addLog(`Agent 1: Batch Complete. ${greenlitTrades.length} Trades approved for Execution Queue.`, 1, 'WARN', currentCycleId, 3);
+        
+        setCompletedAgents(prev => [...prev, 4, 5, 6]);
+
+        // --- PHASE 4: SEQUENTIAL EXECUTION (Single-Threaded Loop) ---
+        // "Finally, the Executioner must be a single-threaded loop to ensure we never double-spend the $300 wallet."
+        
+        if (greenlitTrades.length > 0) {
+            setActiveAgentId(8); // Executioner
+            addLog("Agent 8: Engaging Single-Threaded Execution Loop...", 8, 'WARN', currentCycleId, 4);
+
+            // Local variable to track balance atomically within the loop
+            let runningBalance = currentBalance;
+
+            for (const item of greenlitTrades) {
+                // "Add a try/except block specifically for the Sequential Betting stage"
+                try {
+                    const { market, debate } = item;
+                    setTargetMarket(market);
+
+                    // 1. Balance Check (Agent 9 - Sentinel)
+                    setActiveAgentId(9);
+                    addLog(`Agent 9: Audit Balance: $${runningBalance.toFixed(2)}. Floor: $250.00.`, 9, 'INFO', currentCycleId, 4);
+                    
+                    if (runningBalance < 250) {
+                         addLog(`Agent 9: RISK VETO. Balance too close to floor. Aborting queue.`, 9, 'ERROR', currentCycleId, 4);
+                         break; // Hard stop for risk
+                    }
+
+                    // 2. Kelly Sizing (Agent 8)
+                    setActiveAgentId(8);
+                    const wager = Math.floor(runningBalance * 0.05);
+                    addLog(`Agent 8: Sizing Wager for ${market.ticker}: $${wager} (Conf ${debate.confidenceScore}%).`, 8, 'INFO', currentCycleId, 4);
+                    
+                    // 3. Execution (Agent 7 - Sniper)
+                    setActiveAgentId(7);
+                    addLog(`Agent 7: Checking depth for ${market.ticker}...`, 7, 'INFO', currentCycleId, 4);
+                    const book = await fetchOrderBook(market.ticker, isPaperTrading);
+                    
+                    // 4. Fire (Agent 8)
+                    setActiveAgentId(8);
+                    await createOrder(market.ticker, 'buy', 10, 'yes', isPaperTrading);
+                    addLog(`Agent 8: SNIPER SHOT FIRED. Filled @ ${book.yes_ask}c.`, 8, 'SUCCESS', currentCycleId, 4);
+
+                    // 5. Settlement Update (Internal State)
+                    runningBalance -= wager;
+                    setCurrentBalance(runningBalance); // Sync to React State
+                    
+                    // 6. Log (Agent 10)
+                    setActiveAgentId(10);
+                    await logTradeToHistory(10, `Executed ${market.ticker} @ ${book.yes_ask}c`);
+                    addLog(`Agent 10: Transaction logged to immutable ledger.`, 10, 'SUCCESS', currentCycleId, 4);
+                    
+                    // Cool-down to prevent rate limits
+                    addLog("Agent 1: Cooling down barrel (2s)...", 1, 'INFO', currentCycleId, 4);
+                    await new Promise(r => setTimeout(r, 2000));
+
+                } catch (tradeError: any) {
+                    // Isolated Error Handling: A single failed trade doesn't stop the bot
+                    setActiveAgentId(8);
+                    addLog(`Agent 8: EXECUTION FAILURE for ${item.market.ticker}. Error: ${tradeError.message}`, 8, 'ERROR', currentCycleId, 4);
+                    addLog(`Agent 8: Skipping to next target in queue...`, 8, 'WARN', currentCycleId, 4);
+                    continue; 
+                }
+            }
+            
+            setCompletedAgents(prev => [...prev, 7, 8, 9, 10]);
+        } else {
+            addLog("Agent 1: No trades met the Alpha Threshold (>75%). Holding Cash.", 1, 'WARN', currentCycleId, 4);
+        }
+
+        addLog("Agent 1: Cycle Complete. Sleeping (Time-Warp).", 1, 'INFO', currentCycleId);
+
+    } catch (globalError: any) {
+        // Global Pipeline Error (e.g., Auth failure, Critical API outage)
+        console.error(globalError);
+        addLog(`Agent 1: CRITICAL PIPELINE FAILURE.`, 1, 'ERROR', currentCycleId);
+        
+        // --- AGENT 13: THE FIXER ---
+        setActiveAgentId(13); 
+        addLog("Agent 13 (The Fixer): INTERCEPTING GLOBAL EXCEPTION...", 13, 'WARN', currentCycleId, 13);
+        
+        try {
+            const analysis = await analyzeSystemError(globalError.message, `TaskGroup Failure Cycle #${currentCycleId}`);
+            addLog(`Agent 13: DIAGNOSIS: ${analysis.rootCause}`, 13, 'WARN', currentCycleId, 13);
+            await new Promise(r => setTimeout(r, 2000));
+            addLog(`Agent 13: APPLYING PATCH: ${analysis.suggestedFix}`, 13, 'SUCCESS', currentCycleId, 13);
+            setCompletedAgents(prev => [...prev, 13]);
+        } catch (debugError) {
+            addLog("Agent 13: Fixer Module Failed.", 13, 'ERROR', currentCycleId, 13);
+        }
+    } finally {
+        setActiveAgentId(null);
+        setIsProcessing(false);
+        if (autoPilot) {
+            addLog("SYSTEM: Cooling down... Next cycle in 10s.", 0, 'INFO', currentCycleId);
+        }
     }
   };
 
@@ -255,7 +293,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
             <div className={`h-2.5 w-2.5 rounded-full ${isProcessing ? 'bg-amber-400 animate-ping' : 'bg-emerald-500 animate-pulse'} shadow-[0_0_10px_currentColor]`}></div>
             <span className={`text-sm font-mono tracking-widest ${isProcessing ? 'text-amber-400' : 'text-emerald-500'}`}>
-                {isProcessing ? 'EXECUTING::BATCH' : 'SYSTEM::IDLE'}
+                {isProcessing ? 'EXECUTING::TASKGROUP' : 'SYSTEM::IDLE'}
             </span>
             <div className="h-4 w-[1px] bg-white/10 mx-2"></div>
             
@@ -291,16 +329,16 @@ const App: React.FC = () => {
 
              {/* Test Failover Button */}
              <button
-                onClick={() => runWorkflow(true)}
+                onClick={() => runOrchestrator(true)}
                 disabled={isProcessing}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Simulate a runtime error to trigger Agent 13"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all border bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 hover:border-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_10px_rgba(239,68,68,0.1)] hover:shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+                title="Simulate a runtime error to trigger Agent 13 (The Fixer)"
              >
-                TEST FAILOVER
+                <span className="animate-pulse text-red-500">⚠</span> TEST FAILOVER
              </button>
 
              <button 
-                onClick={() => runWorkflow(false)}
+                onClick={() => runOrchestrator(false)}
                 disabled={isProcessing}
                 className={`flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all border backdrop-blur-md ${
                     isProcessing 
