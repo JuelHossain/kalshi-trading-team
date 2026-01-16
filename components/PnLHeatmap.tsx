@@ -1,183 +1,285 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 type TransactionType = 'PROFIT' | 'LOSS' | 'ASSET_ADDED' | 'WITHDRAWAL' | 'IDLE';
+type TimeRange = '3D' | '1W' | '1M' | '3M' | '6M' | 'YTD';
 
 interface DayData {
+  id: string;
+  dateObj: Date;
   date: string;
+  fullDate: string;
   type: TransactionType;
   amount: number;
   reasoning: string;
 }
 
 const COLORS = {
-  PROFIT_XL: '#00FF41',
-  PROFIT_L: '#00C42E',
-  PROFIT_M: '#008F24',
-  PROFIT_S: '#005C17',
-  LOSS_L: '#FF3131',
-  LOSS_S: '#991B1B',
-  ASSET: '#F1C40F',
-  WITHDRAW: '#3498DB',
-  IDLE: '#111111',
+  PROFIT_XL: '#10b981', // Emerald 500
+  PROFIT_L: '#34d399',  // Emerald 400
+  PROFIT_M: '#059669',  // Emerald 600
+  PROFIT_S: '#064e3b',  // Emerald 900
+  LOSS_L: '#ef4444',    // Red 500
+  LOSS_S: '#7f1d1d',    // Red 900
+  ASSET: '#fbbf24',     // Amber 400
+  WITHDRAW: '#3b82f6',  // Blue 500
+  IDLE: 'rgba(255,255,255,0.05)',
 };
 
-const PnLHeatmap: React.FC = () => {
-  const [data, setData] = useState<DayData[][]>([]);
-  const [loading, setLoading] = useState(true);
-  const [hoveredDay, setHoveredDay] = useState<DayData | null>(null);
+const RANGES: TimeRange[] = ['3D', '1W', '1M', '3M', '6M', 'YTD'];
 
+const PnLHeatmap: React.FC = () => {
+  const [activeRange, setActiveRange] = useState<TimeRange>('YTD');
+  const [data, setData] = useState<DayData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedDay, setSelectedDay] = useState<DayData | null>(null);
+
+  // Initialize Data
   useEffect(() => {
-    const fetchData = async () => {
-        setLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        setData(generateCalendarData());
-        setLoading(false);
-    };
-    fetchData();
+    generateData();
   }, []);
 
-  const generateCalendarData = (): DayData[][] => {
-    const weeks: DayData[][] = [];
-    const totalWeeks = 24; 
-    const now = new Date();
-    
-    for (let w = 0; w < totalWeeks; w++) {
-      const week: DayData[] = [];
-      for (let d = 0; d < 7; d++) {
-        const date = new Date(now);
-        date.setDate(date.getDate() - ((totalWeeks - 1 - w) * 7) + d);
-        let type: TransactionType = 'IDLE';
-        let amount = 0;
-        let reasoning = 'No Market Activity';
-
-        const seed = Math.sin(w * 7 + d) * 10000;
-        const rand = seed - Math.floor(seed);
-
-        if (rand > 0.4) { 
-          if (rand > 0.96) {
-              type = 'WITHDRAWAL';
-              amount = -150;
-              reasoning = 'Agent 1: Vault Overflow -> Bank';
-          } else if (rand > 0.93) {
-              type = 'ASSET_ADDED';
-              amount = 200;
-              reasoning = 'Agent 1: Weekly Liquidity Inject';
-          } else if (rand > 0.85) {
-              type = 'LOSS';
-              const lossSeverity = Math.random();
-              amount = -Math.floor(lossSeverity * 80) - 10;
-              reasoning = amount < -50 ? 'Agent 6: Bull Trap Triggered' : 'Agent 3: Odds Lag Slippage';
-          } else {
-              type = 'PROFIT';
-              const profitMagnitude = Math.random();
-              amount = Math.floor(profitMagnitude * profitMagnitude * 250) + 15; 
-              if (amount > 150) reasoning = 'Agent 2: Whale Gap Detected (High Conf)';
-              else if (amount > 100) reasoning = 'Agent 4: Committee Consensus YES';
-              else if (amount > 50) reasoning = 'Agent 7: Order Book Front-run';
-              else reasoning = 'Agent 5: Scalp (EV +4.2)';
-          }
-        }
-        week.push({
-          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          type,
-          amount,
-          reasoning
-        });
-      }
-      weeks.push(week);
+  // Update selection when data or range changes
+  useEffect(() => {
+    if (data.length > 0) {
+        // Default to the last day (today)
+        setSelectedDay(data[data.length - 1]);
     }
-    return weeks;
+  }, [data]);
+
+  const generateData = () => {
+    setLoading(true);
+    // Simulate generation delay
+    setTimeout(() => {
+        const days: DayData[] = [];
+        const today = new Date();
+        const totalDays = 365; // Generate a full year back, then filter
+
+        for (let i = totalDays; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            
+            let type: TransactionType = 'IDLE';
+            let amount = 0;
+            let reasoning = 'No trading activity detected.';
+            
+            // Deterministic pseudo-random based on date
+            const seed = Math.sin(date.getTime()) * 10000;
+            const rand = seed - Math.floor(seed);
+            
+            // Skip weekends for realism
+            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+
+            if (!isWeekend && rand > 0.3) {
+                if (rand > 0.98) { 
+                    type = 'WITHDRAWAL'; 
+                    amount = -150; 
+                    reasoning = 'Automated Vault Overflow Transfer to Cold Storage.'; 
+                }
+                else if (rand > 0.96) { 
+                    type = 'ASSET_ADDED'; 
+                    amount = 200; 
+                    reasoning = 'Liquidity Injection from Reserve Fund.'; 
+                }
+                else if (rand > 0.85) { 
+                    type = 'LOSS'; 
+                    amount = -Math.floor(Math.random() * 80) - 10; 
+                    reasoning = 'Stop-loss triggered. Volatility spike exceeded Beta threshold.'; 
+                }
+                else { 
+                    type = 'PROFIT'; 
+                    amount = Math.floor(Math.random() * 180) + 15; 
+                    reasoning = 'Alpha capture successful. Price inefficiency exploited.'; 
+                }
+            }
+
+            days.push({
+                id: date.toISOString(),
+                dateObj: date,
+                date: date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }),
+                fullDate: date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+                type,
+                amount,
+                reasoning
+            });
+        }
+        setData(days);
+        setLoading(false);
+    }, 600);
   };
 
-  const getStyle = (day: DayData) => {
+  const filteredData = useMemo(() => {
+    const now = new Date();
+    let daysBack = 0;
+    
+    switch (activeRange) {
+        case '3D': daysBack = 3; break;
+        case '1W': daysBack = 7; break;
+        case '1M': daysBack = 30; break;
+        case '3M': daysBack = 90; break;
+        case '6M': daysBack = 180; break;
+        case 'YTD': 
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+            daysBack = Math.floor((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+            break;
+    }
+    
+    return data.slice(-daysBack);
+  }, [activeRange, data]);
+
+  const getCellStyle = (day: DayData) => {
     let backgroundColor = COLORS.IDLE;
     if (day.type === 'PROFIT') {
-        if (day.amount > 150) backgroundColor = COLORS.PROFIT_XL;
-        else if (day.amount > 100) backgroundColor = COLORS.PROFIT_L;
-        else if (day.amount > 50) backgroundColor = COLORS.PROFIT_M;
+        if (day.amount > 120) backgroundColor = COLORS.PROFIT_XL;
+        else if (day.amount > 80) backgroundColor = COLORS.PROFIT_L;
+        else if (day.amount > 40) backgroundColor = COLORS.PROFIT_M;
         else backgroundColor = COLORS.PROFIT_S;
     } else if (day.type === 'LOSS') {
         if (day.amount < -50) backgroundColor = COLORS.LOSS_L;
         else backgroundColor = COLORS.LOSS_S;
     } else if (day.type === 'ASSET_ADDED') backgroundColor = COLORS.ASSET;
     else if (day.type === 'WITHDRAWAL') backgroundColor = COLORS.WITHDRAW;
+    
     return { backgroundColor };
   };
 
+  // Render logic splits based on density
+  const isListView = activeRange === '3D' || activeRange === '1W';
+
   return (
-    <div className="cyber-card h-full relative group bg-black/40">
-       <div className="corner corner-tl"></div>
-       <div className="corner corner-tr"></div>
-       <div className="corner corner-br"></div>
-       <div className="corner corner-bl"></div>
+    <div className="glass-panel rounded-2xl h-full flex flex-col relative overflow-hidden border border-white/5">
+       {/* Top Bar: Filters */}
+       <div className="flex justify-between items-center p-4 border-b border-white/5 bg-black/20 shrink-0">
+            <h3 className="text-gray-300 font-bold font-tech uppercase tracking-widest text-xs flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Chronos Grid
+            </h3>
+            
+            <div className="flex bg-black/40 rounded-lg p-1 border border-white/5">
+                {RANGES.map(range => (
+                    <button
+                        key={range}
+                        onClick={() => setActiveRange(range)}
+                        className={`
+                            px-2 py-0.5 text-[9px] font-mono rounded-md transition-all duration-300
+                            ${activeRange === range 
+                                ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)] font-bold' 
+                                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}
+                        `}
+                    >
+                        {range}
+                    </button>
+                ))}
+            </div>
+       </div>
 
-       <div className="absolute inset-[1px] flex flex-col p-4 rounded-[1px] overflow-hidden">
-           
-           {/* Header Area */}
-           <div className="flex justify-between items-start mb-2 shrink-0">
-                <div className="flex flex-col">
-                    <h3 className="text-gray-200 font-bold font-mono text-[10px] uppercase tracking-widest flex items-center gap-2">
-                        <span className="text-emerald-500 animate-pulse">◆</span> Historical Grid
-                    </h3>
-                    <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[9px] text-gray-500 font-mono">DB: Agent_10</span>
-                        {loading ? (
-                            <span className="text-[9px] text-amber-500 font-mono animate-pulse">SYNCING...</span>
-                        ) : (
-                            <span className="text-[9px] text-emerald-800 font-mono">LINKED</span>
-                        )}
+       {/* Main Content Area: Split View */}
+       <div className="flex flex-1 overflow-hidden">
+            
+            {/* Left: Visualization Grid/List */}
+            <div className="flex-1 p-4 overflow-y-auto overflow-x-hidden relative">
+                {loading ? (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="flex flex-col items-center gap-2">
+                             <div className="w-6 h-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin"></div>
+                             <span className="text-[10px] text-emerald-500/50 font-mono animate-pulse">SYNCING CHAIN...</span>
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <>
+                        {isListView ? (
+                            <div className="flex flex-col gap-2">
+                                {filteredData.map(day => (
+                                    <div 
+                                        key={day.id}
+                                        onMouseEnter={() => setSelectedDay(day)}
+                                        className={`
+                                            flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer group
+                                            ${selectedDay?.id === day.id 
+                                                ? 'bg-white/10 border-emerald-500/50 shadow-lg translate-x-1' 
+                                                : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'}
+                                        `}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div 
+                                                className="w-2 h-10 rounded-full" 
+                                                style={getCellStyle(day)}
+                                            ></div>
+                                            <div>
+                                                <div className="text-xs font-bold text-gray-200">{day.fullDate}</div>
+                                                <div className="text-[10px] text-gray-500 font-mono truncate max-w-[150px]">{day.reasoning}</div>
+                                            </div>
+                                        </div>
+                                        <div className={`font-mono font-bold text-sm ${day.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {day.amount > 0 ? '+' : ''}{day.amount === 0 ? '--' : `$${day.amount}`}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-wrap gap-1.5 content-start">
+                                {filteredData.map(day => (
+                                    <div 
+                                        key={day.id}
+                                        onMouseEnter={() => setSelectedDay(day)}
+                                        className={`
+                                            w-3 h-3 rounded-[2px] cursor-pointer transition-transform duration-200 hover:scale-150 hover:z-20 hover:rounded-sm relative
+                                            ${selectedDay?.id === day.id ? 'ring-1 ring-white scale-125 z-10' : ''}
+                                        `}
+                                        style={getCellStyle(day)}
+                                    ></div>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
 
-                {/* Inspector Panel - Replaces Floating Tooltip */}
-                <div className="h-10 w-48 border border-gray-800 bg-black/80 flex flex-col justify-center px-2 relative overflow-hidden">
-                    {hoveredDay ? (
-                        <div className="animate-[fadeIn_0.1s]">
-                            <div className="flex justify-between items-center border-b border-gray-800/50 pb-0.5 mb-0.5">
-                                <span className="text-[9px] text-gray-400 font-mono">{hoveredDay.date}</span>
-                                <span className={`text-[8px] font-bold ${hoveredDay.amount >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                    {hoveredDay.amount >= 0 ? '+' : ''}${hoveredDay.amount}
+            {/* Right: Info Details Long on the Side */}
+            <div className="w-[180px] bg-black/20 border-l border-white/5 p-4 flex flex-col shrink-0 backdrop-blur-sm relative z-10">
+                {selectedDay ? (
+                    <div className="animate-[fadeIn_0.3s_ease-out]">
+                        <div className="mb-4">
+                            <span className="text-[9px] text-gray-500 font-mono uppercase tracking-widest block mb-1">Selected Date</span>
+                            <div className="text-xl font-bold text-white leading-tight font-tech">{selectedDay.dateObj.getDate()}</div>
+                            <div className="text-xs text-gray-400 font-mono uppercase">{selectedDay.dateObj.toLocaleString('default', { month: 'long', year: 'numeric' })}</div>
+                            <div className="text-[10px] text-gray-600 font-mono">{selectedDay.dateObj.toLocaleString('default', { weekday: 'long' })}</div>
+                        </div>
+
+                        <div className="w-full h-[1px] bg-white/10 my-2"></div>
+
+                        <div className="mb-4">
+                            <span className="text-[9px] text-gray-500 font-mono uppercase tracking-widest block mb-1">Net Result</span>
+                            <div className={`text-2xl font-black font-tech tracking-tight ${selectedDay.amount >= 0 ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]' : 'text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.3)]'}`}>
+                                {selectedDay.amount > 0 ? '+' : ''}{selectedDay.amount === 0 ? 'IDLE' : `$${selectedDay.amount}`}
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto no-scrollbar">
+                            <span className="text-[9px] text-gray-500 font-mono uppercase tracking-widest block mb-2">AI Reasoning</span>
+                            <div className="p-2 bg-white/5 rounded-lg border border-white/5">
+                                <p className="text-[10px] text-gray-300 leading-relaxed font-mono">
+                                    "{selectedDay.reasoning}"
+                                </p>
+                            </div>
+                            
+                            <div className="mt-3">
+                                <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider
+                                    ${selectedDay.type === 'PROFIT' ? 'bg-emerald-500/20 text-emerald-400' : 
+                                      selectedDay.type === 'LOSS' ? 'bg-red-500/20 text-red-400' :
+                                      selectedDay.type === 'ASSET_ADDED' ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-700 text-gray-400'}
+                                `}>
+                                    {selectedDay.type.replace('_', ' ')}
                                 </span>
                             </div>
-                            <div className="text-[8px] text-emerald-400/70 truncate font-mono">
-                                {hoveredDay.reasoning}
-                            </div>
                         </div>
-                    ) : (
-                         <div className="text-[8px] text-gray-700 font-mono uppercase text-center tracking-widest">
-                            Hover Node to Inspect
-                         </div>
-                    )}
-                    {/* Decorative Scanline inside Inspector */}
-                    <div className="absolute top-0 left-0 w-full h-[1px] bg-emerald-500/20 animate-[packetTravel_2s_linear_infinite]"></div>
-                </div>
-           </div>
-
-           {/* Heatmap Grid */}
-           <div className="flex-1 relative flex items-center justify-center overflow-hidden">
-             {loading ? (
-                <div className="font-mono text-xs text-emerald-500/50 flex flex-col items-center gap-2">
-                    <div className="w-6 h-6 border-2 border-emerald-900 border-t-emerald-500 rounded-full animate-spin"></div>
-                    <div className="text-[10px]">DECRYPTING...</div>
-                </div>
-             ) : (
-                 <div className="flex gap-[2px] h-full items-center overflow-x-auto custom-scrollbar pb-1 w-full justify-start">
-                    {data.map((week, wIndex) => (
-                        <div key={wIndex} className="flex flex-col gap-[2px]">
-                            {week.map((day, dIndex) => (
-                                <div 
-                                    key={dIndex} 
-                                    className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-[1px] transition-all duration-150 hover:scale-125 hover:z-50 hover:ring-1 hover:ring-white cursor-crosshair relative"
-                                    style={getStyle(day)}
-                                    onMouseEnter={() => setHoveredDay(day)}
-                                    onMouseLeave={() => setHoveredDay(null)}
-                                />
-                            ))}
-                        </div>
-                    ))}
-                 </div>
-             )}
-           </div>
+                    </div>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center opacity-30 text-center">
+                        <div className="text-2xl mb-2">📅</div>
+                        <span className="text-[9px] font-mono uppercase">Select a day</span>
+                    </div>
+                )}
+            </div>
        </div>
     </div>
   );

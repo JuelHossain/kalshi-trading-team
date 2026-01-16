@@ -13,13 +13,17 @@ export const scanMarketsWithGroq = async (): Promise<string> => {
           role: 'user',
           content: 'Scan the current prediction market landscape for high-volatility events. Return 3 concise potential market names (e.g. "Fed Rate Cut", "GDP Growth", "Oil Price"). Return ONLY the names separated by commas.'
         }],
-        model: 'llama3-70b-8192',
+        // Updated to latest stable model to prevent 400 errors with deprecated IDs
+        model: 'llama-3.3-70b-versatile',
         temperature: 0.5,
-        max_tokens: 50
+        max_tokens: 100
       })
     });
 
-    if (!response.ok) throw new Error(`Groq API Error: ${response.status}`);
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Groq API Error: ${response.status} - ${errorText}`);
+    }
     
     const data = await response.json();
     return data.choices[0]?.message?.content || "Fed Interest Rate, Nvidia Earnings, Bitcoin Spot ETF";

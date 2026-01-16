@@ -21,7 +21,6 @@ const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
     try {
       const response = await runCommitteeDebate(query);
       
-      // Check if it was a fallback response by checking the text content
       if (response.optimistArg.includes("[LOCAL_FALLBACK]")) {
           if (onLog) {
               onLog("Agent 4: Connection to Gemini Matrix failed.", 4, 'ERROR');
@@ -41,81 +40,87 @@ const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
   };
 
   return (
-    <div className="cyber-card rounded-sm p-6 h-full flex flex-col relative">
-       {/* Holographic Corners */}
-       <div className="corner corner-tl"></div>
-       <div className="corner corner-tr"></div>
-       <div className="corner corner-br"></div>
-       <div className="corner corner-bl"></div>
+    <div className="glass-panel rounded-3xl p-8 h-full flex flex-col relative overflow-hidden border border-white/5 organic-glow">
+      {/* Background Decor */}
+      <div className="absolute -right-20 -top-20 w-60 h-60 bg-purple-500/10 blur-[80px] rounded-full pointer-events-none"></div>
 
-      <div className="mb-6 z-10">
-        <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2 font-tech uppercase tracking-widest">
-          <span className="text-purple-400 animate-[spin-slow_4s_linear_infinite] block text-xs">◆</span> 
-          Agent 4: The Analyst
+      <div className="mb-8 z-10 text-center">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-900/20 border border-purple-500/30 mb-4 shadow-[0_0_20px_rgba(168,85,247,0.2)]">
+            <span className="text-xl">🧠</span>
+        </div>
+        <h2 className="text-2xl font-bold text-white font-tech uppercase tracking-widest">
+          The Analyst
         </h2>
-        <p className="text-gray-400 text-xs font-mono">Input hypothesis for committee validation.</p>
+        <p className="text-gray-400 text-xs font-mono mt-2 max-w-md mx-auto">
+            Input a market hypothesis to convene the AI Committee (Gemini 3 Pro)
+        </p>
       </div>
 
-      <div className="flex gap-2 mb-6 z-10">
+      <div className="flex gap-3 mb-8 z-10 max-w-2xl mx-auto w-full">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="ENTER_MARKET_HYPOTHESIS..."
-          className="flex-1 bg-black/50 border border-gray-700 text-emerald-400 px-4 py-3 rounded-[2px] focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all text-sm font-mono placeholder-gray-700"
+          placeholder="e.g. Will Fed cut rates in September?"
+          className="flex-1 bg-black/30 border border-white/10 text-emerald-100 px-6 py-4 rounded-2xl focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/50 transition-all text-sm font-mono placeholder-gray-600 shadow-inner"
           onKeyDown={(e) => e.key === 'Enter' && handleDebate()}
         />
         <button
           onClick={handleDebate}
           disabled={loading}
-          className="bg-purple-900/20 hover:bg-purple-900/40 disabled:opacity-50 disabled:cursor-not-allowed text-purple-400 px-6 py-2 rounded-[2px] font-bold transition-all uppercase text-xs tracking-wider border border-purple-500/50 shadow-[0_0_15px_rgba(147,51,234,0.1)] hover:shadow-[0_0_20px_rgba(147,51,234,0.3)]"
+          className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-4 rounded-2xl font-bold transition-all uppercase text-xs tracking-widest shadow-lg hover:shadow-purple-500/30 hover:-translate-y-0.5 active:translate-y-0"
         >
-          {loading ? 'Simulating...' : 'CONVENE'}
+          {loading ? (
+            <span className="animate-pulse">thinking...</span>
+          ) : 'ANALYZE'}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar z-10">
+      <div className="flex-1 overflow-y-auto no-scrollbar z-10 relative">
         {loading && (
-            <div className="flex flex-col items-center justify-center h-48 space-y-4">
-                <div className="text-purple-400 font-mono text-xs animate-pulse">Accessing Gemini 3 Pro Context...</div>
-                <div className="w-full max-w-md h-1 bg-gray-800 rounded overflow-hidden">
-                    <div className="h-full bg-purple-500 w-1/3 animate-[slide_1s_ease-in-out_infinite]"></div>
+            <div className="flex flex-col items-center justify-center h-48 space-y-6">
+                <div className="relative w-16 h-16">
+                    <div className="absolute inset-0 border-4 border-purple-500/30 rounded-full"></div>
+                    <div className="absolute inset-0 border-4 border-t-purple-500 rounded-full animate-spin"></div>
                 </div>
+                <div className="text-purple-400 font-mono text-xs animate-pulse">Processing High-Dimensional Context...</div>
             </div>
         )}
 
         {result && (
-          <div className="space-y-4 animate-[fadeIn_0.5s_ease-out]">
-            {result.optimistArg.includes("[LOCAL_FALLBACK]") && (
-                <div className="bg-amber-900/20 border border-amber-500/50 p-2 rounded-[1px] text-[10px] text-amber-500 font-mono uppercase tracking-wide flex items-center gap-2">
-                    <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
-                    Warning: Remote API Unreachable. Showing Local Heuristic Analysis.
-                </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-emerald-900/10 border border-emerald-500/30 p-4 rounded-[2px]">
-                <h3 className="text-emerald-400 font-bold mb-2 text-xs uppercase tracking-wide border-b border-emerald-500/20 pb-1">The Optimist</h3>
-                <p className="text-gray-300 text-sm leading-relaxed font-mono opacity-80">{result.optimistArg}</p>
+          <div className="space-y-6 animate-[fadeIn_0.5s_ease-out] pb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Optimist Card */}
+              <div className="bg-emerald-900/10 border border-emerald-500/20 p-6 rounded-3xl backdrop-blur-sm relative overflow-hidden group hover:border-emerald-500/40 transition-colors">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/10 blur-[40px] rounded-full group-hover:bg-emerald-500/20 transition-all"></div>
+                <h3 className="text-emerald-400 font-bold mb-3 text-xs uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> The Optimist
+                </h3>
+                <p className="text-gray-300 text-sm leading-relaxed font-mono opacity-90">{result.optimistArg}</p>
               </div>
-              <div className="bg-red-900/10 border border-red-500/30 p-4 rounded-[2px]">
-                <h3 className="text-red-400 font-bold mb-2 text-xs uppercase tracking-wide border-b border-red-500/20 pb-1">The Pessimist</h3>
-                <p className="text-gray-300 text-sm leading-relaxed font-mono opacity-80">{result.pessimistArg}</p>
+
+              {/* Pessimist Card */}
+              <div className="bg-red-900/10 border border-red-500/20 p-6 rounded-3xl backdrop-blur-sm relative overflow-hidden group hover:border-red-500/40 transition-colors">
+                <div className="absolute top-0 right-0 w-20 h-20 bg-red-500/10 blur-[40px] rounded-full group-hover:bg-red-500/20 transition-all"></div>
+                <h3 className="text-red-400 font-bold mb-3 text-xs uppercase tracking-widest flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-red-500"></span> The Pessimist
+                </h3>
+                <p className="text-gray-300 text-sm leading-relaxed font-mono opacity-90">{result.pessimistArg}</p>
               </div>
             </div>
 
-            <div className="bg-blue-900/10 border border-blue-500/30 p-6 rounded-[2px] relative overflow-hidden">
-              <div className="absolute top-0 left-0 w-1 h-full bg-blue-500 box-shadow-[0_0_10px_blue]"></div>
-              <div className="flex justify-between items-start mb-3">
-                 <h3 className="text-blue-400 font-bold text-lg uppercase tracking-widest font-tech">The Judge's Verdict</h3>
-                 <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-gray-500 uppercase tracking-widest">Confidence</span>
-                    <span className={`text-xl font-mono font-bold ${result.confidenceScore > 70 ? 'text-green-400' : result.confidenceScore > 40 ? 'text-yellow-400' : 'text-red-400'}`}>
+            {/* Verdict Card */}
+            <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-500/30 p-8 rounded-3xl relative overflow-hidden shadow-2xl">
+              <div className="flex justify-between items-start mb-4 relative z-10">
+                 <h3 className="text-blue-300 font-bold text-xl uppercase tracking-widest font-tech">Final Verdict</h3>
+                 <div className="px-4 py-1.5 rounded-full bg-black/40 border border-white/10 flex items-center gap-2">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-widest">Confidence</span>
+                    <span className={`text-lg font-mono font-bold ${result.confidenceScore > 70 ? 'text-emerald-400' : result.confidenceScore > 40 ? 'text-yellow-400' : 'text-red-400'}`}>
                         {result.confidenceScore}%
                     </span>
                  </div>
               </div>
-              <p className="text-gray-200 text-base font-medium leading-relaxed font-mono">
+              <p className="text-white text-lg font-medium leading-relaxed font-mono relative z-10">
                 "{result.judgeVerdict}"
               </p>
             </div>
@@ -123,8 +128,9 @@ const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
         )}
         
         {!loading && !result && (
-            <div className="flex flex-col items-center justify-center h-full text-gray-800 font-mono text-xs uppercase tracking-widest opacity-30">
-                <span>[ Awaiting Data Stream ]</span>
+            <div className="flex flex-col items-center justify-center h-full opacity-20">
+                <div className="text-6xl mb-4 grayscale">⚖️</div>
+                <span className="font-mono text-xs uppercase tracking-[0.2em]">Awaiting Hypothesis</span>
             </div>
         )}
       </div>

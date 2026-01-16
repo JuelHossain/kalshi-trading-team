@@ -138,3 +138,32 @@ const PnLChart: React.FC = () => {
                     <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#333', strokeWidth: 1, strokeDasharray: '4 4' }} />
                     
                     {/* The "Floor" (Principal) */}
+                    <ReferenceLine y={300} stroke="#333" strokeDasharray="5 5" strokeWidth={1} label={{ position: 'right', value: 'PRINCIPAL', fill: '#444', fontSize: 8, fontFamily: 'monospace' }} />
+
+                    {/* The Area Glow */}
+                    <Area 
+                        type="monotone" 
+                        dataKey="pnl" 
+                        stroke="none" 
+                        fill="url(#cyberGradient)" 
+                    />
+                    
+                    {/* The Sharp Line */}
+                    <Line 
+                        type="monotone" 
+                        dataKey="pnl" 
+                        stroke="#10b981" 
+                        strokeWidth={2} 
+                        dot={<PulsingDot dataLength={data.length} />}
+                        activeDot={{ r: 5, strokeWidth: 0, fill: '#fff' }}
+                        filter="url(#glow)"
+                        animationDuration={1500}
+                    />
+                </ComposedChart>
+            </ResponsiveContainer>
+       </div>
+    </div>
+  );
+};
+
+export default PnLChart;

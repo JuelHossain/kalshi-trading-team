@@ -1,62 +1,75 @@
 import React from 'react';
 
-const VaultGauge: React.FC = () => {
+const VaultGauge: React.FC<{compact?: boolean}> = ({ compact = false }) => {
   const principal = 300;
   const currentProfit = 105;
   const lockThreshold = 50;
   const isLocked = currentProfit >= lockThreshold;
-  
   const total = principal + currentProfit;
 
-  return (
-    <div className="bg-black/40 rounded-[2px] p-4 border border-gray-800 relative group overflow-hidden">
-        {/* Subtle screw heads in corners */}
-        <div className="absolute top-1 left-1 w-1 h-1 bg-gray-700 rounded-full"></div>
-        <div className="absolute top-1 right-1 w-1 h-1 bg-gray-700 rounded-full"></div>
-        <div className="absolute bottom-1 left-1 w-1 h-1 bg-gray-700 rounded-full"></div>
-        <div className="absolute bottom-1 right-1 w-1 h-1 bg-gray-700 rounded-full"></div>
+  if (compact) {
+      return (
+          <div className="w-full">
+              <div className="flex justify-between items-center mb-1.5 px-1">
+                  <span className="text-[8px] text-gray-500 uppercase tracking-widest font-mono">Vault</span>
+                  <span className="text-[10px] font-bold text-white font-mono">${total.toFixed(0)}</span>
+              </div>
+              <div className="w-full h-1.5 bg-gray-800/50 rounded-full overflow-hidden flex">
+                  <div className="h-full bg-gray-600/50" style={{ width: `${(principal/total)*100}%` }}></div>
+                  <div className="h-full bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]" style={{ width: `${(currentProfit/total)*100}%` }}></div>
+              </div>
+          </div>
+      );
+  }
 
-        <div className="flex justify-between items-center mb-2">
-            <span className="text-[10px] text-gray-500 uppercase font-mono tracking-widest">Recursive Vault</span>
+  return (
+    <div className="bg-white/5 rounded-2xl p-5 border border-white/5 relative overflow-hidden group">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 blur-[50px] rounded-full pointer-events-none group-hover:bg-emerald-500/10 transition-colors"></div>
+        
+        <div className="flex justify-between items-center mb-4 relative z-10">
+            <span className="text-[10px] text-emerald-500/80 uppercase font-mono tracking-widest flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                Recursive Vault
+            </span>
             {isLocked && (
-                <span className="flex items-center gap-1 text-[9px] text-amber-400 font-bold uppercase border border-amber-400/30 px-1.5 py-0.5 rounded-sm bg-amber-400/10 animate-pulse">
+                <span className="text-[9px] text-amber-400 font-bold uppercase px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20 shadow-[0_0_10px_rgba(251,191,36,0.2)]">
                     Locked
                 </span>
             )}
         </div>
         
-        <div className="flex justify-between items-end mb-2">
-            <span className="text-2xl font-black text-white tracking-tighter font-tech">${total.toFixed(2)}</span>
-            <span className="text-xs text-emerald-500 font-mono mb-1">+{((currentProfit/principal)*100).toFixed(1)}%</span>
+        <div className="flex items-baseline gap-2 mb-4 relative z-10">
+            <span className="text-3xl font-black text-white tracking-tighter font-tech">${total.toFixed(2)}</span>
+            <span className="text-xs text-emerald-400 font-mono">+{((currentProfit/principal)*100).toFixed(1)}%</span>
         </div>
 
-        {/* Gauge Bar */}
-        <div className="w-full h-2 bg-gray-800 rounded-sm overflow-hidden flex relative box-shadow-inner">
+        {/* Soft Gauge Bar */}
+        <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden flex relative shadow-inner">
             {/* Principal Bar */}
             <div 
-                className="h-full bg-gray-600 relative group transition-all duration-1000" 
+                className="h-full bg-gray-700/50 relative backdrop-blur-sm" 
                 style={{ width: `${(principal/total)*100}%` }}
             >
                 {isLocked && (
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-30"></div>
+                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/diagonal-stripes.png')] opacity-10"></div>
                 )}
             </div>
             
             {/* Profit Bar */}
             <div 
-                className="h-full bg-emerald-500 relative transition-all duration-1000" 
+                className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 relative shadow-[0_0_15px_rgba(16,185,129,0.4)]" 
                 style={{ width: `${(currentProfit/total)*100}%` }}
             >
-                <div className="absolute top-0 right-0 bottom-0 w-[2px] bg-white/80 shadow-[0_0_10px_white]"></div>
+                <div className="absolute top-0 right-0 h-full w-1 bg-white/50 blur-[1px]"></div>
             </div>
         </div>
         
-        <div className="flex justify-between mt-2 text-[9px] font-mono uppercase tracking-wide">
-            <div className="text-gray-600">
-                Principal: <span className={isLocked ? "text-amber-500" : "text-gray-400"}>${principal}</span>
+        <div className="flex justify-between mt-3 text-[9px] font-mono uppercase tracking-wide relative z-10 opacity-70">
+            <div>
+                Principal <span className="text-gray-300 ml-1">${principal}</span>
             </div>
-            <div className="text-gray-600">
-                House: <span className="text-emerald-400">${currentProfit}</span>
+            <div>
+                House <span className="text-emerald-300 ml-1">${currentProfit}</span>
             </div>
         </div>
     </div>

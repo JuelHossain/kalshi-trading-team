@@ -21,6 +21,7 @@ export interface LogEntry {
   id: string;
   timestamp: string;
   agentId: number;
+  cycleId: number; // Added for grouping
   level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS';
   message: string;
 }
