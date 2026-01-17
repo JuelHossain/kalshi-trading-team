@@ -34,22 +34,29 @@ export const calculateRiskParams = (
     };
 };
 
+import { validateExecutionerSafety } from '../agent-14-qa-chaos/index';
+
 export const createOrder = async (
     ticker: string,
     action: 'buy' | 'sell',
     count: number,
     side: 'yes' | 'no',
+    price: number, // Silently snipe at this price
     isPaperTrading: boolean
 ) => {
+    // Agent 14 Check: Verify Safety Protocols
+    validateExecutionerSafety(isPaperTrading, isPaperTrading ? 'DEMO' : 'PROD');
+
     // Agent 8: The Executioner
-    console.log(`[Agent 8] EXECUTION: ${action.toUpperCase()} ${count}x ${ticker} ${side.toUpperCase()}`);
+    console.log(`[Agent 8] SNIPE: ${action.toUpperCase()} ${count}x ${ticker} ${side.toUpperCase()} @ ${price}c`);
 
     const orderBody = {
         action: action,
         count: count,
         side: side,
         ticker: ticker,
-        type: 'market',
+        type: 'limit', // PROTOCOL: The Silent Sniper
+        yes_price: side === 'yes' ? price : 100 - price,
         client_order_id: `sentient_${Date.now()}`
     };
 
@@ -57,7 +64,8 @@ export const createOrder = async (
         const response = await kalshiFetch('/portfolio/orders', 'POST', orderBody, isPaperTrading);
         return response.order;
     } catch (e) {
-        console.error(`[Agent 8] Execution Failed for ${ticker}`, e);
+        console.error(`[Agent 8] Snipe Failed for ${ticker}`, e);
         throw e;
     }
 }
+

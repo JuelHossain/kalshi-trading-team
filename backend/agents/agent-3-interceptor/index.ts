@@ -28,24 +28,24 @@ const normalizeOdds = (rawData: any[]): ShadowOdd[] => {
     });
 };
 
-export const fetchVegasOdds = async (sport: string = 'football'): Promise<ShadowOdd[]> => {
+import { fetchRapidData } from '../../services/aiService';
+
+// ... (Interface and normalizeOdds helper remain the same, or are re-included)
+// Actually I need to re-declare imports and interfaces if I replace the whole block or manage chunks carefully.
+// I will replace fetchVegasOdds implementation.
+
+export const fetchVegasOdds = async (sport: string = 'american-football_nfl'): Promise<ShadowOdd[]> => {
     console.log(`[Agent 3] Intercepting odds for ${sport}...`);
 
-    if (!CONFIG.RAPID_API_KEY) {
-        throw new Error("[Agent 3] RAPID_API_KEY missing. Cannot intercept.");
-    }
-
     try {
-        const response = await fetch(`https://api-football-v1.p.rapidapi.com/v3/odds?league=39&season=2023`, {
-            method: 'GET',
-            headers: {
-                'X-RapidAPI-Key': CONFIG.RAPID_API_KEY,
-                'X-RapidAPI-Host': 'api-football-v1.p.rapidapi.com'
-            }
-        });
+        // Using 'The Lines' API or 'API-Sports' via our generalized service
+        // For NFL: league=1 (example)
+        const host = 'v1.american-football.api-sports.io';
+        const endpoint = '/odds';
+        // Note: Real IDs would be needed. Using a generic 'live' or 'next' call if possible.
+        // Or strictly mapping sports.
 
-        if (!response.ok) throw new Error(`RapidAPI Error: ${response.status}`);
-        const data = await response.json();
+        const data = await fetchRapidData(endpoint, host, { league: '1', season: '2023' });
         return normalizeOdds(data.response);
 
     } catch (error: any) {

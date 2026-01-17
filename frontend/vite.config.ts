@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: '0.0.0.0',
+      fs: {
+        allow: ['..'] // Allow access to shared folder
+      }
     },
     plugins: [react()],
     define: {
@@ -16,13 +19,16 @@ export default defineConfig(({ mode }) => {
       'process.env.GROQ_API_KEY': JSON.stringify(env.GROQ_API_KEY),
       'process.env.SUPABASE_URL': JSON.stringify(env.SUPABASE_URL),
       'process.env.SUPABASE_KEY': JSON.stringify(env.SUPABASE_KEY),
-      'process.env.KALSHI_KEY_ID': JSON.stringify(env.KALSHI_KEY_ID),
-      'process.env.KALSHI_PRIVATE_KEY': JSON.stringify(env.KALSHI_PRIVATE_KEY),
+      'process.env.KALSHI_DEMO_KEY_ID': JSON.stringify(env.KALSHI_DEMO_KEY_ID),
+      'process.env.KALSHI_DEMO_PRIVATE_KEY': JSON.stringify(env.KALSHI_DEMO_PRIVATE_KEY),
+      'process.env.KALSHI_PROD_KEY_ID': JSON.stringify(env.KALSHI_PROD_KEY_ID),
+      'process.env.KALSHI_PROD_PRIVATE_KEY': JSON.stringify(env.KALSHI_PROD_PRIVATE_KEY),
       'process.env.RAPID_API_KEY': JSON.stringify(env.RAPID_API_KEY)
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(__dirname, './src'),
+        '@shared': path.resolve(__dirname, '../shared')
       }
     }
   };

@@ -15,3 +15,30 @@ export const fetchOrderBook = async (ticker: string, isPaperTrading: boolean) =>
         throw e;
     }
 }
+
+export const analyzeOrderBook = (
+    book: { yes_bid: number; yes_ask: number },
+    targetTicker: string
+) => {
+    // Protocol: The Silent Sniper
+    const spread = book.yes_ask - book.yes_bid;
+
+    console.log(`[Agent 7] Analyzing Orderbook for ${targetTicker}. Spread: ${spread}c`);
+
+    // Guard: Spread too wide (Liquidity Gap Warning)
+    if (spread > 10) {
+        console.warn(`[Agent 7] wide spread detected (${spread}c). Implementation Risk: HIGH.`);
+    }
+
+    // Snipe Logic: 1 cent above high bid
+    const snipePrice = book.yes_bid + 1;
+
+    // Safety: Never snipe above the ask
+    const finalPrice = Math.min(snipePrice, book.yes_ask);
+
+    return {
+        snipePrice: finalPrice,
+        isLiquid: spread < 5,
+        spread: spread
+    };
+}

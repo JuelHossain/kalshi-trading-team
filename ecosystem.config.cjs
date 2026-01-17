@@ -1,10 +1,39 @@
 module.exports = {
-    apps: [{
-        name: "kalshi-sentient-alpha",
-        script: "npm",
-        args: "run preview -- --host --port 8501", // Serving on 8501 to match Blueprint "Streamlit" port convention
-        env: {
-            NODE_ENV: "production",
+    apps: [
+        {
+            name: "kalshi-alpha-backend",
+            cwd: "./backend",
+            script: "npm",
+            args: "start",
+            env: {
+                NODE_ENV: "production",
+            }
+        },
+        {
+            name: "kalshi-alpha-frontend",
+            cwd: "./frontend",
+            script: "npm",
+            args: "run preview -- --host --port 3000",
+            env: {
+                NODE_ENV: "production",
+            }
+        },
+        {
+            name: "sentient-alpha-engine",
+            script: "python3",
+            args: "engine/main.py",
+            env: {
+                PYTHONPATH: "."
+            }
+        },
+        {
+            name: "sentient-alpha-dashboard",
+            script: "streamlit",
+            args: "run dashboard/app.py --server.port 8501 --server.address 0.0.0.0",
+            env: {
+                PYTHONPATH: "."
+            }
         }
-    }]
+    ]
 };
+

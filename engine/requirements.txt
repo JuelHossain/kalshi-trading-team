@@ -1,0 +1,10 @@
+asyncio
+aiohttp
+pydantic
+python-dotenv
+colorama
+cryptography
+groq
+google-generativeai
+supabase
+psutil

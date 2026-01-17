@@ -1,0 +1,17 @@
+{
+    "name": "kalshi-sentient-alpha-root",
+    "private": true,
+    "scripts": {
+        "build:backend": "cd backend && npm install && npm run build",
+        "build:frontend": "cd frontend && npm install && npm run build",
+        "build": "npm run build:backend && npm run build:frontend",
+        "start": "npx pm2 start ecosystem.config.cjs",
+        "stop": "npx pm2 stop all",
+        "logs": "npx pm2 logs",
+        "dev:backend": "cd backend && npm run dev",
+        "dev:frontend": "cd frontend && npm run dev",
+        "test": "npm run test:backend && npm run test:frontend",
+        "test:backend": "cd backend && npm run test",
+        "test:frontend": "cd frontend && npm run test"
+    }
+}

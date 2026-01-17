@@ -12,16 +12,16 @@ export const authorizeExecution = async (cycleId: number): Promise<boolean> => {
     }
 
     // 2. Check Global Kill Switch (Env Var or Config)
-    // In a real app, this might check a Supabase flag or Redis key
-    const killSwitchActive = false;
-    if (killSwitchActive) {
+    if (CONFIG.KILL_SWITCH) {
         console.warn("[Agent 1] OVERRIDE: Kill Switch Active. Halting.");
         return false;
     }
 
     // 3. Time Window Check (e.g., Don't trade during maintainance)
     const now = new Date();
-    if (now.getHours() === 23 && now.getMinutes() > 55) {
+    if (CONFIG.MAINTENANCE_WINDOW.ENABLED &&
+        now.getHours() === CONFIG.MAINTENANCE_WINDOW.START_HOUR &&
+        now.getMinutes() >= CONFIG.MAINTENANCE_WINDOW.START_MINUTE) {
         console.warn("[Agent 1] MAINTENANCE WINDOW. Standing down.");
         return false;
     }

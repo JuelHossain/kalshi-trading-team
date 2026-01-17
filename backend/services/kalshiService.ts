@@ -50,9 +50,32 @@ const getHeaders = (method: string, path: string, body: string = '') => {
     };
 };
 
+export const checkConnection = async (isPaperTrading: boolean) => {
+    try {
+        const balance = await kalshiFetch('/portfolio/balance', 'GET', undefined, isPaperTrading);
+        console.log(`[Agent 8] Connection Verified. Balance: ${JSON.stringify(balance)}`);
+        return true;
+    } catch (e) {
+        console.error("[Agent 8] Connection Check Failed:", e);
+        return false;
+    }
+}
+
 // Generic V2 Request Handler
+import { CHAOS_STATE } from '../agents/agent-14-qa-chaos/state';
+
 // Generic V2 Request Handler
 export const kalshiFetch = async (endpoint: string, method: 'GET' | 'POST' | 'DELETE', body?: any, isPaper: boolean = true) => {
+    // Agent 14: Chaos Injection
+    if (CHAOS_STATE.SIMULATE_500) {
+        console.warn("[Agent 14] CHAOS: Simulating 500 Error...");
+        throw new Error("CHAOS_INJECTED_500: Internal Server Error (Simulated)");
+    }
+    if (CHAOS_STATE.SIMULATE_TIMEOUT) {
+        console.warn("[Agent 14] CHAOS: Simulating 20s Timeout...");
+        await new Promise(resolve => setTimeout(resolve, 20000));
+        throw new Error("CHAOS_INJECTED_TIMEOUT: Request Timed Out (Simulated)");
+    }
     const baseUrl = isPaper ? CONFIG.KALSHI.SANDBOX_API : CONFIG.KALSHI.PROD_API;
     // Remove /trade-api/v2 from base if present to ensure path correctness, 
     // assuming CONFIG.KALSHI.*_API includes the version path. 
@@ -155,13 +178,35 @@ export const createOrder = async (
         count: count,
         side: side,
         ticker: ticker,
-        type: 'market', // Aggressive execution
+        type: 'limit', // PROTOCOL: The Silent Sniper (No Market Orders)
+        yes_price: side === 'yes' ? 50 : 50, // This should be calculated by Agent 8
         client_order_id: `sentient_${Date.now()}`
     };
 
     const response = await kalshiFetch('/portfolio/orders', 'POST', orderBody, isPaperTrading);
     return response.order;
 }
+
+export const fetchOpenOrders = async (isPaperTrading: boolean) => {
+    try {
+        const data = await kalshiFetch('/portfolio/orders?status=resting', 'GET', undefined, isPaperTrading);
+        return data.orders || [];
+    } catch (e) {
+        console.error("[Agent 12] Failed to fetch open orders", e);
+        return [];
+    }
+};
+
+export const cancelOrder = async (orderId: string, isPaperTrading: boolean) => {
+    try {
+        await kalshiFetch(`/portfolio/orders/${orderId}`, 'DELETE', undefined, isPaperTrading);
+        return true;
+    } catch (e) {
+        console.error(`[Agent 12] Failed to cancel order ${orderId}`, e);
+        return false;
+    }
+};
+
 
 export const fetchActiveMarkets = async (isPaperTrading: boolean) => {
     return fetchScoutedMarkets(isPaperTrading);

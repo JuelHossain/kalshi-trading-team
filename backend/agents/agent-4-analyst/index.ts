@@ -1,51 +1,100 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { DebateResponse } from "../../types";
+import { SchemaType } from "@google/generative-ai";
+import { DebateResponse } from "@shared/types";
+import { initGenAI, queryGroq, queryGemini } from "../../services/aiService";
+import { retrieveReflexiveMemory } from "../agent-10-historian";
 
-const initGenAI = () => {
-    const apiKey = process.env.API_KEY; // Using properly exposed env var via vite define or process.env shim
-    if (!apiKey) return null;
-    return new GoogleGenAI({ apiKey });
+// ------------------------------------------------------------------
+// MATH: KELLY CRITERION
+// ------------------------------------------------------------------
+const calculateKelly = (winProb: number, marketPriceCents: number): number => {
+    // WinProb (0-1), MarketPrice (1-99)
+    // b (Net Odds) = (Payout - Cost) / Cost
+    if (marketPriceCents <= 0 || marketPriceCents >= 100) return 0;
+
+    const marketProb = marketPriceCents / 100;
+    const netOdds = (1 - marketProb) / marketProb;
+
+    // Full Kelly = p - (1-p)/b
+    const kellyFraction = winProb - ((1 - winProb) / netOdds);
+
+    // Safety: Fractional Kelly (1/4) and cap at 10% of bankroll per trade
+    const safeKelly = kellyFraction * 0.25;
+
+    return Math.max(0, Math.min(safeKelly, 0.10));
 };
 
-export const runCommitteeDebate = async (market: string): Promise<DebateResponse> => {
+// ------------------------------------------------------------------
+// DEBATE LOGIC
+// ------------------------------------------------------------------
+
+export const runCommitteeDebate = async (market: string, currentPriceCents: number): Promise<DebateResponse> => {
     const ai = initGenAI();
+    if (!ai) throw new Error("Agent 4 Offline: AI Init Failed");
 
-    if (!ai) {
-        throw new Error("System: API_KEY missing. Agent 4 Offline.");
-    }
+    console.log(`[Agent 4] Starting Committee Debate for: "${market}"`);
 
-    try {
-        const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: `Conduct a 'Committee Debate' for the Kalshi prediction market: "${market}".
-      
-      You are three agents:
-      1. The Optimist: Looks for reasons to BUY/Enter.
-      2. The Pessimist: Looks for risks, traps, and reasons to SELL/Avoid.
-      3. The Judge: Weighs both sides and gives a final verdict and confidence score (0-100).
-      
-      Be concise, technical, and trade-focused.`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        optimistArg: { type: Type.STRING },
-                        pessimistArg: { type: Type.STRING },
-                        judgeVerdict: { type: Type.STRING },
-                        confidenceScore: { type: Type.INTEGER },
-                    },
-                    required: ["optimistArg", "pessimistArg", "judgeVerdict", "confidenceScore"],
+    // 1. REFLEXIVE MEMORY (RAG)
+    const pastLessons = await retrieveReflexiveMemory(market, market);
+    const contextInjection = pastLessons ? `\n\nCRITICAL PAST LESSONS (DO NOT REPEAT MISTAKES):\n${pastLessons}` : "";
+
+    // 2. THE OPTIMIST (Gemini 1.5 Pro)
+    const optimistPrompt = `You are The Optimist (Bull). 
+    Argue why we should BUY "YES" on this Kalshi market: "${market}".
+    Current Price: ${currentPriceCents} cents.
+    Focus on positive alpha, momentum, and structural advantages.
+    Keep it concise (2 sentences).${contextInjection}`;
+
+    const optimistArg = await queryGemini(optimistPrompt);
+
+    // 3. THE PESSIMIST (Llama 3.1 70B via Groq)
+    const pessimistPrompt = `You are The Pessimist (Bear).
+    Argue why we should BUY "NO" (or Sell "Yes") on this Kalshi market: "${market}".
+    Current Price: ${currentPriceCents} cents.
+    Focus on risks, overvaluation, and why the crowd is wrong.
+    Keep it concise (2 sentences).${contextInjection}`;
+
+    const pessimistArg = await queryGroq(pessimistPrompt, "You are a skeptical risk manager.", "llama-3.1-70b-versatile");
+
+    // 4. THE JUDGE (Gemini 1.5 Pro - Structured Output)
+    console.log(`[Agent 4] Judge is deliberating...`);
+
+    const judgePrompt = `Act as The Judge. Weigh the arguments for market "${market}" (Price: ${currentPriceCents}¢).
+    
+    [OPTIMIST ARGUMENT]: ${optimistArg}
+    [PESSIMIST ARGUMENT]: ${pessimistArg}
+    ${contextInjection}
+    
+    Decide the true probability of YES winning (0-100%).
+    Provide a final verdict/reasoning.`;
+
+    const model = ai.getGenerativeModel({
+        model: "gemini-1.5-pro",
+        generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: SchemaType.OBJECT,
+                properties: {
+                    optimistArg: { type: SchemaType.STRING },
+                    pessimistArg: { type: SchemaType.STRING },
+                    judgeVerdict: { type: SchemaType.STRING },
+                    confidenceScore: { type: SchemaType.INTEGER },
                 },
-            },
-        });
+                required: ["optimistArg", "judgeVerdict", "confidenceScore"]
+            }
+        }
+    });
 
-        const result = response.text ? JSON.parse(response.text) : null;
-        if (!result) throw new Error("Malformed JSON response from Gemini");
-        return result as DebateResponse;
+    const result = await model.generateContent(judgePrompt);
+    const discussion = JSON.parse(result.response.text());
 
-    } catch (error) {
-        console.error("Gemini API Failed.", error);
-        throw error;
-    }
+    // 5. CALCULATE SIZE
+    const winProb = discussion.confidenceScore / 100;
+    const recommendedSize = calculateKelly(winProb, currentPriceCents);
+
+    return {
+        ...discussion,
+        pessimistArg: pessimistArg, // Ensure Llama's output is included even if Gemini hallucinated it (override)
+        recommendedSize: recommendedSize,
+        market: market
+    };
 };

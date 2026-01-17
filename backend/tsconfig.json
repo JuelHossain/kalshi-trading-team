@@ -1,29 +1,30 @@
 {
     "compilerOptions": {
         "target": "ESNext",
-        "useDefineForClassFields": true,
         "module": "ESNext",
         "moduleResolution": "Node",
+        "outDir": "dist",
         "strict": true,
-        "jsx": "react-jsx",
-        "resolveJsonModule": true,
-        "isolatedModules": true,
         "esModuleInterop": true,
-        "lib": [
-            "ESNext",
-            "DOM"
-        ],
         "skipLibCheck": true,
-        "noEmit": true,
-        "allowImportingTsExtensions": true,
-        "rewriteRelativeImportExtensions": true
+        "forceConsistentCasingInFileNames": true,
+        "resolveJsonModule": true,
+        "baseUrl": ".",
+        "paths": {
+            "@shared/*": [
+                "../shared/*"
+            ]
+        }
     },
     "include": [
-        "src",
-        "agents",
-        "services",
-        "types.ts",
+        "src/**/*",
+        "agents/**/*",
+        "services/**/*",
         "config.ts",
-        "constants.ts"
+        "../shared/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist"
     ]
 }

@@ -11,3 +11,5 @@ export * from './agent-10-historian';
 export * from './agent-11-mechanic';
 export * from './agent-12-ragnarok';
 export * from './agent-13-fixer';
+export * from './agent-14-qa-chaos/index';
+// export * from './agent-14-qa-chaos/state'; // Optional, but usually index re-exports are sufficient if configured.

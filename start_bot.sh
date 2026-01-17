@@ -2,20 +2,18 @@
 
 echo "🔧 Agent 11 (The Mechanic): Initializing Stability Protocol..."
 
-# 1. Use npx to run PM2 without global install
-echo "Using npx to manage process..."
-
-
-# 2. Build the application
+# 1. Build the application (Shared -> Backend -> Frontend)
 echo "Building Production Artifacts..."
 npm run build
 
-# 3. Start the Ecosystem
-echo "Starting Bot via Process Manager..."
+# 2. Start the Ecosystem (Backend + Frontend)
+echo "Starting Sentient Alpha via Process Manager..."
 npx pm2 start ecosystem.config.cjs
 
-# 4. Save list related to system reboot
+# 3. Save process list
 npx pm2 save
 
-echo "✅ Bot is Online at http://YOUR_VPS_IP:8501"
-echo "⚠️  REMINDER: You must keep a BROWSER TAB OPEN at this URL for the Orchestrator (Agent 1) to run."
+echo "✅ Bot is Online!"
+echo "📡 Backend: http://localhost:3001"
+echo "📊 HUD (Frontend): http://localhost:8501"
+echo "⚠️  REMINDER: Open the HUD in your browser to start the autonomous cycle."

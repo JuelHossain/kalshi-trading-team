@@ -1,10 +1,11 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { runOrchestratorCycle } from './orchestrator';
-import { LogEntry } from '../types';
+import { spawn } from 'child_process';
+import { LogEntry } from '@shared/types';
 import { CONFIG } from '../config';
 import { authenticateWithKeys, isAuthenticated } from '../services/kalshiService';
+import { startSentinel, auditCodebase } from '../agents/exports';
 
 dotenv.config();
 
@@ -50,6 +51,17 @@ const initializeBackend = async () => {
         try {
             await authenticateWithKeys(keyId, privateKey, !isProd);
             console.log(`System: Backend Authorized [${isProd ? 'LIVE_NET' : 'SANDBOX'}].`);
+
+            // Agent 14: Start Sentinel for Principal Protection
+            await startSentinel(!isProd);
+
+            // Agent 14: Logic Audit
+            const auditPassed = auditCodebase();
+            if (!auditPassed) {
+                console.error("[Agent 14] VETO TRIGGERED: Critical Codebase Violations. Shutting down.");
+                process.exit(1);
+            }
+
         } catch (e) {
             console.error("System: Backend Authorization Failed.", e);
         }
@@ -85,44 +97,96 @@ const broadcast = (data: any) => {
     });
 };
 
+app.post('/api/analyze', async (req: Request, res: Response) => {
+    const { query } = req.body;
+    try {
+        const { runCommitteeDebate } = await import('../agents/exports');
+        const debate = await runCommitteeDebate(query, 50); // Default to 50c if no price known
+        res.json(debate);
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth', async (req: Request, res: Response) => {
+    const { keyId, privateKey, isPaperTrading } = req.body;
+    try {
+        await authenticateWithKeys(keyId, privateKey, isPaperTrading);
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(401).json({ error: err.message });
+    }
+});
+
 app.post('/api/run', async (req: Request, res: Response) => {
     if (systemState.isProcessing) {
         return res.status(400).json({ error: 'System busy. Cycle already in progress.' });
     }
 
-    const { isPaperTrading } = req.body;
+    systemState.isProcessing = true;
     systemState.cycleCount++;
+    broadcast({ type: 'STATE', state: { isProcessing: true, cycleCount: systemState.cycleCount } });
 
-    // Trigger the cycle in the background
-    runOrchestratorCycle(isPaperTrading, systemState.cycleCount, (update: any) => {
-        // Update local state
-        if (update.type === 'LOG') {
-            systemState.logs = [...systemState.logs.slice(-499), update.log];
-        } else if (update.type === 'STATE') {
-            systemState = { ...systemState, ...update.state };
-        }
-        // Broadcast to all connected frontends
-        broadcast(update);
-    }).catch(err => {
-        console.error("Background cycle crashed:", err);
-        broadcast({
-            type: 'LOG',
-            log: {
-                id: 'err-' + Date.now(),
-                timestamp: new Date().toISOString(),
-                agentId: 0,
-                cycleId: systemState.cycleCount,
-                level: 'ERROR',
-                message: `CRITICAL PROCESS CRASH: ${err.message}`
+    console.log("[BRIDGE] Spawning Python Ghost Engine...");
+    const isPaperTrading = req.body.isPaperTrading;
+
+    const pyProcess = spawn('python3', ['engine/main.py'], {
+        env: {
+            ...process.env,
+            JSON_LOGS: 'true',
+            IS_PAPER_TRADING: isPaperTrading ? 'true' : 'false'
+        },
+        cwd: process.cwd()
+    });
+
+    // Cleanup: Kill Python if Node exits
+    const cleanup = () => pyProcess.kill();
+    process.on('exit', cleanup);
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
+
+    pyProcess.stdout.on('data', (data) => {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+                const event = JSON.parse(line);
+                if (event.type === 'LOG') {
+                    const log = {
+                        id: Math.random().toString(36).substring(7),
+                        timestamp: new Date().toISOString(),
+                        ...event.log
+                    };
+                    systemState.logs = [...systemState.logs.slice(-499), log];
+                    broadcast({ type: 'LOG', log });
+                } else {
+                    // STATE, VAULT, SIMULATION, HEALTH
+                    broadcast(event);
+                }
+            } catch (e) {
+                // Not JSON, just regular log
+                console.log(`[PY] ${line}`);
             }
-        });
+        }
+    });
+
+    pyProcess.stderr.on('data', (data) => {
+        console.error(`[PY_ERR] ${data}`);
+    });
+
+    pyProcess.on('close', (code) => {
+        console.log(`[BRIDGE] Python Engine exited with code ${code}`);
         systemState.isProcessing = false;
         broadcast({ type: 'STATE', state: { isProcessing: false } });
     });
 
-    res.json({ message: 'Engine cycle initiated.', cycleId: systemState.cycleCount });
+    res.json({ message: 'Python Engine cycle initiated.', cycleId: systemState.cycleCount });
 });
 
-app.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`SENTIENT ALPHA ENGINE online at port ${PORT}`);
-});
+export { app };
+
+if (process.env.NODE_ENV !== 'test') {
+    app.listen(Number(PORT), '0.0.0.0', () => {
+        console.log(`SENTIENT ALPHA ENGINE online at port ${PORT}`);
+    });
+}

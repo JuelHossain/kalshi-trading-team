@@ -1,37 +1,43 @@
-import { GoogleGenAI } from "@google/genai";
-import { CONFIG } from '../../config';
+import { queryGroq } from "../../services/aiService";
 
-const initGenAI = () => {
-    const apiKey = CONFIG.GEMINI_API_KEY || process.env.API_KEY;
-    if (!apiKey) return null;
-    return new GoogleGenAI({ apiKey });
-};
-
-export const auditDecision = async (marketTitle: string, analystVerdict: string): Promise<{ approved: boolean; reason: string }> => {
-    // Agent 6: The Auditor (Cynical Reviewer)
-    const ai = initGenAI();
-    if (!ai) return { approved: true, reason: "Auditor Offline - Bypassing" };
+export const auditDecision = async (
+    marketTitle: string,
+    analystVerdict: string,
+    analystConfidence: number
+): Promise<{ approved: boolean; reason: string; auditorConfidence: number }> => {
+    // Agent 6: The Auditor
+    // PROTOCOL: The Committee Veto (Requires 85% Consensus)
 
     try {
-        const response = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: `Role: Financial Auditor.
-            Task: Review a trade decision for hallucination or extreme bias.
-            
-            Market: "${marketTitle}"
-            Analyst Verdict: "${analystVerdict}"
-            
-            If the verdict seems rational (even if risky), APPROVE.
-            If the verdict ignores obvious reality (e.g., "The sun will not set today"), REJECT.
-            
-            Output JSON: { "approved": boolean, "reason": string }`,
-            config: { responseMimeType: "application/json" }
-        });
+        const systemPrompt = "You are the Pessimist Auditor. Your job is to find reasons why a trade will FAIL. Be cynical and paranoid. Return STRICTLY valid JSON.";
+        const userPrompt = `Review this trade:
+        Market: "${marketTitle}"
+        Analyst Verdict: "${analystVerdict}"
 
-        const text = response.text || "{}";
-        return JSON.parse(text);
-    } catch (e) {
-        console.error("[Agent 6] Audit Failed", e);
-        return { approved: true, reason: "Audit Error - Fail Open" };
+        Give me a confidence score (0-100) on success.
+        Output strictly JSON: { "approved": boolean, "reason": string, "auditorConfidence": number }`;
+
+        const responseText = await queryGroq(userPrompt, systemPrompt);
+
+        // Clean up markdown if present
+        const jsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const result = JSON.parse(jsonStr);
+
+        // Calculate Consensus
+        const averageConfidence = (analystConfidence + result.auditorConfidence) / 2;
+        const consensusReached = averageConfidence >= 85;
+
+        if (!consensusReached) {
+            return {
+                approved: false,
+                reason: `COMMITTEE VETO: Consensus (${averageConfidence.toFixed(1)}%) < 85%. ${result.reason}`,
+                auditorConfidence: result.auditorConfidence
+            };
+        }
+
+        return { ...result, approved: true };
+    } catch (e: any) {
+        console.error("[Agent 6] Audit Failed:", e.message);
+        return { approved: false, reason: `Audit Error: ${e.message} - Fail Closed`, auditorConfidence: 0 };
     }
 }
