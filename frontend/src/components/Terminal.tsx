@@ -1,47 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { LogEntry } from '@shared/types';
+import { PHASES, PHASE_ORDER, INTERVENTION_PHASE, PhaseConfig } from '@shared/constants';
 
 interface TerminalProps {
     logs: LogEntry[];
 }
 
-const PHASE_CONFIG: Record<number, { title: string; subtitle: string; color: string; borderColor: string; icon: string; bg: string }> = {
-    0: { title: 'SYSTEM', subtitle: 'Kernel', color: 'text-gray-400', borderColor: 'border-gray-800', icon: '⏻', bg: 'bg-gray-900/20' },
-    1: { title: 'PHASE 1', subtitle: 'Surveillance', color: 'text-blue-400', borderColor: 'border-blue-500/30', icon: '📡', bg: 'bg-blue-900/10' },
-    2: { title: 'PHASE 2', subtitle: 'Intelligence', color: 'text-pink-400', borderColor: 'border-pink-500/30', icon: '🧠', bg: 'bg-pink-900/10' },
-    3: { title: 'PHASE 3', subtitle: 'Execution', color: 'text-emerald-400', borderColor: 'border-emerald-500/30', icon: '⚡', bg: 'bg-emerald-900/10' },
-    4: { title: 'PHASE 4', subtitle: 'Accounting', color: 'text-amber-400', borderColor: 'border-amber-500/30', icon: '💾', bg: 'bg-amber-900/10' },
-    5: { title: 'PROTECT', subtitle: 'Sentinel', color: 'text-red-400', borderColor: 'border-red-500/30', icon: '🛡️', bg: 'bg-red-900/10' },
-    13: { title: 'INTERVENTION', subtitle: 'Auto-Fix', color: 'text-red-500', borderColor: 'border-red-500/50', icon: '🔧', bg: 'bg-red-900/20' }
-};
-
-const getPhaseId = (agentId: number, logPhaseId?: number): number => {
-    if (logPhaseId !== undefined) return logPhaseId;
-
-    switch (agentId) {
-        case 14: // Sentinel Audit is phase 0, but checking PnL or Chaos is phase 5
-            return 5;
-        case 12: // Ragnarok
-            return 5;
-        case 2: // Scout
-        case 3: // Interceptor
-        case 7: // Sniper
-            return 1;
-        case 4: // Analyst
-        case 5: // Sim
-        case 6: // Auditor
-            return 2;
-        case 1: // Ghost
-        case 8: // Executioner
-        case 11: // Mechanic
-            return 3;
-        case 9: // Accountant
-        case 10: // Historian
-            return 4;
-        case 13: // Fixer
-            return 13;
-        default: return 0;
-    }
+const getPhaseConfig = (phaseId: number): PhaseConfig => {
+    if (phaseId === 13) return INTERVENTION_PHASE;
+    return PHASES[phaseId] || PHASES[0];
 };
 
 const PhaseBlock: React.FC<{
@@ -50,7 +17,7 @@ const PhaseBlock: React.FC<{
     isLast: boolean;
     isActiveCycle: boolean;
 }> = ({ phaseId, logs, isLast, isActiveCycle }) => {
-    const config = PHASE_CONFIG[phaseId] || PHASE_CONFIG[0];
+    const config = getPhaseConfig(phaseId);
 
     // Determine status based on logs
     const hasError = logs.some(l => l.level === 'ERROR');
@@ -110,6 +77,72 @@ const PhaseBlock: React.FC<{
     );
 };
 
+const CycleProgressIndicator: React.FC<{
+    completedPhases: Set<number>;
+    currentPhase: number;
+    hasError: boolean;
+    isComplete: boolean;
+}> = ({ completedPhases, currentPhase, hasError, isComplete }) => {
+    const progress = (completedPhases.size / PHASE_ORDER.length) * 100;
+
+    return (
+        <div className="mb-4 p-3 rounded-xl bg-black/40 border border-white/5">
+            {/* Progress Bar */}
+            <div className="mb-3">
+                <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[9px] font-mono text-gray-500 uppercase tracking-wider">Cycle Progress</span>
+                    <span className="text-[9px] font-mono text-emerald-400 font-bold">{Math.round(progress)}%</span>
+                </div>
+                <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div
+                        className={`h-full transition-all duration-500 ${hasError ? 'bg-red-500' : isComplete ? 'bg-emerald-500' : 'bg-blue-500'
+                            }`}
+                        style={{ width: `${progress}%` }}
+                    ></div>
+                </div>
+            </div>
+
+            {/* Phase Checklist */}
+            <div className="grid grid-cols-2 gap-2">
+                {PHASE_ORDER.map(phaseId => {
+                    const config = PHASES[phaseId];
+                    const isCompleted = completedPhases.has(phaseId);
+                    const isCurrent = currentPhase === phaseId;
+                    const isPending = !isCompleted && !isCurrent;
+
+                    let statusIcon = '○';
+                    let statusColor = 'text-gray-600';
+
+                    if (isCompleted) {
+                        statusIcon = '✓';
+                        statusColor = 'text-emerald-500';
+                    } else if (isCurrent) {
+                        statusIcon = '⏳';
+                        statusColor = 'text-blue-400 animate-pulse';
+                    } else if (hasError && isCurrent) {
+                        statusIcon = '✗';
+                        statusColor = 'text-red-500';
+                    }
+
+                    return (
+                        <div
+                            key={phaseId}
+                            className={`flex items-center gap-2 px-2 py-1 rounded-lg ${isCurrent ? 'bg-white/5 border border-white/10' : ''
+                                }`}
+                        >
+                            <span className={`text-[10px] ${statusColor}`}>{statusIcon}</span>
+                            <span className={`text-[9px] font-mono ${isCompleted ? 'text-gray-400' : isCurrent ? 'text-white' : 'text-gray-600'
+                                }`}>
+                                {config.subtitle}
+                            </span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
 const CycleGroup: React.FC<{
     cycleId: number;
     logs: LogEntry[];
@@ -119,21 +152,21 @@ const CycleGroup: React.FC<{
 }> = ({ cycleId, logs, isExpanded, toggle, isLatest }) => {
 
     const hasError = logs.some(l => l.level === 'ERROR');
-    const isSuccess = logs.some(l => l.message.includes('Cycle Complete'));
+    const isComplete = logs.some(l => l.message.includes('CYCLE') && l.message.includes('COMPLETE'));
 
     const targetLog = logs.find(l => l.message.includes('TARGET LOCK') || l.message.includes('Target:'));
     const targetName = targetLog
         ? targetLog.message.split(':').pop()?.replace('(', '').replace(')', '').trim()
         : logs.find(l => l.message.includes('Scanning')) ? 'SCANNING...' : 'SYSTEM IDLE';
 
-    const statusColor = isLatest && !isSuccess && !hasError ? 'text-blue-400'
+    const statusColor = isLatest && !isComplete && !hasError ? 'text-blue-400'
         : hasError ? 'text-red-400'
-            : isSuccess ? 'text-emerald-400'
+            : isComplete ? 'text-emerald-400'
                 : 'text-gray-400';
 
-    const borderColor = isLatest && !isSuccess && !hasError ? 'border-blue-500/30'
+    const borderColor = isLatest && !isComplete && !hasError ? 'border-blue-500/30'
         : hasError ? 'border-red-500/30'
-            : isSuccess ? 'border-emerald-500/30'
+            : isComplete ? 'border-emerald-500/30'
                 : 'border-white/5';
 
     // Group logs by Phase
@@ -142,8 +175,7 @@ const CycleGroup: React.FC<{
         let currentPhaseId = -1;
 
         logs.forEach(log => {
-            const pId = getPhaseId(log.agentId, log.phaseId);
-            // Collapse Phase 0 (System) logs if they appear consecutively
+            const pId = log.phaseId;
             if (pId !== currentPhaseId) {
                 groups.push({ phaseId: pId, logs: [log] });
                 currentPhaseId = pId;
@@ -152,6 +184,38 @@ const CycleGroup: React.FC<{
             }
         });
         return groups;
+    }, [logs]);
+
+    // Calculate completed phases and current phase
+    const completedPhases = useMemo(() => {
+        const phases = new Set<number>();
+        let maxPhase = 0;
+
+        logs.forEach(log => {
+            if (log.phaseId > maxPhase) maxPhase = log.phaseId;
+        });
+
+        // Mark all phases before the current one as complete
+        PHASE_ORDER.forEach(phaseId => {
+            if (phaseId < maxPhase) {
+                phases.add(phaseId);
+            }
+        });
+
+        // If cycle is complete, mark all phases as complete
+        if (isComplete) {
+            PHASE_ORDER.forEach(phaseId => phases.add(phaseId));
+        }
+
+        return phases;
+    }, [logs, isComplete]);
+
+    const currentPhase = useMemo(() => {
+        let maxPhase = 0;
+        logs.forEach(log => {
+            if (log.phaseId > maxPhase) maxPhase = log.phaseId;
+        });
+        return maxPhase;
     }, [logs]);
 
     return (
@@ -178,9 +242,14 @@ const CycleGroup: React.FC<{
                 </div>
 
                 <div className="flex items-center gap-3">
-                    {isLatest && !isSuccess && !hasError && (
+                    {isLatest && !isComplete && !hasError && (
                         <div className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-[9px] text-blue-400 font-mono animate-pulse">
                             RUNNING
+                        </div>
+                    )}
+                    {isComplete && (
+                        <div className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] text-emerald-400 font-mono">
+                            COMPLETE
                         </div>
                     )}
                     <div className={`text-xs text-gray-500 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
@@ -192,6 +261,15 @@ const CycleGroup: React.FC<{
             {/* Expanded Phase View */}
             {isExpanded && (
                 <div className="p-4 pt-2 border-t border-white/5 animate-[fadeIn_0.3s_ease-out]">
+                    {/* Cycle Progress Indicator */}
+                    <CycleProgressIndicator
+                        completedPhases={completedPhases}
+                        currentPhase={currentPhase}
+                        hasError={hasError}
+                        isComplete={isComplete}
+                    />
+
+                    {/* Phase Timeline */}
                     <div className="relative">
                         {phaseGroups.map((group, idx) => (
                             <PhaseBlock
@@ -199,7 +277,7 @@ const CycleGroup: React.FC<{
                                 phaseId={group.phaseId}
                                 logs={group.logs}
                                 isLast={idx === phaseGroups.length - 1}
-                                isActiveCycle={isLatest && !isSuccess && !hasError}
+                                isActiveCycle={isLatest && !isComplete && !hasError}
                             />
                         ))}
                     </div>
@@ -256,7 +334,7 @@ const Terminal: React.FC<TerminalProps> = ({ logs }) => {
                         <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/20 border border-emerald-500/50"></div>
                     </div>
                     <h3 className="text-gray-400 font-mono text-xs uppercase tracking-widest ml-2">
-                        Neural_Trace_v2.2 [PHASED]
+                        Neural_Trace_v3.0 [CYCLE-BASED]
                     </h3>
                 </div>
                 <div className="px-2 py-1 rounded-full bg-emerald-900/20 border border-emerald-500/20">

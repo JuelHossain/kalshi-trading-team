@@ -17,14 +17,29 @@ export interface Agent {
   hidden?: boolean;
 }
 
+export enum CycleStatus {
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETE = 'COMPLETE',
+  INCOMPLETE = 'INCOMPLETE'
+}
+
 export interface LogEntry {
   id: string;
   timestamp: string;
   agentId: number;
   cycleId: number;
-  phaseId?: number; // Added to override default agent-to-phase mapping
+  phaseId: number; // Required: explicit phase for cycle-based tracking
   level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS';
   message: string;
+}
+
+export interface CycleState {
+  cycleId: number;
+  status: CycleStatus;
+  completedPhases: number[];
+  currentPhase: number;
+  startTime: string;
+  endTime?: string;
 }
 
 export interface MarketAnalysis {

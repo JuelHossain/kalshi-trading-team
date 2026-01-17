@@ -45,3 +45,92 @@ export const WORKFLOW_STEPS: Record<number, string> = {
   13: "FIXER: AI-driven autonomous error recovery protocol...",
   14: "GATEWAY: Transmitting bus telemetry to dashboard bridge...",
 };
+
+// Phase Configuration for Cycle-Based Completion
+export const PHASE_ORDER = [0, 1, 2, 3, 4, 5] as const;
+
+export interface PhaseConfig {
+  id: number;
+  title: string;
+  subtitle: string;
+  color: string;
+  borderColor: string;
+  icon: string;
+  bg: string;
+  requiredAgents: number[]; // Agents that must complete in this phase
+}
+
+export const PHASES: Record<number, PhaseConfig> = {
+  0: {
+    id: 0,
+    title: 'PHASE 0',
+    subtitle: 'System Init',
+    color: 'text-gray-400',
+    borderColor: 'border-gray-800',
+    icon: '⏻',
+    bg: 'bg-gray-900/20',
+    requiredAgents: [1, 11], // Ghost + Mechanic
+  },
+  1: {
+    id: 1,
+    title: 'PHASE 1',
+    subtitle: 'Surveillance',
+    color: 'text-blue-400',
+    borderColor: 'border-blue-500/30',
+    icon: '📡',
+    bg: 'bg-blue-900/10',
+    requiredAgents: [2, 3, 7], // Scout + Interceptor + Sniper
+  },
+  2: {
+    id: 2,
+    title: 'PHASE 2',
+    subtitle: 'Intelligence',
+    color: 'text-pink-400',
+    borderColor: 'border-pink-500/30',
+    icon: '🧠',
+    bg: 'bg-pink-900/10',
+    requiredAgents: [4, 5, 6], // Analyst + Scientist + Auditor
+  },
+  3: {
+    id: 3,
+    title: 'PHASE 3',
+    subtitle: 'Execution',
+    color: 'text-emerald-400',
+    borderColor: 'border-emerald-500/30',
+    icon: '⚡',
+    bg: 'bg-emerald-900/10',
+    requiredAgents: [8], // Executioner
+  },
+  4: {
+    id: 4,
+    title: 'PHASE 4',
+    subtitle: 'Accounting',
+    color: 'text-amber-400',
+    borderColor: 'border-amber-500/30',
+    icon: '💾',
+    bg: 'bg-amber-900/10',
+    requiredAgents: [9, 10], // Accountant + Historian
+  },
+  5: {
+    id: 5,
+    title: 'PHASE 5',
+    subtitle: 'Protection',
+    color: 'text-red-400',
+    borderColor: 'border-red-500/30',
+    icon: '🛡️',
+    bg: 'bg-red-900/10',
+    requiredAgents: [12, 14], // Ragnarok + Sentinel
+  },
+};
+
+// Special phase for interventions
+export const INTERVENTION_PHASE: PhaseConfig = {
+  id: 13,
+  title: 'INTERVENTION',
+  subtitle: 'Auto-Fix',
+  color: 'text-red-500',
+  borderColor: 'border-red-500/50',
+  icon: '🔧',
+  bg: 'bg-red-900/20',
+  requiredAgents: [13], // Fixer
+};

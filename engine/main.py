@@ -43,6 +43,8 @@ class GhostEngine:
         self.vault: RecursiveVault = RecursiveVault()
         self.running: bool = True
         self.agents: List[BaseAgent] = []
+        self.cycle_count: int = 0
+        self.is_processing: bool = False
 
     async def initialize_system(self):
         print(f"{Fore.MAGENTA}=========================================={Style.RESET_ALL}")
@@ -119,21 +121,34 @@ class GhostEngine:
 
         return True
 
-    async def run_cycle(self):
-        """Main Heartbeat Loop."""
-        cycle_count = 0
-        while self.running:
-            cycle_count += 1
-            
+    async def execute_single_cycle(self, is_paper_trading: bool = True):
+        """Execute a single trading cycle on-demand."""
+        if self.is_processing:
+            print(f"{Fore.YELLOW}[GHOST] Cycle already in progress. Ignoring trigger.{Style.RESET_ALL}")
+            return
+        
+        self.is_processing = True
+        self.cycle_count += 1
+        
+        try:
             # Agent 1: Authorization
             if not self.authorize_cycle():
-                await asyncio.sleep(60) # Back off if not authorized
-                continue
-
-            # Broadcast "TICK" event
-            await self.bus.publish("TICK", {"cycle": cycle_count}, "GHOST")
+                print(f"{Fore.YELLOW}[GHOST] Cycle {self.cycle_count} not authorized.{Style.RESET_ALL}")
+                return
             
-            await asyncio.sleep(1)
+            # Broadcast "TICK" event
+            await self.bus.publish("TICK", {"cycle": self.cycle_count, "isPaperTrading": is_paper_trading}, "GHOST")
+            
+            # Simulate cycle work (agents will respond to TICK)
+            await asyncio.sleep(0.5)
+            
+            print(f"{Fore.GREEN}[GHOST] Cycle {self.cycle_count} complete.{Style.RESET_ALL}")
+        
+        except Exception as e:
+            print(f"{Fore.RED}[GHOST] Cycle {self.cycle_count} failed: {e}{Style.RESET_ALL}")
+        
+        finally:
+            self.is_processing = False
 
     async def shutdown(self):
         print(f"\n{Fore.RED}[GHOST] SHUTDOWN PROTOCOL INITIATED.{Style.RESET_ALL}")
@@ -144,6 +159,93 @@ class GhostEngine:
         
         # Future: Call teardown() on all agents
         print(f"{Fore.RED}[GHOST] ALL SYSTEMS OFFLINE.{Style.RESET_ALL}")
+
+    async def start_http_server(self):
+        """Start HTTP trigger endpoint."""
+        from aiohttp import web
+        import asyncio
+        
+        # SSE clients queue
+        self.sse_clients = []
+        
+        async def trigger_cycle(request):
+            data = await request.json()
+            is_paper = data.get('isPaperTrading', True)
+            
+            # Fire and forget
+            asyncio.create_task(self.execute_single_cycle(is_paper))
+            
+            return web.json_response({
+                "status": "triggered",
+                "cycleId": self.cycle_count + 1,
+                "isProcessing": self.is_processing
+            })
+        
+        async def health_check(request):
+            return web.json_response({
+                "status": "online",
+                "cycleCount": self.cycle_count,
+                "isProcessing": self.is_processing,
+                "vaultLocked": self.vault.is_locked,
+                "killSwitch": self.vault.kill_switch_active
+            })
+        
+        async def stream_logs(request):
+            """SSE endpoint for real-time log streaming."""
+            response = web.StreamResponse()
+            response.headers['Content-Type'] = 'text/event-stream'
+            response.headers['Cache-Control'] = 'no-cache'
+            response.headers['Connection'] = 'keep-alive'
+            await response.prepare(request)
+            
+            # Create a queue for this client
+            queue = asyncio.Queue()
+            self.sse_clients.append(queue)
+            
+            try:
+                while True:
+                    event = await queue.get()
+                    await response.write(f"data: {json.dumps(event)}\n\n".encode())
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self.sse_clients.remove(queue)
+            
+            return response
+        
+        app = web.Application()
+        app.router.add_post('/trigger', trigger_cycle)
+        app.router.add_get('/health', health_check)
+        app.router.add_get('/stream', stream_logs)
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', 3002)
+        await site.start()
+        
+        print(f"{Fore.CYAN}[GHOST] HTTP Trigger Server online at http://0.0.0.0:3002{Style.RESET_ALL}")
+        
+        # Subscribe to bus events to broadcast via SSE
+        await self.bus.subscribe("SYSTEM_LOG", self._broadcast_to_sse)
+        await self.bus.subscribe("VAULT_UPDATE", self._broadcast_to_sse)
+        await self.bus.subscribe("SIM_RESULT", self._broadcast_to_sse)
+        
+    async def _broadcast_to_sse(self, message):
+        """Broadcast bus events to all SSE clients."""
+        for queue in self.sse_clients:
+            try:
+                await queue.put(message.payload)
+            except:
+                pass
+        
+    async def run(self):
+        """Main event loop - just keeps server alive."""
+        await self.initialize_system()
+        await self.start_http_server()
+        
+        # Keep alive
+        while self.running:
+            await asyncio.sleep(1)
         
     def start(self):
         loop = asyncio.new_event_loop()
@@ -154,11 +256,11 @@ class GhostEngine:
             loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown()))
 
         try:
-            loop.run_until_complete(self.initialize_system())
-            loop.run_until_complete(self.run_cycle())
+            loop.run_until_complete(self.run())
         except (KeyboardInterrupt, asyncio.CancelledError):
             pass
         finally:
+            loop.run_until_complete(self.shutdown())
             loop.close()
 
 if __name__ == "__main__":

@@ -22,20 +22,15 @@ module.exports = {
             name: "sentient-alpha-engine",
             script: "python3",
             args: "engine/main.py",
+            autorestart: true,
+            max_memory_restart: "500M",
             env: {
-                PYTHONPATH: "."
-            }
-        },
-        {
-            name: "sentient-alpha-dashboard",
-            script: "python3",
-            args: "-m streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0",
-            env: {
-                PYTHONPATH: "."
+                PYTHONPATH: ".",
+                JSON_LOGS: "true",
+                IS_PAPER_TRADING: "true"  // Default to paper trading
             }
         }
-
-
     ]
 };
+
 

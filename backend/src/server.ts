@@ -1,7 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { spawn } from 'child_process';
 import { LogEntry } from '@shared/types';
 import { CONFIG } from '../config';
 import { authenticateWithKeys, isAuthenticated } from '../services/kalshiService';
@@ -123,64 +122,54 @@ app.post('/api/run', async (req: Request, res: Response) => {
         return res.status(400).json({ error: 'System busy. Cycle already in progress.' });
     }
 
-    systemState.isProcessing = true;
+    const { isPaperTrading } = req.body;
     systemState.cycleCount++;
+    systemState.isProcessing = true;
     broadcast({ type: 'STATE', state: { isProcessing: true, cycleCount: systemState.cycleCount } });
 
-    console.log("[BRIDGE] Spawning Python Ghost Engine...");
-    const isPaperTrading = req.body.isPaperTrading;
+    console.log(`[BRIDGE] Triggering Python Engine (Cycle ${systemState.cycleCount}, Paper: ${isPaperTrading})...`);
 
-    const pyProcess = spawn('python3', ['engine/main.py'], {
-        env: {
-            ...process.env,
-            JSON_LOGS: 'true',
-            IS_PAPER_TRADING: isPaperTrading ? 'true' : 'false'
-        },
-        cwd: process.cwd()
-    });
+    try {
+        // Trigger Python engine via HTTP
+        const response = await fetch('http://localhost:3002/trigger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isPaperTrading })
+        });
 
-    // Cleanup: Kill Python if Node exits
-    const cleanup = () => pyProcess.kill();
-    process.on('exit', cleanup);
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
-
-    pyProcess.stdout.on('data', (data) => {
-        const lines = data.toString().split('\n');
-        for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-                const event = JSON.parse(line);
-                if (event.type === 'LOG') {
-                    const log = {
-                        id: Math.random().toString(36).substring(7),
-                        timestamp: new Date().toISOString(),
-                        ...event.log
-                    };
-                    systemState.logs = [...systemState.logs.slice(-499), log];
-                    broadcast({ type: 'LOG', log });
-                } else {
-                    // STATE, VAULT, SIMULATION, HEALTH
-                    broadcast(event);
-                }
-            } catch (e) {
-                // Not JSON, just regular log
-                console.log(`[PY] ${line}`);
-            }
+        if (!response.ok) {
+            throw new Error(`Python engine returned ${response.status}`);
         }
-    });
 
-    pyProcess.stderr.on('data', (data) => {
-        console.error(`[PY_ERR] ${data}`);
-    });
+        const result = await response.json();
+        console.log(`[BRIDGE] Python engine triggered:`, result);
 
-    pyProcess.on('close', (code) => {
-        console.log(`[BRIDGE] Python Engine exited with code ${code}`);
+        // Python will stream logs via Gateway agent, we just acknowledge
+        res.json({
+            message: 'Python Engine cycle initiated.',
+            cycleId: systemState.cycleCount,
+            engineResponse: result
+        });
+
+    } catch (err: any) {
+        console.error("[BRIDGE] Failed to trigger Python engine:", err.message);
         systemState.isProcessing = false;
         broadcast({ type: 'STATE', state: { isProcessing: false } });
-    });
 
-    res.json({ message: 'Python Engine cycle initiated.', cycleId: systemState.cycleCount });
+        broadcast({
+            type: 'LOG',
+            log: {
+                id: 'err-' + Date.now(),
+                timestamp: new Date().toISOString(),
+                agentId: 0,
+                cycleId: systemState.cycleCount,
+                level: 'ERROR',
+                message: `BRIDGE ERROR: ${err.message}. Is Python engine running on port 3002?`
+            }
+        });
+
+        res.status(500).json({ error: 'Python engine unreachable', details: err.message });
+    }
 });
 
 export { app };
