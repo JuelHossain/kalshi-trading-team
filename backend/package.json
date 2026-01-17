@@ -1,9 +1,8 @@
 {
     "name": "kalshi-alpha-backend",
     "version": "1.0.0",
-    "type": "module",
     "scripts": {
-        "start": "node dist/server.js",
+        "start": "node dist/backend/src/server.js",
         "build": "tsc",
         "dev": "tsx watch src/server.ts",
         "test": "vitest run",

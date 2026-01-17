@@ -13,7 +13,7 @@ except ImportError:
 
 class FixerAgent(BaseAgent):
     """
-    Agent 13: The Fixer (Gemini 1.5 Pro)
+    Agent 13: The Fixer (Gemini 2.0 Flash)
     Role: AI Diagnostics & Root Cause Analysis.
     Triggers on system errors to provide suggested hotfixes.
     """
@@ -29,8 +29,8 @@ class FixerAgent(BaseAgent):
             return
 
         genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
-        await self.log("Fixer AI Engine Online (Gemini 1.5 Pro). Monitoring for failures.")
+        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        await self.log("Fixer AI Engine Online (Gemini 2.0 Flash). Monitoring for failures.")
         
         # Subscribe to System Logs to find ERRORs
         await self.bus.subscribe("SYSTEM_LOG", self.handle_error_log)

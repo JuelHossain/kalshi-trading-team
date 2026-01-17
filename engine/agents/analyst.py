@@ -25,8 +25,8 @@ class AnalystAgent(BaseAgent):
             return
 
         genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-pro-latest')
-        await self.log("Gemini 1.5 Pro Online. Playing role: Optimist.")
+        self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        await self.log("Gemini 2.0 Flash Online. Playing role: Optimist.")
         
         await self.bus.subscribe("INTERCEPT_DATA", self.handle_analysis_request)
 

@@ -47,7 +47,7 @@ export const queryGemini = async (prompt: string) => {
     if (!ai) throw new Error("Gemini AI not initialized");
 
     try {
-        const model = ai.getGenerativeModel({ model: "gemini-1.5-pro" });
+        const model = ai.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
         const result = await model.generateContent(prompt);
         return result.response.text();
     } catch (e: any) {

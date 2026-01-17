@@ -21,7 +21,7 @@ class Analyst:
             self.model = None
         else:
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-pro')
+            self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
     def scrape_realtime_info(self, ticker: str) -> Dict[str, Any]:
         """

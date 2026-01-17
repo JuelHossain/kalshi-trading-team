@@ -25,6 +25,7 @@ from agents.historian import HistorianAgent
 from agents.mechanic import MechanicAgent
 from agents.ragnarok import RagnarokAgent
 from agents.fixer import FixerAgent
+from agents.gateway import GatewayAgent
 from agents.base import BaseAgent
 
 # Initialize Colorama and Env
@@ -70,9 +71,8 @@ class GhostEngine:
             (FixerAgent, 13),
             (GatewayAgent, 14)
         ]
-
-        from agents.gateway import GatewayAgent
         for cls, agent_id in agent_classes:
+
             try:
                 # Accountant and Gateway need the vault reference
                 if cls in [AccountantAgent, GatewayAgent]:

@@ -37,7 +37,7 @@ export const runCommitteeDebate = async (market: string, currentPriceCents: numb
     const pastLessons = await retrieveReflexiveMemory(market, market);
     const contextInjection = pastLessons ? `\n\nCRITICAL PAST LESSONS (DO NOT REPEAT MISTAKES):\n${pastLessons}` : "";
 
-    // 2. THE OPTIMIST (Gemini 1.5 Pro)
+    // 2. THE OPTIMIST (Gemini 2.0 Flash)
     const optimistPrompt = `You are The Optimist (Bull). 
     Argue why we should BUY "YES" on this Kalshi market: "${market}".
     Current Price: ${currentPriceCents} cents.
@@ -55,7 +55,7 @@ export const runCommitteeDebate = async (market: string, currentPriceCents: numb
 
     const pessimistArg = await queryGroq(pessimistPrompt, "You are a skeptical risk manager.", "llama-3.1-70b-versatile");
 
-    // 4. THE JUDGE (Gemini 1.5 Pro - Structured Output)
+    // 4. THE JUDGE (Gemini 2.0 Flash - Structured Output)
     console.log(`[Agent 4] Judge is deliberating...`);
 
     const judgePrompt = `Act as The Judge. Weigh the arguments for market "${market}" (Price: ${currentPriceCents}¢).
@@ -68,7 +68,7 @@ export const runCommitteeDebate = async (market: string, currentPriceCents: numb
     Provide a final verdict/reasoning.`;
 
     const model = ai.getGenerativeModel({
-        model: "gemini-1.5-pro",
+        model: "gemini-2.0-flash-exp",
         generationConfig: {
             responseMimeType: "application/json",
             responseSchema: {

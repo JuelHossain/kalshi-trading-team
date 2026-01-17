@@ -28,12 +28,14 @@ module.exports = {
         },
         {
             name: "sentient-alpha-dashboard",
-            script: "streamlit",
-            args: "run dashboard/app.py --server.port 8501 --server.address 0.0.0.0",
+            script: "python3",
+            args: "-m streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0",
             env: {
                 PYTHONPATH: "."
             }
         }
+
+
     ]
 };
 

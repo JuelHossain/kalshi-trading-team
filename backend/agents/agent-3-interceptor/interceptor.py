@@ -122,7 +122,7 @@ class Interceptor:
         if not self.gemini_api_key:
             return self.simplified_fuzzy_match(ticker, team_names)
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={self.gemini_api_key}"
         
         prompt = f"""
         Task: Match the ticker to the most likely team from the list.

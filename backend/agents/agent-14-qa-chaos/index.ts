@@ -134,16 +134,16 @@ export const validateExecutionerSafety = (isPaperInput: boolean, intendedEnv: 'D
     return true;
 };
 
-import { fileURLToPath } from 'url';
-
 /**
  * AUDIT: Scans code for loops and potential leaks
  */
 export const auditCodebase = () => {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
+    // For CJS, we have __filename and __dirname globally.
+    // For TS/Node, we resolution them to strings.
     const rootDir = path.resolve(__dirname, '../../'); // backend root
+
     const agentsDir = path.join(rootDir, 'agents');
+
     const pyAgentsDir = path.resolve(rootDir, '../engine/agents');
 
     console.log("[Agent 14] Starting Cross-Platform Static Analysis Audit...");
