@@ -1,14 +1,32 @@
 import { CONFIG } from '../config';
 import { KJUR } from 'jsrsasign';
+import { isDemoCredentials, authenticateDemo, getDemoMarketData, getDemoBalance, getDemoOrderbook } from './demoAuthService';
 
 // Agent 8: The Executioner (V2 Auth & Order Management)
 // Implements RSA-SHA256 Signing for Kalshi V2 API
 
-let session: { keyId: string; privateKey: string } | null = null;
+let session: { keyId: string; privateKey: string; isDemo?: boolean } | null = null;
 
 export const isAuthenticated = () => !!session;
 
 export const authenticateWithKeys = async (keyId: string, privateKey: string, isPaper: boolean) => {
+    // Check if demo credentials
+    if (isDemoCredentials(keyId, privateKey)) {
+        console.log('[Auth] Demo credentials detected. Initializing demo mode...');
+        const demoAuth = await authenticateDemo();
+
+        if (demoAuth.success) {
+            session = {
+                keyId: demoAuth.session.keyId,
+                privateKey: 'DEMO_MODE',
+                isDemo: true
+            };
+            console.log('[Auth] Demo mode activated. Using mock data.');
+            return true;
+        }
+    }
+
+    // Real authentication flow
     const baseUrl = isPaper ? CONFIG.KALSHI.SANDBOX_API : CONFIG.KALSHI.PROD_API;
     console.log(`[Agent 8] Initializing V2 Crypto-Engine for ${baseUrl}...`);
 
@@ -23,12 +41,14 @@ export const authenticateWithKeys = async (keyId: string, privateKey: string, is
 
     session = {
         keyId: keyId,
-        privateKey: privateKey
+        privateKey: privateKey,
+        isDemo: false
     };
 
     console.log(`[Agent 8] Keys Loaded. Crypto-Engine Online.`);
     return true;
 }
+
 
 // V2 Signature Generator
 const getHeaders = (method: string, path: string, body: string = '') => {
@@ -114,6 +134,12 @@ export const fetchScoutedMarkets = async (isPaperTrading: boolean) => {
         return getMockMarkets();
     }
 
+    // Demo mode: return realistic demo data
+    if (session.isDemo) {
+        console.log('[Agent 2] Demo mode: Returning demo market data...');
+        return getDemoMarketData();
+    }
+
     console.log(`[Agent 2] Scanning Real Markets via V2...`);
     try {
         // Fetch active markets, limit to 100 for speed
@@ -136,9 +162,21 @@ export const fetchScoutedMarkets = async (isPaperTrading: boolean) => {
     }
 };
 
+
 export const fetchOrderBook = async (ticker: string, isPaperTrading: boolean) => {
     if (!session) {
         return { yes_bid: 10, yes_ask: 50 }; // Mock
+    }
+
+    // Demo mode: return demo orderbook
+    if (session.isDemo) {
+        const demoBook = getDemoOrderbook(ticker);
+        const yesBids = demoBook.orderbook.yes.bids;
+        const yesAsks = demoBook.orderbook.yes.asks;
+        return {
+            yes_bid: yesBids.length > 0 ? yesBids[0][0] : 0,
+            yes_ask: yesAsks.length > 0 ? yesAsks[0][0] : 99
+        };
     }
 
     try {
@@ -156,6 +194,7 @@ export const fetchOrderBook = async (ticker: string, isPaperTrading: boolean) =>
         return { yes_bid: 0, yes_ask: 99 };
     }
 }
+
 
 export const createOrder = async (
     ticker: string,
