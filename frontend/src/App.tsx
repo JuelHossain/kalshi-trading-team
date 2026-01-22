@@ -48,7 +48,12 @@ const App: React.FC = () => {
 
     const orchestratorProps = useOrchestrator(isLoggedIn, isPaperTrading);
 
-    if (!isLoggedIn) {
+    // Bypass login for Paper Trading (Demo Sandbox)
+    const shouldShowLogin = !isLoggedIn && (!isPaperTrading || !orchestratorProps.isProcessing);
+    // Actually, useAuth now handles isAuthenticating. 
+    // If isPaperTrading is true, we want to show the dashboard immediately.
+
+    if (!isLoggedIn && !isPaperTrading) {
         return (
             <Login
                 apiKeyId={apiKeyId}

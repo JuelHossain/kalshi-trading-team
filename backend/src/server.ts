@@ -39,16 +39,24 @@ interface SSEClient {
 // SSE Clients
 let clients: SSEClient[] = [];
 
-// Auto-Authentication on Startup (Sandbox by default)
+// Auto-Authentication on Startup
 const initializeBackend = async () => {
+    // If PROD keys exist and no DEMO key is explicitly set, assume PROD
     const isProd = !!CONFIG.KALSHI.PROD_KEY_ID && !CONFIG.KALSHI.DEMO_KEY_ID;
-    const keyId = isProd ? CONFIG.KALSHI.PROD_KEY_ID : CONFIG.KALSHI.DEMO_KEY_ID;
-    const privateKey = isProd ? CONFIG.KALSHI.PROD_PRIVATE_KEY : CONFIG.KALSHI.DEMO_PRIVATE_KEY;
 
-    if (!isAuthenticated() && keyId && privateKey) {
+    // Fallback to defaults if keys are missing from environment
+    const keyId = isProd ? CONFIG.KALSHI.PROD_KEY_ID : (CONFIG.KALSHI.DEMO_KEY_ID || 'demo-key-id');
+    const privateKey = isProd ? CONFIG.KALSHI.PROD_PRIVATE_KEY : (CONFIG.KALSHI.DEMO_PRIVATE_KEY || 'DEMO_MODE');
+
+    if (!isAuthenticated()) {
         console.log(`System: Attempting Backend Auto-Authentication (${isProd ? 'PROD' : 'SANDBOX'})...`);
         try {
-            await authenticateWithKeys(keyId, privateKey, !isProd);
+            // Force demo mode for sandbox if no private key provided
+            const pk = (privateKey === 'DEMO_MODE' && !isProd) ?
+                `-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAyDemoKeyForTestingPurposesOnly123456789ABCDEFGH\n-----END RSA PRIVATE KEY-----` :
+                privateKey;
+
+            await authenticateWithKeys(keyId, pk, !isProd);
             console.log(`System: Backend Authorized [${isProd ? 'LIVE_NET' : 'SANDBOX'}].`);
 
             // Agent 14: Start Sentinel for Principal Protection
