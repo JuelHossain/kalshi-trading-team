@@ -20,14 +20,10 @@ class AuditorAgent(BaseAgent):
     
     CONSENSUS_THRESHOLD = 85  # 85% average confidence required
 
-    def __init__(self, agent_id: int, bus: EventBus):
-        super().__init__("AUDITOR", agent_id, bus)
+    async def setup(self):
         self.api_key = os.getenv("GROQ_API_KEY")
-        self.client = None
-
-    async def start(self):
         if not self.api_key:
-            await self.log("GROQ_API_KEY missing. Auditor Offline.")
+            await self.log("GROQ_API_KEY missing. Auditor Offline.", level="ERROR")
             return
 
         self.client = AsyncGroq(api_key=self.api_key)

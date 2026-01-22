@@ -44,5 +44,7 @@ class BaseAgent(ABC):
         }
         await self.bus.publish("SYSTEM_LOG", payload, self.name)
         
-        if os.getenv("JSON_LOGS") != "true":
+        if os.getenv("JSON_LOGS") == "true":
+            print(json.dumps({"type": "LOG", "data": payload}))
+        else:
             print(f"[{self.name}] {message}")

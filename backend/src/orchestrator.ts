@@ -89,10 +89,19 @@ export const runOrchestratorCycle = async (
         updateState({ activeAgentId: 7, completedAgents: [2, 3] });
         const book = await fetchOrderBook(targetMarket.ticker, isPaperTrading);
 
-        // Agent 14 check: Stale Data
-        validateStaleData(Date.now());
+        // CRITICAL FIX #4: Validate using market's last update time, not current time
+        const marketLastUpdate = (targetMarket as any).last_updated || Date.now();
+        validateStaleData(marketLastUpdate);
 
         const sniperAnalysis = analyzeOrderBook(book, targetMarket.ticker);
+
+        // Check for spread veto
+        if ((sniperAnalysis as any).vetoed) {
+            addLog(`SPREAD VETO: ${(sniperAnalysis as any).vetoReason}`, 7, 1, 'ERROR');
+            updateState({ isProcessing: false, activeAgentId: null });
+            return;
+        }
+
         addLog(`Sniper scanning orderbook for ${targetMarket.ticker}: Bid=${book.yes_bid}, Ask=${book.yes_ask}, Snipe=${sniperAnalysis.snipePrice}c`, 7, 1, 'INFO');
 
         // PHASE 2: Intelligence Committee & Simulations
@@ -143,11 +152,18 @@ export const runOrchestratorCycle = async (
             addLog(`Executioner: Preparing Limit Snipe - Wager $${wager} (Kelly: ${(analystReport.recommendedSize * 100).toFixed(1)}%)`, 8, 3, 'INFO');
 
             // Calculate contract count from wager and price
-            const count = Math.floor(wager / (sniperAnalysis.snipePrice / 100));
+            let count = Math.floor(wager / (sniperAnalysis.snipePrice / 100));
 
             if (count <= 0) {
                 addLog("Executioner Bypass: Price too high for wager amount.", 8, 3, 'WARN');
                 return;
+            }
+
+            // CRITICAL FIX #3: Enforce maximum position size
+            const MAX_POSITION_SIZE = 500;
+            if (count > MAX_POSITION_SIZE) {
+                addLog(`Position size capped: ${count} → ${MAX_POSITION_SIZE} contracts (risk management)`, 8, 3, 'WARN');
+                count = MAX_POSITION_SIZE;
             }
 
             // PROTOCOL: The Silent Sniper (Limit Orders Only)

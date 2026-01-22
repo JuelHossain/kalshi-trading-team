@@ -25,9 +25,16 @@ export const analyzeOrderBook = (
 
     console.log(`[Agent 7] Analyzing Orderbook for ${targetTicker}. Spread: ${spread}c`);
 
-    // Guard: Spread too wide (Liquidity Gap Warning)
+    // CRITICAL FIX #5: Hard veto on excessive spreads (changed from warning to rejection)
     if (spread > 10) {
-        console.warn(`[Agent 7] wide spread detected (${spread}c). Implementation Risk: HIGH.`);
+        console.error(`[Agent 7] VETO: Spread too wide (${spread}c). Market is illiquid.`);
+        return {
+            snipePrice: 0,
+            isLiquid: false,
+            spread: spread,
+            vetoed: true,
+            vetoReason: `Spread (${spread}c) exceeds 10c threshold`
+        };
     }
 
     // Snipe Logic: 1 cent above high bid
@@ -39,6 +46,7 @@ export const analyzeOrderBook = (
     return {
         snipePrice: finalPrice,
         isLiquid: spread < 5,
-        spread: spread
+        spread: spread,
+        vetoed: false
     };
 }

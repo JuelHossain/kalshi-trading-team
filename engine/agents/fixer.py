@@ -18,14 +18,11 @@ class FixerAgent(BaseAgent):
     Triggers on system errors to provide suggested hotfixes.
     """
     
-    def __init__(self, agent_id: int, bus: EventBus):
-        super().__init__("FIXER", agent_id, bus)
-        self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("API_KEY")
-        self.model = None
 
-    async def start(self):
+    async def setup(self):
+        self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("API_KEY")
         if not self.api_key:
-            await self.log("GEMINI_API_KEY missing. Fixer Offline.")
+            await self.log("GEMINI_API_KEY missing. Fixer Offline.", level="ERROR")
             return
 
         genai.configure(api_key=self.api_key)
