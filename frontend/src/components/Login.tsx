@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 interface LoginProps {
     apiKeyId: string;
@@ -15,7 +15,21 @@ const Login: React.FC<LoginProps> = ({
     apiKeyId, setApiKeyId, apiSecret, setApiSecret,
     isPaperTrading, setIsPaperTrading, handleLogin, authError
 }) => {
+    // Auto-login for demo mode
+    useEffect(() => {
+        if (isPaperTrading && !apiKeyId && !apiSecret) {
+            // Set demo credentials
+            setApiKeyId('demo-key-id');
+            setApiSecret('demo-private-key');
+            // Auto-login after a brief delay
+            setTimeout(() => {
+                handleLogin();
+            }, 500);
+        }
+    }, [isPaperTrading, apiKeyId, apiSecret, setApiKeyId, setApiSecret, handleLogin]);
+
     return (
+
         <div className="min-h-screen bg-black flex items-center justify-center p-6 bg-grid-pattern">
             <div className="glass-panel w-full max-w-md p-8 rounded-2xl animate-scale-in border-emerald-500/20 shadow-[0_0_50px_rgba(16,185,129,0.1)]">
                 <div className="flex justify-center mb-6">
