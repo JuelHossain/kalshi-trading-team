@@ -18,6 +18,9 @@ class FixerAgent(BaseAgent):
     Triggers on system errors to provide suggested hotfixes.
     """
     
+    def __init__(self, agent_id: int, bus: EventBus):
+        super().__init__("FIXER", agent_id, bus)
+    
 
     async def setup(self):
         self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("API_KEY")

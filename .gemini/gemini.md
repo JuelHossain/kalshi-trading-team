@@ -1,30 +1,23 @@
-# Project-Specific Rules
-## Testing Requirements
-- Always run backend tests (`npm run test:backend`) after modifying TypeScript code
-- Always run frontend tests (`npm run test:frontend`) after modifying React components
-- Test Python engine modules individually before integration
-- Never skip testing when modifying agent logic or API integrations
-## Deployment Protocol
-- Build both backend and frontend before deploying: `npm run build`
-- Deploy using PM2: `npm start` (uses ecosystem.config.cjs)
-- Verify all 3 processes are running: backend, frontend, and Python engine
-- Check PM2 logs after deployment: `npm run logs`
-## Git Commit Standards
-- Commit after every significant feature completion
-- Use conventional commits: `feat:`, `fix:`, `refactor:`, `test:`
-- Always pull before push to avoid conflicts
-- Include affected components in commit message (e.g., "feat(engine): add analyst agent")
-## Python Engine Development
-- Always activate virtual environment before working: `source engine/venv/bin/activate`
-- Update requirements.txt when adding dependencies
-- Use structured JSON logging for all agent outputs
-- Maintain agent independence - each agent should be testable in isolation
-## API Key Management
-- Never commit [.env](cci:7://file:///home/jrrahman01/workspace/active/kalshi-trading-team/engine/.env:0:0-0:0) or [.env.local](cci:7://file:///home/jrrahman01/workspace/active/kalshi-trading-team/.env.local:0:0-0:0) files
-- Verify all required API keys before testing: GEMINI_API_KEY, KALSHI_API_KEY, RAPID_API_KEY
-- Use paper trading mode by default (IS_PAPER_TRADING=true)
-## Code Quality
-- TypeScript: Maintain strict type safety, no `any` types
-- Python: Follow PEP 8, use type hints
-- React: Use TypeScript for all components, proper prop typing
-- Shared types: Update `shared/types.ts` when modifying data structures
+# Multi-Agent Project Constitution
+Strict standards for all Human and AI collaborators to ensure project stability, autonomous safety, and efficient scaling.
+
+## PILLAR 1: The Safety Anchor (Operational Security)
+*   **Veto Supremacy**: If ANY security agent (Auditor, Sim Scientist) emits `veto: true` or `verdict: VETO`, the trade cycle must terminate immediately. No buy orders allowed.
+*   **Vault Lock**: Zero trade execution if `VaultState.isLocked` is true.
+*   **Paper-First**: All new agents and experimental workflows must default to `IS_PAPER_TRADING: true`.
+*   **Credential Shield**: Never commit `.env` or `.env.local`. Use provided `update-env` workflow for key rotation.
+
+## PILLAR 2: The Agent Contract (Service Boundaries)
+*   **Decoupled I/O**: Agents communicate *exclusively* via JSON on the `EventBus`. No direct file mutation or global state modification outside of your specific module.
+*   **Runtime Validation**: Every published message must pass schema validation (Zod/Pydantic). Malformed data must trigger a `CRITICAL` log and cycle abortion.
+*   **Latency Budget**: Market-critical agents (Scout, Interceptor) must return data within **2.5s**. No blocking I/O; use `asyncio` for all networking and LLM calls.
+
+## PILLAR 3: The Workflow Shield (Engineering Integrity)
+*   **Pre-Flight Verification**: Never deploy or merge without passing `npm run test` and `npm run build`.
+*   **Strategic Alignment**: Follow the `ecosystem.config.cjs` architecture. All services (Backend, Frontend, Engine) must be managed via PM2.
+*   **Atomic Refactoring**: Commits must be testable units with conventional titles (`feat:`, `fix:`, `refactor:`). Always pull before pushing to prevent merge conflicts.
+
+## PILLAR 4: The Resilience Layer (Scalability)
+*   **Defensive API Usage**: Implement **Exponential Backoff** for 429/500 errors. Agents should "Hibernate" after 5 failures to protect API reputation.
+*   **Determinism**: Log enough context to recreate decisions using the `replay-debug` workflow.
+*   **Alpha Efficiency**: Heavy math/filtering belongs in Python/Numpy. LLMs are reserved for high-value "Finalist" tickers only.

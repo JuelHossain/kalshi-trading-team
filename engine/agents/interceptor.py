@@ -54,7 +54,7 @@ class InterceptorAgent(BaseAgent):
 
     async def fetch_live_odds(self) -> List[Dict]:
         if not self.api_key:
-            return self.get_mock_odds()
+            return []
 
         headers = {
             'X-RapidAPI-Key': self.api_key,
@@ -70,10 +70,10 @@ class InterceptorAgent(BaseAgent):
                         return self.normalize_odds(data.get('response', []))
                     else:
                         await self.log(f"RapidAPI Error {resp.status}")
-                        return self.get_mock_odds()
+                        return []
             except Exception as e:
                 await self.log(f"Intercept Failed: {e}", level="ERROR")
-                return self.get_mock_odds()
+                return []
 
     def normalize_odds(self, raw_data: List[Any]) -> List[Dict]:
         normalized = []

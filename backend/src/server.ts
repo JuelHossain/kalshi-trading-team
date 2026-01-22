@@ -69,11 +69,65 @@ const initializeBackend = async () => {
                 process.exit(1);
             }
 
+            // --- ENGINE LOG BRIDGE ---
+            console.log("System: Connecting to Python Engine Link...");
+            connectToEngine();
+
         } catch (e) {
             console.error("System: Backend Authorization Failed.", e);
         }
     }
 };
+
+const connectToEngine = () => {
+    // Attempt to connect to Python Engine SSE
+    const connect = async () => {
+        try {
+            const response = await fetch('http://localhost:3002/stream');
+            if (!response.ok) throw new Error(`Engine stream offline: ${response.status}`);
+
+            console.log("[BRIDGE] Connected to Python Engine Stream.");
+            const reader = response.body?.getReader();
+            if (!reader) return;
+
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            // Rebroadcast to frontend clients
+                            broadcast(data);
+
+                            // Keep in-memory state updated for INIT events
+                            if (data.type === 'LOG') {
+                                systemState.logs = [...systemState.logs.slice(-499), data.log];
+                            } else if (data.type === 'STATE') {
+                                systemState = { ...systemState, ...data.state };
+                            }
+                        } catch (e) {
+                            // Skip malformed JSON
+                        }
+                    }
+                }
+            }
+        } catch (err: any) {
+            console.log(`[BRIDGE] Engine Link failed (${err.message}). Retrying in 5s...`);
+            setTimeout(connect, 5000);
+        }
+    };
+    connect();
+};
+
 initializeBackend();
 
 app.get('/api/stream', (req: Request, res: Response) => {

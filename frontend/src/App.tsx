@@ -18,20 +18,13 @@ const App: React.FC = () => {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isPaperTrading, setIsPaperTrading] = useState(true);
 
-    const {
-        activeAgentId,
-        completedAgents,
-        logs,
-        isProcessing,
-        cycleCount,
-        targetMarket,
-        currentBalance,
-        autoPilot,
-        setAutoPilot,
-        runOrchestrator,
-        handleTerminate,
-        addLog
-    } = useOrchestrator(false, isPaperTrading); // Temp isLoggedIn=false for initialization
+    // Single source of truth for logs and orchestrator state
+    const [tempLogs, setTempLogs] = useState<any[]>([]);
+    const addLogToOrchestrator = (msg: string, id: number, level: string) => {
+        // This will be handled by the backend broadcast, 
+        // but for local UI feedback before SSE is established:
+        console.log(`[UI LOG] ${msg}`);
+    };
 
     const {
         apiKeyId,
@@ -41,10 +34,7 @@ const App: React.FC = () => {
         isLoggedIn,
         authError,
         handleLogin
-    } = useAuth(addLog, isPaperTrading);
-
-    // Sync isProcessing/cycleCount if needed? No, hook handles it.
-    // The previous useOrchestrator call used false for isLoggedIn, but it should react to isLoggedIn change.
+    } = useAuth(addLogToOrchestrator, isPaperTrading);
 
     const orchestratorProps = useOrchestrator(isLoggedIn, isPaperTrading);
 
@@ -208,6 +198,37 @@ const App: React.FC = () => {
                         {activeTab === 'analysis' && (
                             <div className="animate-scale-in">
                                 <MarketAnalysis market={orchestratorProps.targetMarket} />
+                            </div>
+                        )}
+
+                        {activeTab === 'logs' && (
+                            <div className="animate-scale-in h-full">
+                                <Terminal
+                                    logs={orchestratorProps.logs}
+                                    activeAgentId={orchestratorProps.activeAgentId}
+                                />
+                            </div>
+                        )}
+
+                        {activeTab === 'settings' && (
+                            <div className="animate-scale-in glass-panel p-10 rounded-[2rem]">
+                                <h2 className="text-2xl font-tech font-bold text-emerald-500 mb-6 tracking-widest uppercase">System Configuration</h2>
+                                <div className="space-y-6 max-w-2xl">
+                                    <div className="flex justify-between items-center p-4 bg-white/5 rounded-xl border border-white/10">
+                                        <div>
+                                            <div className="text-sm font-bold text-white uppercase tracking-widest">Environment</div>
+                                            <div className="text-[10px] text-gray-500 font-mono">Current operational environment</div>
+                                        </div>
+                                        <div className="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-[10px] font-bold border border-emerald-500/30">DEMO SANDBOX</div>
+                                    </div>
+                                    <div className="flex justify-between items-center p-4 bg-white/5 rounded-xl border border-white/10">
+                                        <div>
+                                            <div className="text-sm font-bold text-white uppercase tracking-widest">Safety Sentinel</div>
+                                            <div className="text-[10px] text-gray-500 font-mono">Agent 14 Principal Protection</div>
+                                        </div>
+                                        <div className="px-3 py-1 bg-emerald-500 text-black rounded-full text-[10px] font-bold">ACTIVE</div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 

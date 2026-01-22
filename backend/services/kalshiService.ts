@@ -1,6 +1,5 @@
 import { CONFIG } from '../config';
 import { KJUR } from 'jsrsasign';
-import { isDemoCredentials, authenticateDemo, getDemoMarketData, getDemoBalance, getDemoOrderbook } from './demoAuthService';
 
 // Agent 8: The Executioner (V2 Auth & Order Management)
 // Implements RSA-SHA256 Signing for Kalshi V2 API
@@ -10,22 +9,6 @@ let session: { keyId: string; privateKey: string; isDemo?: boolean } | null = nu
 export const isAuthenticated = () => !!session;
 
 export const authenticateWithKeys = async (keyId: string, privateKey: string, isPaper: boolean) => {
-    // Check if demo credentials
-    if (isDemoCredentials(keyId, privateKey)) {
-        console.log('[Auth] Demo credentials detected. Initializing demo mode...');
-        const demoAuth = await authenticateDemo();
-
-        if (demoAuth.success) {
-            session = {
-                keyId: demoAuth.session.keyId,
-                privateKey: 'DEMO_MODE',
-                isDemo: true
-            };
-            console.log('[Auth] Demo mode activated. Using mock data.');
-            return true;
-        }
-    }
-
     // Real authentication flow
     const baseUrl = isPaper ? CONFIG.KALSHI.SANDBOX_API : CONFIG.KALSHI.PROD_API;
     console.log(`[Agent 8] Initializing V2 Crypto-Engine for ${baseUrl}...`);
@@ -48,7 +31,6 @@ export const authenticateWithKeys = async (keyId: string, privateKey: string, is
     console.log(`[Agent 8] Keys Loaded. Crypto-Engine Online.`);
     return true;
 }
-
 
 // V2 Signature Generator
 const getHeaders = (method: string, path: string, body: string = '') => {
@@ -84,7 +66,6 @@ export const checkConnection = async (isPaperTrading: boolean) => {
 // Generic V2 Request Handler
 import { CHAOS_STATE } from '../agents/agent-14-qa-chaos/state';
 
-// Generic V2 Request Handler
 export const kalshiFetch = async (endpoint: string, method: 'GET' | 'POST' | 'DELETE', body?: any, isPaper: boolean = true) => {
     // Agent 14: Chaos Injection
     if (CHAOS_STATE.SIMULATE_500) {
@@ -96,12 +77,8 @@ export const kalshiFetch = async (endpoint: string, method: 'GET' | 'POST' | 'DE
         await new Promise(resolve => setTimeout(resolve, 20000));
         throw new Error("CHAOS_INJECTED_TIMEOUT: Request Timed Out (Simulated)");
     }
-    const baseUrl = isPaper ? CONFIG.KALSHI.SANDBOX_API : CONFIG.KALSHI.PROD_API;
-    // Remove /trade-api/v2 from base if present to ensure path correctness, 
-    // assuming CONFIG.KALSHI.*_API includes the version path. 
-    // V2 Docs typically say: Base URL + Path.
-    // e.g. Path is /markets
 
+    const baseUrl = isPaper ? CONFIG.KALSHI.SANDBOX_API : CONFIG.KALSHI.PROD_API;
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const url = `${baseUrl}${path}`;
     const bodyStr = body ? JSON.stringify(body) : '';
@@ -130,14 +107,7 @@ export const kalshiFetch = async (endpoint: string, method: 'GET' | 'POST' | 'DE
 export const fetchScoutedMarkets = async (isPaperTrading: boolean) => {
     // Agent 2: The Scout - Now using Real V2 API
     if (!session) {
-        console.warn("[Agent 2] No Auth Session. Returning Mock Protocol.");
-        return getMockMarkets();
-    }
-
-    // Demo mode: return realistic demo data
-    if (session.isDemo) {
-        console.log('[Agent 2] Demo mode: Returning demo market data...');
-        return getDemoMarketData();
+        throw new Error("[Agent 2] No Auth Session Active.");
     }
 
     console.log(`[Agent 2] Scanning Real Markets via V2...`);
@@ -157,26 +127,15 @@ export const fetchScoutedMarkets = async (isPaperTrading: boolean) => {
         }));
 
     } catch (e) {
-        console.error("[Agent 2] Scan Failed. Fallback to Mock.", e);
-        return getMockMarkets();
+        console.error("[Agent 2] Scan Failed:", e);
+        throw e;
     }
 };
 
 
 export const fetchOrderBook = async (ticker: string, isPaperTrading: boolean) => {
     if (!session) {
-        return { yes_bid: 10, yes_ask: 50 }; // Mock
-    }
-
-    // Demo mode: return demo orderbook
-    if (session.isDemo) {
-        const demoBook = getDemoOrderbook(ticker);
-        const yesBids = demoBook.orderbook.yes.bids;
-        const yesAsks = demoBook.orderbook.yes.asks;
-        return {
-            yes_bid: yesBids.length > 0 ? yesBids[0][0] : 0,
-            yes_ask: yesAsks.length > 0 ? yesAsks[0][0] : 99
-        };
+        throw new Error("[Agent 7] No Auth Session Active.");
     }
 
     try {
@@ -205,9 +164,7 @@ export const createOrder = async (
 ) => {
     // Agent 8: The Executioner
     if (!session) {
-        console.log("[Agent 8] Mock Execution (No Session).");
-        await new Promise(r => setTimeout(r, 1000));
-        return { status: 'executed', filled_count: count, order_id: 'mock_ord_123' };
+        throw new Error("[Agent 8] No Auth Session Active.");
     }
 
     console.log(`[Agent 8] EXECUTION: ${action.toUpperCase()} ${count}x ${ticker} ${side.toUpperCase()}`);
@@ -250,10 +207,3 @@ export const cancelOrder = async (orderId: string, isPaperTrading: boolean) => {
 export const fetchActiveMarkets = async (isPaperTrading: boolean) => {
     return fetchScoutedMarkets(isPaperTrading);
 };
-
-// Fallback Mock Data
-const getMockMarkets = () => [
-    { ticker: 'NBA-LAL-BOS', title: 'NBA: Lakers vs Celtics', kalshi_prob: 0.52, vegas_prob: 0.58, delta: 0.06, volume: 42000, type: 'SPORTS' },
-    { ticker: 'NFL-KC-BAL', title: 'NFL: Chiefs vs Ravens', kalshi_prob: 0.48, vegas_prob: 0.53, delta: 0.05, volume: 85000, type: 'SPORTS' },
-    { ticker: 'ECON-CPI-SEP', title: 'US CPI > 3.2%', kalshi_prob: 0.22, vegas_prob: 0.25, delta: 0.03, volume: 12000, type: 'ECON' }
-];

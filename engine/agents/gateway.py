@@ -31,7 +31,7 @@ class GatewayAgent(BaseAgent):
         agent_id = payload.get('agent_id')
         
         # Pass logs to frontend
-        self.emit("LOG", {
+        await self.emit("LOG", {
             "agentId": agent_id,
             "level": payload.get('level', 'INFO'),
             "message": payload.get('message')
@@ -39,7 +39,7 @@ class GatewayAgent(BaseAgent):
 
         # Update active agent in visualizer
         if sender not in ["GHOST", "GATEWAY", "HISTORIAN", "MECHANIC"]:
-            self.emit("STATE", {
+            await self.emit("STATE", {
                 "activeAgentId": agent_id
             })
 
@@ -52,10 +52,10 @@ class GatewayAgent(BaseAgent):
             "isLocked": self.vault.is_locked,
             "total": self.vault.current_balance / 100
         }
-        self.emit("VAULT", vault_state)
+        await self.emit("VAULT", vault_state)
         
         # Heartbeat
-        self.emit("STATE", {
+        await self.emit("STATE", {
             "cycleCount": payload.get('cycle'),
             "isProcessing": True
         })
@@ -70,13 +70,23 @@ class GatewayAgent(BaseAgent):
             "iterations": payload.get('iterations', 0),
             "veto": payload.get('veto', False)
         }
-        self.emit("SIMULATION", sim_data)
+        await self.emit("SIMULATION", sim_data)
 
     async def handle_health(self, message):
-        self.emit("HEALTH", message.payload)
+        await self.emit("HEALTH", message.payload)
 
-    def emit(self, msg_type: str, data: Any):
-        """Helper to print JSON to stdout for TS server capture."""
+    async def emit(self, msg_type: str, data: Any):
+        """Helper to print JSON to stdout and publish to bus for SSE streaming."""
+        # Wrap for bus if needed
+        bus_topic = None
+        if msg_type == "VAULT": bus_topic = "VAULT_UPDATE"
+        elif msg_type == "SIMULATION": bus_topic = "SIM_RESULT"
+        elif msg_type == "HEALTH": bus_topic = "SYSTEM_HEALTH"
+        elif msg_type == "STATE": bus_topic = "SYSTEM_STATE"
+        
+        if bus_topic:
+            await self.bus.publish(bus_topic, data, self.name)
+
         if os.getenv("JSON_LOGS") == "true":
             # Direct print here because this IS the gateway output channel
             print(json.dumps({

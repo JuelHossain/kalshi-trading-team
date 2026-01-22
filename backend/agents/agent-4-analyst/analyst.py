@@ -26,32 +26,17 @@ class Analyst:
     def scrape_realtime_info(self, ticker: str) -> Dict[str, Any]:
         """
         Context Injection: Logic to feed real-time news and injury data.
-        This function simulates/implements the scraping of external data.
         """
-        logger.info(f"Scraping real-time intelligence for {ticker}...")
+        logger.info(f"Searching for real-time intelligence for {ticker}...")
         
-        # Placeholder for actual scraping logic (e.g., using BeautifulSoup or specialized News APIs)
-        # For the 'Oracle Developer' task, we define the structure that feeds the debate.
+        # In a production environment, this would call specialized news APIs (e.g. NewsAPI, Serper, etc.)
+        # To strictly follow the 'no mock data' rule, we return an empty structure if no live integration is configured.
         
-        # Example of how one might fetch news (simulated)
-        # response = requests.get(f"https://api.example.com/news?q={ticker}")
-        
-        mock_data = {
-            "news_headlines": [
-                f"{ticker} sentiment surges amid high institutional interest.",
-                f"Market analysis: {ticker} shows strong support at current price levels.",
-                f"Late-breaking: Macro factors favoring {ticker} outcome reported by Bloomberg."
-            ],
-            "injury_reports": [
-                "Lakers: LeBron James (Foot) - Probable for tonight.",
-                "Celtics: Jaylen Brown (Adductor) - Out.",
-                "Heat: Jimmy Butler (Rest) - Available."
-            ],
-            "social_sentiment": "Bullish - High social volume on X/Twitter."
+        return {
+            "news_headlines": [],
+            "injury_reports": [],
+            "social_sentiment": "Neutral/Unknown"
         }
-        
-        # Real logic would filter these based on the specific ticker
-        return mock_data
 
     def conduct_committee_debate(self, asym_package: Dict[str, Any]) -> Dict[str, Any]:
         """

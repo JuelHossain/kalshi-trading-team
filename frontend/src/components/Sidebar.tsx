@@ -10,7 +10,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
     const menuItems = [
         { id: 'dashboard', label: 'Command', icon: '⚡' },
         { id: 'agents', label: 'Agents', icon: '🕵️‍♂️' },
-        { id: 'analyst', label: 'Analyst', icon: '🧠' },
+        { id: 'analysis', label: 'Analyst', icon: '🧠' },
         { id: 'logs', label: 'Trace', icon: '📜' },
         { id: 'about', label: 'Mission', icon: 'ℹ️' },
         { id: 'settings', label: 'Config', icon: '⚙️' },

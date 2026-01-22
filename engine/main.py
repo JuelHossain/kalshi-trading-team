@@ -2,6 +2,7 @@ import asyncio
 import os
 import signal
 import sys
+import json
 from datetime import datetime
 from typing import List, Optional
 
@@ -133,15 +134,38 @@ class GhostEngine:
         try:
             # Agent 1: Authorization
             if not self.authorize_cycle():
-                print(f"{Fore.YELLOW}[GHOST] Cycle {self.cycle_count} not authorized.{Style.RESET_ALL}")
+                msg = f"Cycle {self.cycle_count} not authorized."
+                print(f"{Fore.YELLOW}[GHOST] {msg}{Style.RESET_ALL}")
+                await self.bus.publish("SYSTEM_LOG", {
+                    "level": "WARN",
+                    "message": msg,
+                    "agent_id": 1,
+                    "timestamp": datetime.now().isoformat()
+                }, "GHOST")
                 return
             
+            # Explicit Cycle Start Log for UI
+            await self.bus.publish("SYSTEM_LOG", {
+                "level": "INFO", 
+                "message": f"[GHOST] CYCLE START: Sentient Alpha Funnel Protocol (Cycle #{self.cycle_count})",
+                "agent_id": 1,
+                "timestamp": datetime.now().isoformat()
+            }, "GHOST")
+
             # Broadcast "TICK" event
             await self.bus.publish("TICK", {"cycle": self.cycle_count, "isPaperTrading": is_paper_trading}, "GHOST")
             
             # Simulate cycle work (agents will respond to TICK)
             await asyncio.sleep(0.5)
             
+            # Explicit Cycle Complete Log for UI
+            await self.bus.publish("SYSTEM_LOG", {
+                "level": "SUCCESS",
+                "message": f"✓ CYCLE #{self.cycle_count} COMPLETE - All phases finished successfully",
+                "agent_id": 1,
+                "timestamp": datetime.now().isoformat()
+            }, "GHOST")
+
             print(f"{Fore.GREEN}[GHOST] Cycle {self.cycle_count} complete.{Style.RESET_ALL}")
         
         except Exception as e:
@@ -231,12 +255,61 @@ class GhostEngine:
         await self.bus.subscribe("SIM_RESULT", self._broadcast_to_sse)
         
     async def _broadcast_to_sse(self, message):
-        """Broadcast bus events to all SSE clients."""
-        for queue in self.sse_clients:
-            try:
-                await queue.put(message.payload)
-            except:
-                pass
+        """Broadcast bus events to all SSE clients with proper formatting for the frontend."""
+        event_type = message.topic
+        payload = message.payload
+        
+        formatted_event = None
+        
+        # Mapping mirrors shared/constants.ts for phase-based UI
+        AGENT_TO_PHASE = {
+            1: 0, 11: 0,           # Phase 0: System Init
+            2: 1, 3: 1, 7: 1,      # Phase 1: Surveillance
+            4: 2, 5: 2, 6: 2,      # Phase 2: Intelligence
+            8: 3,                   # Phase 3: Execution
+            9: 4, 10: 4,            # Phase 4: Accounting
+            12: 5, 14: 5,           # Phase 5: Protection
+            13: 13                  # Intervention
+        }
+        
+        if event_type == "SYSTEM_LOG":
+            agent_id = payload.get("agent_id", 0)
+            phase_id = AGENT_TO_PHASE.get(agent_id, 0)
+            
+            formatted_event = {
+                "type": "LOG",
+                "log": {
+                    "id": f"log-{datetime.now().timestamp()}",
+                    "timestamp": payload.get("timestamp", datetime.now().isoformat()),
+                    "agentId": agent_id,
+                    "cycleId": self.cycle_count,
+                    "phaseId": phase_id,
+                    "message": payload.get("message", ""),
+                    "level": payload.get("level", "INFO")
+                }
+            }
+        elif event_type == "VAULT_UPDATE":
+            formatted_event = {
+                "type": "VAULT",
+                "state": payload
+            }
+        elif event_type == "SIM_RESULT":
+            formatted_event = {
+                "type": "SIMULATION",
+                "state": payload
+            }
+        elif event_type == "SYSTEM_STATE":
+             formatted_event = {
+                "type": "STATE",
+                "state": payload
+            }
+            
+        if formatted_event:
+            for queue in self.sse_clients:
+                try:
+                    await queue.put(formatted_event)
+                except:
+                    pass
         
     async def run(self):
         """Main event loop - just keeps server alive."""

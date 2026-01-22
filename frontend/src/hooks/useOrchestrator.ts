@@ -1,7 +1,7 @@
 import { LogEntry, VaultState, SimulationState, SystemHealthData } from '@shared/types';
 import { useState, useEffect } from 'react';
 
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = `http://${window.location.hostname}:3001`;
 
 export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) => {
     const [activeAgentId, setActiveAgentId] = useState<number | null>(null);
@@ -35,7 +35,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
                 if (data.state.cycleCount !== undefined) setCycleCount(data.state.cycleCount);
             } else if (data.type === 'VAULT') {
                 setVault(data.state);
-                setCurrentBalance(data.state.total / 100);
+                setCurrentBalance(data.state.total);
             } else if (data.type === 'SIMULATION') {
                 setSimulation(data.state);
             } else if (data.type === 'HEALTH') {
@@ -52,14 +52,21 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     }, []);
 
     const runOrchestrator = async () => {
+        console.log('[Orchestrator] runOrchestrator called');
         try {
-            await fetch(`${BACKEND_URL}/api/run`, {
+            console.log(`[Orchestrator] POSTING to ${BACKEND_URL}/api/run`);
+            const response = await fetch(`${BACKEND_URL}/api/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ isPaperTrading })
             });
+            console.log('[Orchestrator] response status:', response.status);
+            if (!response.ok) {
+                const err = await response.json();
+                console.error('[Orchestrator] error response:', err);
+            }
         } catch (error) {
-            console.error('Failed to trigger backend:', error);
+            console.error('[Orchestrator] Failed to trigger backend:', error);
         }
     };
 
