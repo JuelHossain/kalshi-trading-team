@@ -21,3 +21,4 @@ Strict standards for all Human and AI collaborators to ensure project stability,
 *   **Defensive API Usage**: Implement **Exponential Backoff** for 429/500 errors. Agents should "Hibernate" after 5 failures to protect API reputation.
 *   **Determinism**: Log enough context to recreate decisions using the `replay-debug` workflow.
 *   **Alpha Efficiency**: Heavy math/filtering belongs in Python/Numpy. LLMs are reserved for high-value "Finalist" tickers only.
+* **git rule** : never commit to main , always commit to antigravity branch. then merge to main. always pull before pushing to prevent merge conflicts. always use rebase to keep history clean. test every changes working properly before pushing the code to github.
