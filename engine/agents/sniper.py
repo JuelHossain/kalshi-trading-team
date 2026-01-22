@@ -20,6 +20,9 @@ class SniperAgent(BaseAgent):
     Role: Precise Price Targeting & Liquidity Guard.
     """
     
+    def __init__(self, agent_id: int, bus: EventBus):
+        super().__init__("SNIPER", agent_id, bus)
+    
     async def setup(self):
         await self.log("Sniper initialized and listening for Intercept Data.")
         await self.bus.subscribe("INTERCEPT_DATA", self.handle_snipe_request)

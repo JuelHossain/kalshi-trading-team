@@ -1,9 +1,11 @@
 import asyncio
 import json
 import os
+from typing import Dict, Any
 from agents.base import BaseAgent
 from core.bus import EventBus
 from core.vault import RecursiveVault
+
 
 class GatewayAgent(BaseAgent):
     """

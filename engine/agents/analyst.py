@@ -18,6 +18,9 @@ class AnalystAgent(BaseAgent):
     Finds alpha and structural reasons to enter a trade.
     """
     
+    def __init__(self, agent_id: int, bus: EventBus):
+        super().__init__("ANALYST", agent_id, bus)
+    
     async def setup(self):
         self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("API_KEY")
         if not self.api_key:

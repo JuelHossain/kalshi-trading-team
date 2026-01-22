@@ -17,6 +17,9 @@ class InterceptorAgent(BaseAgent):
     Fetches real-time odds to establish "Shadow Probabilities".
     """
     
+    def __init__(self, agent_id: int, bus: EventBus):
+        super().__init__("INTERCEPTOR", agent_id, bus)
+    
     async def setup(self):
         self.api_key = os.getenv("RAPID_API_KEY")
         self.host = "api-football-v1.p.rapidapi.com"

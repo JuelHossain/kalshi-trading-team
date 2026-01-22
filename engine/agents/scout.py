@@ -18,6 +18,9 @@ class ScoutAgent(BaseAgent):
     Optimized for Sentient Alpha v2.
     """
     
+    def __init__(self, agent_id: int, bus: EventBus):
+        super().__init__("SCOUT", agent_id, bus)
+    
     async def setup(self):
         await self.log("Scout initialized and connected to Kalshi via shared client.")
 
