@@ -89,3 +89,21 @@ export interface ErrorAnalysis {
   suggestedFix: string;
   confidence: number;
 }
+
+export type TimelineEventType = 'LOG' | 'SIMULATION' | 'VAULT' | 'MARKET' | 'INTERCEPT' | 'ERROR' | 'FIXER';
+
+export interface FixerActivity {
+  errorMessage: string;
+  action: 'ANALYZING' | 'ATTEMPTING_FIX' | 'FIXED' | 'FAILED';
+  details: string;
+  canRecover: boolean;
+}
+
+export interface TimelineEvent {
+  id: string;
+  type: TimelineEventType;
+  timestamp: string;
+  cycleId: number;
+  phaseId: number;
+  data: LogEntry | SimulationState | VaultState | FixerActivity | any;
+}

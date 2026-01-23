@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { LogEntry } from '@shared/types';
+import { LogEntry, TimelineEvent, TimelineEventType, SimulationState, VaultState } from '@shared/types';
 import { PHASES, PHASE_ORDER, INTERVENTION_PHASE, PhaseConfig } from '@shared/constants';
 
 interface TerminalProps {
-    logs: LogEntry[];
+    timelineEvents: TimelineEvent[];
     activeAgentId?: number | null;
 }
 
@@ -12,218 +12,274 @@ const getPhaseConfig = (phaseId: number): PhaseConfig => {
     return PHASES[phaseId] || PHASES[0];
 };
 
-// --- SUB-COMPONENTS ---
+// --- DATA CARD COMPONENTS ---
 
-const TypewriterLog: React.FC<{ message: string, className?: string }> = ({ message, className }) => {
-    const [displayed, setDisplayed] = useState('');
-
-    useEffect(() => {
-        setDisplayed(message);
-    }, [message]);
-
-    return (
-        <div className={`font-mono text-sm leading-relaxed break-words ${className}`}>
-            {displayed}
-            <span className="inline-block w-2 h-4 bg-emerald-500 ml-1 animate-pulse align-middle"></span>
+const VaultCard: React.FC<{ data: VaultState }> = ({ data }) => (
+    <div className="bg-emerald-900/10 border border-emerald-500/20 rounded-lg p-3 my-2 flex justify-between items-center backdrop-blur-sm animate-scale-in">
+        <div className="flex flex-col">
+            <span className="text-[9px] text-emerald-400 uppercase tracking-widest font-mono">Vault Balance</span>
+            <span className="text-lg font-bold font-tech text-white">${(data.total / 100).toFixed(2)}</span>
         </div>
-    );
-};
+        <div className="flex flex-col items-end">
+            <span className="text-[9px] text-gray-400 uppercase tracking-widest font-mono">Profit</span>
+            <span className={`text-sm font-bold font-mono ${data.currentProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {data.currentProfit >= 0 ? '+' : ''}${(data.currentProfit / 100).toFixed(2)}
+            </span>
+        </div>
+    </div>
+);
 
-const PhaseHero: React.FC<{
-    currentPhaseId: number,
-    latestLog?: LogEntry,
-    isComplete: boolean
-}> = ({ currentPhaseId, latestLog, isComplete }) => {
-    const config = getPhaseConfig(currentPhaseId);
-
-    return (
-        <div className={`relative w-full p-6 mb-6 rounded-2xl overflow-hidden border border-white/10 transition-all duration-500 ${isComplete ? 'bg-emerald-900/10' : 'bg-black/40'}`}>
-            {/* Background Glow */}
-            <div className={`absolute top-0 right-0 w-64 h-64 blur-[100px] rounded-full opacity-20 pointer-events-none ${isComplete ? 'bg-emerald-500' : 'bg-blue-500'}`}></div>
-
-            <div className="relative z-10 flex flex-col gap-4">
-                {/* Header */}
-                <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center border ${config.borderColor} ${config.bg} shadow-lg`}>
-                            <span className={`text-xl ${config.color}`}>{config.icon}</span>
-                        </div>
-                        <div>
-                            <div className="text-[10px] text-gray-500 uppercase tracking-[0.2em] font-mono mb-1">Current Protocol</div>
-                            <div className={`text-2xl font-bold font-tech uppercase tracking-widest ${config.color}`}>
-                                {config.title}
-                            </div>
-                            <div className="text-xs text-gray-400 font-mono uppercase tracking-wider opacity-70">
-                                {config.subtitle}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Status Badge */}
-                    <div className={`px-3 py-1.5 rounded-lg border ${isComplete ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-blue-500/30 bg-blue-500/10'}`}>
-                        <span className={`text-[10px] font-bold font-mono uppercase animate-pulse ${isComplete ? 'text-emerald-400' : 'text-blue-400'}`}>
-                            {isComplete ? 'PHASE COMPLETE' : 'PROCESSING...'}
-                        </span>
-                    </div>
-                </div>
-
-                {/* Console Output Area */}
-                <div className="mt-4 p-4 rounded-xl bg-black/60 border border-white/5 min-h-[80px] relative font-mono text-xs">
-                    <div className="absolute top-2 right-2 text-[8px] text-gray-600 uppercase">System Output</div>
-                    {latestLog ? (
-                        <TypewriterLog
-                            message={latestLog.message.replace(/^Agent \d+: /, '')}
-                            className={latestLog.level === 'ERROR' ? 'text-red-400' : 'text-emerald-100'}
-                        />
-                    ) : (
-                        <span className="text-gray-600 italic">Waiting for signal...</span>
-                    )}
-                </div>
+const SimulationCard: React.FC<{ data: SimulationState }> = ({ data }) => (
+    <div className="bg-blue-900/10 border border-blue-500/20 rounded-lg p-3 my-2 backdrop-blur-sm animate-scale-in">
+        <div className="flex justify-between items-center mb-2">
+            <span className="text-[9px] text-blue-400 uppercase tracking-widest font-mono">Sim Results: {data.ticker}</span>
+            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${data.veto ? 'bg-red-500/20 text-red-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
+                {data.veto ? 'VETOED' : 'APPROVED'}
+            </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+            <div className="bg-black/20 rounded p-1.5 text-center">
+                <div className="text-[8px] text-gray-500 uppercase">Win Rate</div>
+                <div className="text-sm font-bold text-white">{(data.winRate * 100).toFixed(1)}%</div>
             </div>
-
-            {/* Progress Line */}
-            <div className="absolute bottom-0 left-0 h-1 bg-white/5 w-full">
-                <div
-                    className={`h-full transition-all duration-300 ${isComplete ? 'bg-emerald-500 w-full' : 'bg-blue-500 w-1/3 animate-pulse'}`}
-                ></div>
+            <div className="bg-black/20 rounded p-1.5 text-center">
+                <div className="text-[8px] text-gray-500 uppercase">EV Score</div>
+                <div className="text-sm font-bold text-blue-300">{data.evScore.toFixed(2)}</div>
+            </div>
+            <div className="bg-black/20 rounded p-1.5 text-center">
+                <div className="text-[8px] text-gray-500 uppercase">Variance</div>
+                <div className="text-sm font-bold text-purple-300">{data.variance.toFixed(3)}</div>
             </div>
         </div>
-    );
-};
+    </div>
+);
 
-// --- SIMPLIFIED HISTORY ROW ---
-const HistoryLog: React.FC<{ log: LogEntry }> = ({ log }) => {
-    const isError = log.level === 'ERROR';
+const LogLine: React.FC<{ log: LogEntry }> = ({ log }) => {
+    // Heuristic: Check for error keywords even if level is INFO
+    const errorKeywords = ['error', 'failed', 'fail', 'exception', 'veto', 'rejected', 'invalid', 'could not'];
+    const isError = log.level === 'ERROR' ||
+        errorKeywords.some(kw => log.message.toLowerCase().includes(kw));
+
     return (
-        <div className={`flex gap-3 py-1.5 px-2 rounded hover:bg-white/5 transition-colors font-mono text-[10px] group border-l-2 ${isError ? 'border-red-500 bg-red-500/5' : 'border-transparent'}`}>
-            <span className="text-gray-600 w-14 shrink-0 opacity-50">{log.timestamp.split('T')[1]?.split('.')[0]}</span>
-            <span className={`${isError ? 'text-red-400' : 'text-gray-400 group-hover:text-gray-200'}`}>
-                {log.message}
+        <div className={`flex gap-3 py-1 px-2 rounded hover:bg-white/5 transition-colors font-mono text-[10px] group border-l-2 ${isError ? 'border-red-500 bg-red-500/5' : 'border-transparent'}`}>
+            <span className="text-gray-600 w-12 shrink-0 opacity-50">{log.timestamp.split('T')[1]?.split('.')[0]}</span>
+            <span className={`${isError ? 'text-red-400' : 'text-gray-400 group-hover:text-gray-200'} break-words flex-1`}>
+                {log.message.replace(/^Agent \d+: /, '')}
             </span>
         </div>
     );
 };
 
-const CycleHistory: React.FC<{ cycleId: number, logs: LogEntry[] }> = ({ cycleId, logs }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const hasError = logs.some(l => l.level === 'ERROR');
+// --- ERROR & FIXER CARDS (Inline Agent 13) ---
+
+const ErrorCard: React.FC<{ error: any }> = ({ error }) => (
+    <div className="bg-red-900/20 border border-red-500/40 rounded-xl p-4 my-3 backdrop-blur-sm animate-shake relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-red-400 to-red-500 animate-pulse"></div>
+        <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-red-500/20 border border-red-500/40 flex items-center justify-center shrink-0">
+                <span className="text-xl">⚠️</span>
+            </div>
+            <div className="flex-1">
+                <div className="text-[10px] text-red-400 uppercase tracking-widest font-mono mb-1">System Error Detected</div>
+                <div className="text-sm text-red-200 font-mono break-words">{error.message || error}</div>
+            </div>
+        </div>
+    </div>
+);
+
+const FixerCard: React.FC<{ data: any }> = ({ data }) => {
+    const actionColors: Record<string, string> = {
+        'ANALYZING': 'text-yellow-400 border-yellow-500/30 bg-yellow-900/10',
+        'ATTEMPTING_FIX': 'text-orange-400 border-orange-500/30 bg-orange-900/10',
+        'FIXED': 'text-emerald-400 border-emerald-500/30 bg-emerald-900/10',
+        'FAILED': 'text-red-400 border-red-500/30 bg-red-900/10'
+    };
+    const colorClass = actionColors[data.action] || actionColors['ANALYZING'];
 
     return (
-        <div className="border border-white/5 rounded-xl bg-white/[0.02] overflow-hidden mb-2">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-3 hover:bg-white/5 transition-colors"
+        <div className={`border rounded-xl p-4 my-3 backdrop-blur-sm animate-scale-in ${colorClass}`}>
+            <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg bg-black/30 border border-current flex items-center justify-center shrink-0 animate-pulse">
+                    <span className="text-xl">🔧</span>
+                </div>
+                <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] uppercase tracking-widest font-mono">Agent 13 :: Fixer</span>
+                        <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-black/30">
+                            {data.action}
+                        </span>
+                    </div>
+                    <div className="text-sm font-mono break-words opacity-90">{data.details}</div>
+                    {data.action === 'FAILED' && !data.canRecover && (
+                        <div className="mt-2 text-[10px] text-red-300 border-t border-red-500/20 pt-2">
+                            ⚠️ Manual intervention required. System paused.
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- ACCORDION ITEM ---
+
+const PhaseAccordionItem: React.FC<{
+    phaseId: number;
+    events: TimelineEvent[];
+    isActive: boolean;
+    isPending: boolean;
+    isComplete: boolean;
+    onToggle: () => void;
+    expanded: boolean;
+}> = ({ phaseId, events, isActive, isPending, isComplete, onToggle, expanded }) => {
+    const config = getPhaseConfig(phaseId);
+
+    // Status visual logic
+    let statusColor = 'text-gray-600';
+    let borderColor = 'border-white/5';
+    let bgClass = 'bg-white/[0.02]';
+
+    if (isActive) {
+        statusColor = 'text-blue-400 animate-pulse';
+        borderColor = 'border-blue-500/30';
+        bgClass = 'bg-blue-900/5';
+    } else if (isComplete) {
+        statusColor = 'text-emerald-500';
+        borderColor = 'border-emerald-500/20';
+        bgClass = 'bg-emerald-900/5';
+    }
+
+    return (
+        <div className={`mb-2 rounded-xl border ${borderColor} ${bgClass} overflow-hidden transition-all duration-300`}>
+            {/* Header */}
+            <div
+                onClick={onToggle}
+                className="flex items-center justify-between p-3 cursor-pointer hover:bg-white/5"
             >
                 <div className="flex items-center gap-3">
-                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${hasError ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                        CYCLE #{cycleId}
-                    </span>
-                    <span className="text-[10px] text-gray-500 font-mono">
-                        {logs.length} events
-                    </span>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${isActive ? config.borderColor : 'border-transparent'} bg-black/20`}>
+                        <span className={`text-sm ${isActive ? config.color : 'text-gray-600'}`}>{config.icon}</span>
+                    </div>
+                    <div>
+                        <div className={`text-[10px] font-bold font-tech uppercase tracking-wider ${isActive ? 'text-white' : 'text-gray-400'}`}>
+                            {config.title}
+                        </div>
+                        <div className="text-[8px] text-gray-600 uppercase font-mono">{events.length} Events</div>
+                    </div>
                 </div>
-                <span className={`text-xs text-gray-600 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
-            </button>
 
-            {isOpen && (
-                <div className="p-3 pt-0 border-t border-white/5 bg-black/20">
-                    {logs.map(log => <HistoryLog key={log.id} log={log} />)}
+                <div className="flex items-center gap-3">
+                    {/* Mini Status Indicator */}
+                    {isActive && <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>}
+                    {isComplete && <div className="text-emerald-500 text-xs">✓</div>}
+                    <div className={`text-xs text-gray-600 transition-transform duration-300 ${expanded ? 'rotate-180' : ''}`}>▼</div>
+                </div>
+            </div>
+
+            {/* Expanded Content (Timeline) */}
+            {expanded && (
+                <div className="border-t border-white/5 bg-black/20 p-3 animate-slide-down">
+                    {events.map((event) => {
+                        if (event.type === 'LOG') return <LogLine key={event.id} log={event.data as LogEntry} />;
+                        if (event.type === 'SIMULATION') return <SimulationCard key={event.id} data={event.data as SimulationState} />;
+                        if (event.type === 'VAULT') return <VaultCard key={event.id} data={event.data as VaultState} />;
+                        if (event.type === 'ERROR') return <ErrorCard key={event.id} error={event.data} />;
+                        if (event.type === 'FIXER') return <FixerCard key={event.id} data={event.data} />;
+                        return null;
+                    })}
+                    {isActive && (
+                        <div className="pl-14 pt-2 pb-1">
+                            <span className="inline-block w-1.5 h-3 bg-blue-500/50 animate-pulse"></span>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
     );
 };
 
-
 // --- MAIN TERMINAL ---
 
-const Terminal: React.FC<TerminalProps> = ({ logs, activeAgentId }) => {
-    const bottomRef = useRef<HTMLDivElement>(null);
+const Terminal: React.FC<TerminalProps> = ({ timelineEvents }) => {
+    // Group events by Cycle -> Phase
+    // Only show the LATEST cycle
+    const latestCycleId = timelineEvents.length > 0 ? timelineEvents[timelineEvents.length - 1].cycleId : 0;
 
-    // Filter relevant logs for display
-    const currentCycleId = logs.length > 0 ? logs[logs.length - 1].cycleId : 0;
-    const currentLogs = logs.filter(l => l.cycleId === currentCycleId);
+    // Filter events for this cycle
+    const cycleEvents = timelineEvents.filter(e => e.cycleId === latestCycleId);
 
-    // Find latest "Action"
-    const latestLog = currentLogs[currentLogs.length - 1];
+    // Determine current active phase
+    const lastEvent = cycleEvents[cycleEvents.length - 1];
+    const currentPhaseId = lastEvent?.phaseId || 0;
 
-    // Determine active phase from latest log
-    const currentPhaseId = latestLog?.phaseId || 0;
+    // Group into phases
+    const eventsByPhase = useMemo(() => {
+        const groups: Record<number, TimelineEvent[]> = {};
+        PHASE_ORDER.forEach(id => groups[id] = []);
 
-    // Detect cycle completion
-    const isCycleComplete = latestLog?.message.includes('COMPLETE') || false;
-
-    // Auto-scroll effect for the stream
-    useEffect(() => {
-        if (bottomRef.current) {
-            bottomRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [logs.length]);
-
-    // Group past cycles
-    const pastCycles = useMemo(() => {
-        const groups: Record<number, LogEntry[]> = {};
-        logs.forEach(l => {
-            if (l.cycleId !== currentCycleId) {
-                if (!groups[l.cycleId]) groups[l.cycleId] = [];
-                groups[l.cycleId].push(l);
-            }
+        cycleEvents.forEach(e => {
+            if (!groups[e.phaseId]) groups[e.phaseId] = [];
+            groups[e.phaseId].push(e);
         });
-        return Object.entries(groups).sort((a, b) => Number(b[0]) - Number(a[0]));
-    }, [logs, currentCycleId]);
+        return groups;
+    }, [cycleEvents]);
+
+    // Auto-expand logic: By default, expand the ACTIVE phase
+    const [expandedPhases, setExpandedPhases] = useState<Record<number, boolean>>({});
+
+    // Effect to auto-expand new phases as we enter them
+    useEffect(() => {
+        setExpandedPhases(prev => ({
+            ...prev,
+            [currentPhaseId]: true
+        }));
+    }, [currentPhaseId]);
+
+    const togglePhase = (id: number) => {
+        setExpandedPhases(prev => ({ ...prev, [id]: !prev[id] }));
+    };
 
     return (
         <div className="h-full max-h-full flex flex-col relative glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/10">
             {/* Header */}
-            <div className="shrink-0 h-12 border-b border-white/5 bg-black/40 backdrop-blur-md flex justify-between items-center px-6">
+            <div className="shrink-0 h-14 border-b border-white/5 bg-black/40 backdrop-blur-md flex justify-between items-center px-6">
                 <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]"></div>
-                    <span className="text-[10px] font-mono font-bold text-gray-300 uppercase tracking-[0.2em] opacity-80">
-                        NEURAL_UPLINK_V4.0 // LIVE
-                    </span>
-                </div>
-                <div className="text-[10px] font-mono text-emerald-500/50">
-                    FREQ: 4Hz [BUFFERED]
+                    <div>
+                        <div className="text-[10px] font-mono font-bold text-gray-300 uppercase tracking-[0.2em] opacity-80">
+                            NEURAL_TRACE_V5 // CYCLE {latestCycleId}
+                        </div>
+                        <div className="text-[8px] text-gray-500 font-mono uppercase tracking-wider">
+                            Real-time Event Stream
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
-                {/* 1. HERO: Active Process */}
-                {logs.length > 0 && (
-                    <PhaseHero
-                        currentPhaseId={currentPhaseId}
-                        latestLog={latestLog}
-                        isComplete={isCycleComplete}
-                    />
-                )}
+            {/* Accordion List */}
+            <div className="flex-1 overflow-y-auto p-4 scroll-smooth no-scrollbar">
+                {PHASE_ORDER.map(phaseId => {
+                    const isActive = phaseId === currentPhaseId;
+                    // Phase is complete if we are past it in the sequence OR if cycle is done
+                    const isComplete = phaseId < currentPhaseId || (cycleEvents.some(e => e.data?.message?.includes('CYCLE') && e.data?.message?.includes('COMPLETE')));
 
-                {/* 2. LOG STREAM (Current Cycle) */}
-                <div className="mb-8">
-                    <div className="text-[10px] text-gray-500 font-mono uppercase tracking-widest mb-3 pl-1">Target Sequence Stream</div>
-                    <div className="space-y-1 relative">
-                        {/* Connecting Line */}
-                        <div className="absolute left-[11px] top-0 bottom-0 w-[1px] bg-white/5"></div>
+                    return (
+                        <PhaseAccordionItem
+                            key={phaseId}
+                            phaseId={phaseId}
+                            events={eventsByPhase[phaseId] || []}
+                            isActive={isActive}
+                            isPending={!isActive && !isComplete}
+                            isComplete={isComplete}
+                            expanded={!!expandedPhases[phaseId]}
+                            onToggle={() => togglePhase(phaseId)}
+                        />
+                    );
+                })}
 
-                        {currentLogs.slice(-8).map(log => ( // Show last 8 only to keep it clean, unless scrolled
-                            <div key={log.id} className="relative pl-6 animate-slide-in-right">
-                                <div className={`absolute left-2 top-2.5 w-1.5 h-1.5 rounded-full ${log.level === 'ERROR' ? 'bg-red-500' : 'bg-emerald-500/30'}`}></div>
-                                <HistoryLog log={log} />
-                            </div>
-                        ))}
-                        <div ref={bottomRef}></div>
-                    </div>
-                </div>
-
-                {/* 3. ARCHIVE (Past Cycles) */}
-                {pastCycles.length > 0 && (
-                    <div className="border-t border-white/5 pt-6 mt-6">
-                        <div className="text-[10px] text-gray-600 font-mono uppercase tracking-widest mb-4 text-center opacity-50">
-                            Completed Sequences
-                        </div>
-                        {pastCycles.map(([id, cycleLogs]) => (
-                            <CycleHistory key={id} cycleId={Number(id)} logs={cycleLogs} />
-                        ))}
+                {cycleEvents.length === 0 && (
+                    <div className="text-center mt-20 text-gray-600 font-mono text-xs animate-pulse">
+                        Waiting for Cycle Initiation...
                     </div>
                 )}
             </div>

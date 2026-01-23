@@ -6,135 +6,106 @@ interface WorkflowVisualizerProps {
     agents: Agent[];
     activeAgentId: number | null;
     completedAgents: number[];
-    agentData?: Record<number, any>;
     currentPhaseId?: number;
 }
 
-// Funnel Topology: Wide Left -> Narrow Center -> Execution Right
+// 4 Mega-Agent Vertical Topology: SOUL → SENSES → BRAIN → HAND
 const NODES = [
-    { id: 1, x: 10, y: 50 },  // Orchestrator (Far Left Start)
-    { id: 11, x: 10, y: 85 }, // Mechanic (Below Start)
-
-    // Phase 2: Wide Net (Scout & Interceptor)
-    { id: 2, x: 25, y: 25 },  // Scout (Top Left)
-    { id: 3, x: 25, y: 75 },  // Interceptor (Bottom Left)
-
-    // Phase 3: The Filter (Analyst) - Central Hub
-    { id: 4, x: 45, y: 50 },  // Analyst (Center)
-    { id: 5, x: 45, y: 20 },  // Sim Scientist (Satellite Top - Standby)
-    { id: 6, x: 45, y: 80 },  // Auditor (Satellite Bottom - Standby)
-
-    // Phase 4: Sequential Execution Loop
-    { id: 8, x: 70, y: 50 },  // Executioner (Center Right Hub)
-    { id: 9, x: 70, y: 20 },  // Accountant (Risk Check - Top)
-    { id: 7, x: 70, y: 80 },  // Sniper (Order Book - Bottom)
-
-    // End State
-    { id: 10, x: 90, y: 50 }, // Historian (Far Right End)
-
-    { id: 12, x: 50, y: 5 },  // Visualist (Header)
-    { id: 13, x: 50, y: 50 }, // Fixer (Hidden Layer)
+    { id: 1, x: 50, y: 12 },  // SOUL (Top)
+    { id: 2, x: 50, y: 37 },  // SENSES
+    { id: 3, x: 50, y: 62 },  // BRAIN
+    { id: 4, x: 50, y: 87 },  // HAND (Bottom)
 ];
 
-// Connections reflecting the "Funnel" Logic
+// Vertical Pipeline Connections
 const CONNECTIONS = [
-    // Phase 1 -> 2
-    { from: 1, to: 11 }, // Init Check
-    { from: 1, to: 2 },  // Start Scout
-    { from: 1, to: 3 },  // Start Interceptor
-
-    // Phase 2 -> 3 (Convergence)
-    { from: 2, to: 4 },  // Scout data to Analyst
-    { from: 3, to: 4 },  // Odds data to Analyst
-
-    // Optional Standby Paths (Visual completeness)
-    { from: 4, to: 5 }, { from: 5, to: 4 },
-    { from: 4, to: 6 }, { from: 6, to: 4 },
-
-    // Phase 3 -> 4 (Handoff to Execution)
-    { from: 4, to: 8 },
-
-    // Phase 4: The Loop (Star Topology around Executioner)
-    { from: 8, to: 9 }, { from: 9, to: 8 }, // Balance Check
-    { from: 8, to: 7 }, { from: 7, to: 8 }, // Depth Check
-    { from: 8, to: 10 }, // Log Result
-
-    // Error Handling
-    { from: 13, to: 4 }, { from: 13, to: 8 }, { from: 13, to: 1 }
+    { from: 1, to: 2 },  // SOUL → SENSES
+    { from: 2, to: 3 },  // SENSES → BRAIN
+    { from: 3, to: 4 },  // BRAIN → HAND
 ];
 
-const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (id: number) => void }> = ({ agents, activeAgentId, completedAgents, agentData = {}, currentPhaseId = 0, onAgentClick }) => {
-    const [hoveredAgentId, setHoveredAgentId] = React.useState<number | null>(null);
+// Agent metadata for display
+const AGENT_META: Record<number, { icon: string; color: string; glow: string }> = {
+    1: { icon: '👁️', color: 'purple', glow: 'rgba(168, 85, 247, 0.5)' },
+    2: { icon: '📡', color: 'blue', glow: 'rgba(59, 130, 246, 0.5)' },
+    3: { icon: '🧠', color: 'pink', glow: 'rgba(236, 72, 153, 0.5)' },
+    4: { icon: '✋', color: 'emerald', glow: 'rgba(16, 185, 129, 0.5)' },
+};
 
-    // Get agents in current phase for phase-sync highlighting
-    const phaseAgents = PHASES[currentPhaseId]?.requiredAgents || [];
+const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (id: number) => void }> = ({
+    agents,
+    activeAgentId,
+    completedAgents,
+    currentPhaseId = 0,
+    onAgentClick
+}) => {
+    const [hoveredAgentId, setHoveredAgentId] = React.useState<number | null>(null);
 
     return (
         <div className="h-full w-full relative overflow-hidden rounded-3xl glass-panel bg-black/80 shadow-2xl flex items-center justify-center p-8 border border-white/5">
 
-            {/* 1. Deep Space Background */}
+            {/* Deep Space Background */}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-gray-900/40 via-black to-black pointer-events-none"></div>
 
-            {/* 2. Fluid SVG Connections (Bezier Curves) */}
+            {/* Pipeline SVG */}
             <svg className="absolute inset-0 w-full h-full z-0 pointer-events-none overflow-visible">
                 <defs>
                     <filter id="glow-line">
-                        <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                        <feGaussianBlur stdDeviation="3" result="coloredBlur" />
                         <feMerge>
                             <feMergeNode in="coloredBlur" />
                             <feMergeNode in="SourceGraphic" />
                         </feMerge>
                     </filter>
+                    <linearGradient id="pipeline-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="#a855f7" />
+                        <stop offset="33%" stopColor="#3b82f6" />
+                        <stop offset="66%" stopColor="#ec4899" />
+                        <stop offset="100%" stopColor="#10b981" />
+                    </linearGradient>
                 </defs>
-                {CONNECTIONS.map((conn, i) => {
-                    const start = NODES.find(n => n.id === conn.from) || { x: 0, y: 0 };
-                    const end = NODES.find(n => n.id === conn.to) || { x: 0, y: 0 };
 
-                    // Check if this path is "Active" (Both nodes are involved in the current/past flow)
+                {CONNECTIONS.map((conn, i) => {
+                    const start = NODES.find(n => n.id === conn.from) || { x: 50, y: 0 };
+                    const end = NODES.find(n => n.id === conn.to) || { x: 50, y: 100 };
+
                     const isPathActive = (completedAgents.includes(conn.from) || activeAgentId === conn.from) &&
                         (completedAgents.includes(conn.to) || activeAgentId === conn.to);
 
-                    // Bezier Control Point (Simple curve effect)
-                    const cpX = (start.x + end.x) / 2;
-                    const cpY = (start.y + end.y) / 2 + (i % 2 === 0 ? 15 : -15); // Alternating curve direction
-
                     return (
                         <g key={`link-${i}`}>
-                            {/* Background Trace */}
-                            <path
-                                d={`M ${start.x}% ${start.y}% Q ${cpX}% ${cpY}% ${end.x}% ${end.y}%`}
+                            {/* Background Line */}
+                            <line
+                                x1={`${start.x}%`} y1={`${start.y}%`}
+                                x2={`${end.x}%`} y2={`${end.y}%`}
                                 stroke="#222"
-                                strokeWidth="1"
-                                fill="none"
-                            />
-                            {/* Active Impulse */}
-                            <path
-                                d={`M ${start.x}% ${start.y}% Q ${cpX}% ${cpY}% ${end.x}% ${end.y}%`}
-                                stroke={isPathActive ? "#10b981" : "transparent"}
                                 strokeWidth="2"
-                                fill="none"
+                            />
+                            {/* Active Pulse Line */}
+                            <line
+                                x1={`${start.x}%`} y1={`${start.y}%`}
+                                x2={`${end.x}%`} y2={`${end.y}%`}
+                                stroke={isPathActive ? "url(#pipeline-gradient)" : "transparent"}
+                                strokeWidth="4"
                                 filter="url(#glow-line)"
                                 strokeDasharray="10"
-                                className={isPathActive ? "animate-flow opacity-60" : "opacity-0"}
+                                className={isPathActive ? "animate-flow opacity-80" : "opacity-0"}
                             />
                         </g>
                     );
                 })}
             </svg>
 
-            {/* 3. Floating Nodes (Star Points) */}
+            {/* 4 Mega-Agent Nodes */}
             <div className="relative w-full h-full z-10">
                 {agents.map((agent) => {
-                    const pos = NODES.find(p => p.id === agent.id) || { x: 50, y: 50 };
+                    const pos = NODES.find(p => p.id === agent.id);
+                    if (!pos) return null;
+
                     const isActive = activeAgentId === agent.id;
                     const isCompleted = completedAgents.includes(agent.id);
                     const isHovered = hoveredAgentId === agent.id;
-                    const isError = agent.id === 13;
-                    const isInCurrentPhase = phaseAgents.includes(agent.id);
-                    const data = agentData[agent.id];
-
-                    // Hide the fixer unless active or error OR explicitly hovered (to test it)
-                    if (agent.id === 13 && !isActive && !isHovered) return null;
+                    const meta = AGENT_META[agent.id] || { icon: '⚡', color: 'gray', glow: 'rgba(100,100,100,0.5)' };
 
                     return (
                         <div
@@ -143,149 +114,84 @@ const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (i
                             style={{
                                 left: `${pos.x}%`,
                                 top: `${pos.y}%`,
-                                // Slight float animation for organic feel
-                                animation: `float ${5 + (agent.id % 3)}s ease-in-out infinite ${agent.id * 0.2}s`
                             }}
                             onMouseEnter={() => setHoveredAgentId(agent.id)}
                             onMouseLeave={() => setHoveredAgentId(null)}
                             onClick={() => onAgentClick && onAgentClick(agent.id)}
                         >
-                            {/* --- THE STAR NODE --- */}
-                            <div className="relative w-16 h-16 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
-
-                                {/* 1. Orbiting Circle (Running around the star) - Active Only */}
+                            {/* Node Container */}
+                            <div className={`
+                                relative flex flex-col items-center transition-all duration-500
+                                ${isActive ? 'scale-125' : isHovered ? 'scale-110' : 'scale-100'}
+                            `}>
+                                {/* Orbiting Ring (Active) */}
                                 {isActive && (
-                                    <svg className="absolute inset-0 w-full h-full rotate-[-90deg]">
+                                    <svg className="absolute w-24 h-24 -inset-4 rotate-[-90deg]">
                                         <circle
-                                            cx="50%" cy="50%" r="28"
+                                            cx="50%" cy="50%" r="40"
                                             fill="none"
-                                            stroke={isError ? '#ef4444' : '#10b981'}
-                                            strokeWidth="1.5"
+                                            stroke={meta.glow}
+                                            strokeWidth="2"
                                             strokeLinecap="round"
-                                            // Custom keyframe in index.html for "running" effect
                                             className="animate-dash"
-                                            strokeDasharray="175" // Circumference ~ 2*PI*28
-                                            strokeDashoffset="175"
+                                            strokeDasharray="250"
+                                            strokeDashoffset="250"
                                         />
-                                        {/* Inner faint ring for structure */}
-                                        <circle cx="50%" cy="50%" r="28" stroke="rgba(255,255,255,0.1)" strokeWidth="1" fill="none" />
                                     </svg>
                                 )}
 
-                                {/* 2. The Star Core */}
+                                {/* Core Icon */}
                                 <div className={`
-                            relative rounded-full transition-all duration-700 z-10 flex items-center justify-center
-                            ${isActive
-                                        ? 'w-3 h-3 bg-white shadow-[0_0_25px_rgba(255,255,255,1)] scale-125'
-                                        : isHovered
-                                            ? 'w-3 h-3 bg-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.6)] scale-110'
-                                            : isCompleted
-                                                ? 'w-2.5 h-2.5 bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.8)]'
-                                                : isInCurrentPhase
-                                                    ? 'w-2 h-2 bg-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.7)] scale-105'
-                                                    : 'w-1.5 h-1.5 bg-gray-600 opacity-60'}
-                        `}>
-                                    {/* Flare active effect */}
+                                    w-16 h-16 rounded-2xl flex items-center justify-center text-3xl
+                                    transition-all duration-500 backdrop-blur-sm
+                                    ${isActive
+                                        ? `bg-${meta.color}-500/30 border-2 border-${meta.color}-400 shadow-[0_0_30px_${meta.glow}]`
+                                        : isCompleted
+                                            ? `bg-${meta.color}-500/20 border border-${meta.color}-500/50`
+                                            : 'bg-white/5 border border-white/10'}
+                                `}
+                                    style={{
+                                        boxShadow: isActive ? `0 0 40px ${meta.glow}` : 'none'
+                                    }}
+                                >
+                                    {meta.icon}
                                     {isActive && (
-                                        <div className="absolute inset-0 bg-white rounded-full animate-ping opacity-50"></div>
+                                        <div className="absolute inset-0 bg-white/10 rounded-2xl animate-ping opacity-30"></div>
                                     )}
                                 </div>
 
-                                {/* 3. Ambient Glow Field (Active, Hovered, or Phase-Synced) */}
-                                {(isActive || isHovered || isInCurrentPhase) && (
-                                    <div className={`absolute inset-0 ${isError ? 'bg-red-500/20' : isInCurrentPhase && !isActive && !isHovered ? 'bg-blue-500/10' : 'bg-emerald-500/20'} blur-xl rounded-full ${isActive || isHovered ? 'animate-pulse' : ''} pointer-events-none`}></div>
+                                {/* Agent Name */}
+                                <div className={`
+                                    mt-3 text-center transition-all duration-300
+                                    ${isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-100'}
+                                `}>
+                                    <div className={`
+                                        text-xs font-bold font-tech uppercase tracking-widest
+                                        ${isActive ? 'text-white' : 'text-gray-400'}
+                                    `}>
+                                        {agent.name}
+                                    </div>
+                                    <div className="text-[9px] text-gray-600 font-mono">
+                                        {agent.role.split(' ')[0]}
+                                    </div>
+                                </div>
+
+                                {/* Status Badge */}
+                                {isCompleted && !isActive && (
+                                    <div className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] text-black font-bold">
+                                        ✓
+                                    </div>
                                 )}
                             </div>
 
-                            {/* Node Label (Below) */}
-                            {!isActive && !isHovered && (
-                                <div className={`
-                            absolute top-14 left-1/2 -translate-x-1/2 whitespace-nowrap
-                            text-[8px] font-mono uppercase tracking-widest transition-all duration-500
-                            ${isCompleted ? 'text-emerald-500/60 translate-y-0' : 'text-gray-700 translate-y-1 opacity-50'}
-                        `}>
-                                    {agent.name.split(' ').pop()}
-                                </div>
-                            )}
-
-                            {/* --- SUMMARY POPUP (Smooth Animation) --- */}
-                            {/* Check for Hover OR Active (ONLY for ERROR/FIXER) for the expanded view */}
-                            {(isHovered || (isActive && isError)) && (
-                                <div className={`
-                            absolute top-1/2 pointer-events-none origin-center
-                            ${pos.x > 60 ? 'right-full mr-8' : 'left-full ml-8'} 
-                            -translate-y-1/2 w-[280px] z-50
-                            animate-scale-in
-                        `}>
-                                    <div className={`
-                                glass-panel bg-black/95 p-5 rounded-2xl relative shadow-2xl backdrop-blur-2xl
-                                ${isError ? 'border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.2)]' : 'border-emerald-500/50 shadow-[0_0_30px_rgba(16,185,129,0.2)]'}
-                            `}>
-                                        {/* Connector Line to Star */}
-                                        <div className={`
-                                    absolute top-1/2 w-8 h-[1px]
-                                    ${pos.x > 60 ? '-right-8 bg-gradient-to-l' : '-left-8 bg-gradient-to-r'}
-                                    from-emerald-500/50 to-transparent
-                                 `}></div>
-
-                                        <div className="flex justify-between items-center mb-3">
-                                            <h4 className={`font-tech text-sm uppercase tracking-wider font-bold ${isError ? 'text-red-400' : 'text-emerald-400'}`}>
-                                                {agent.name}
-                                            </h4>
-                                            <div className="flex items-center gap-2">
-                                                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white animate-pulse' : 'bg-gray-500'}`}></span>
-                                                <span className="text-[9px] font-mono text-gray-400 uppercase">
-                                                    {isActive ? 'Processing' : (isHovered ? 'Click to Test' : agent.status)}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div className="text-[10px] text-gray-500 font-mono mb-3 flex items-center gap-2 bg-white/5 p-1.5 rounded-lg border border-white/5">
-                                            <span className="text-emerald-500/50">CPU:</span>
-                                            <span>{agent.model}</span>
-                                        </div>
-
-                                        <div className="bg-black/50 rounded-xl p-3 border border-white/10 relative overflow-hidden">
-                                            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/50"></div>
-                                            <div className="flex gap-2">
-                                                <span className={`text-[10px] mt-[2px] ${isError ? 'text-red-500' : 'text-emerald-500'}`}>►</span>
-                                                <div className="text-[11px] text-gray-200 font-mono leading-relaxed w-full">
-                                                    {/* DATA DISPLAY LOGIC */}
-                                                    {data ? (
-                                                        <div className="space-y-1">
-                                                            {agent.id === 4 && (
-                                                                <>
-                                                                    <div className="flex justify-between"><span className="text-gray-500">Verdict:</span> <span className="text-white font-bold">{data.judgeVerdict}</span></div>
-                                                                    <div className="flex justify-between"><span className="text-gray-500">Confidence:</span> <span className="text-emerald-400">{data.confidenceScore}%</span></div>
-                                                                </>
-                                                            )}
-                                                            {agent.id === 7 && (
-                                                                <>
-                                                                    <div className="flex justify-between"><span className="text-gray-500">Snipe:</span> <span className="text-white font-bold">{data.snipe_price}c</span></div>
-                                                                    <div className="flex justify-between"><span className="text-gray-500">Spread:</span> <span className="text-emerald-400">{data.spread}c</span></div>
-                                                                    <div className="flex justify-between"><span className="text-gray-500">Liquid:</span> <span className={data.is_liquid ? "text-emerald-400" : "text-red-400"}>{data.is_liquid ? "YES" : "NO"}</span></div>
-                                                                </>
-                                                            )}
-                                                            {agent.id === 5 && (
-                                                                <>
-                                                                    <div className="flex justify-between"><span className="text-gray-500">EV Score:</span> <span className="text-white font-bold">{data.evScore?.toFixed(2)}</span></div>
-                                                                    <div className="flex justify-between"><span className="text-gray-500">Win Rate:</span> <span className="text-emerald-400">{(data.winRate * 100)?.toFixed(1)}%</span></div>
-                                                                </>
-                                                            )}
-                                                            {![4, 5, 7].includes(agent.id) && (
-                                                                <p className="text-[10px] text-gray-400 wrap-text">{JSON.stringify(data).substring(0, 50)}...</p>
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <p>{isActive ? WORKFLOW_STEPS[agent.id] : agent.description}</p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Decorative footer line */}
-                                        <div className="mt-2 flex justify-end">
-                                            <div className="w-12 h-[2px] bg-emerald-500/30 rounded-full animate-pulse"></div>
+                            {/* Expanded Info Panel */}
+                            {isHovered && !isActive && (
+                                <div className="absolute left-full ml-4 top-1/2 -translate-y-1/2 z-20 w-48 animate-fade-in">
+                                    <div className="bg-black/90 border border-white/10 rounded-xl p-3 backdrop-blur-xl shadow-2xl">
+                                        <div className="text-xs font-bold text-white mb-1">{agent.name}</div>
+                                        <div className="text-[10px] text-gray-400">{agent.description}</div>
+                                        <div className="mt-2 pt-2 border-t border-white/10 text-[9px] text-gray-500 font-mono">
+                                            {agent.model}
                                         </div>
                                     </div>
                                 </div>
@@ -294,6 +200,9 @@ const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (i
                     );
                 })}
             </div>
+
+            {/* Background Noise */}
+            <div className="absolute inset-0 pointer-events-none opacity-[0.02] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
         </div>
     );
 };

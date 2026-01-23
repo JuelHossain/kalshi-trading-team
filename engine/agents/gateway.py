@@ -25,16 +25,33 @@ class GatewayAgent(BaseAgent):
         await self.bus.subscribe("SIM_RESULT", self.handle_sim)
         await self.bus.subscribe("SYSTEM_HEALTH", self.handle_health)
 
+    # Agent to Phase mapping (mirrors shared/constants.ts)
+    AGENT_TO_PHASE = {
+        1: 0, 11: 0,           # Phase 0: System Init
+        2: 1, 3: 1, 7: 1,      # Phase 1: Surveillance
+        4: 2, 5: 2, 6: 2,      # Phase 2: Intelligence
+        8: 3,                   # Phase 3: Execution
+        9: 4, 10: 4,            # Phase 4: Accounting
+        12: 5, 14: 5,           # Phase 5: Protection
+        13: 13                  # Intervention
+    }
+
     async def handle_system_log(self, message):
+        from datetime import datetime
         payload = message.payload
         sender = payload.get('agent_name')
-        agent_id = payload.get('agent_id')
+        agent_id = payload.get('agent_id', 0)
+        phase_id = self.AGENT_TO_PHASE.get(agent_id, 0)
         
-        # Pass logs to frontend
+        # Pass logs to frontend with proper structure including phaseId and cycleId
         await self.emit("LOG", {
+            "id": f"log-{datetime.now().timestamp()}",
+            "timestamp": payload.get('timestamp', datetime.now().isoformat()),
             "agentId": agent_id,
+            "cycleId": 1,  # Will be updated by main.py cycle_count
+            "phaseId": phase_id,
             "level": payload.get('level', 'INFO'),
-            "message": payload.get('message')
+            "message": payload.get('message', '')
         })
 
         # Update active agent in visualizer

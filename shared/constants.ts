@@ -1,53 +1,65 @@
 import { Agent, AgentStatus } from './types';
 
+// 4 MEGA-AGENTS: The Pillars of Profit
 export const AGENTS: Agent[] = [
-  { id: 1, name: 'Ghost', role: 'Strategic Authorization', description: 'Checks Kill Switch and Maintenance Windows.', status: AgentStatus.WORKING, lastAction: 'Authorizing cycles', model: 'Python 3.12' },
-  { id: 2, name: 'Scout', role: 'Global Harvester', description: 'Filters active markets with >$2k liquidity.', status: AgentStatus.WORKING, lastAction: 'Scanning Kalshi', model: 'Python/Aiohttp' },
-  { id: 3, name: 'Interceptor', role: 'Odds Sync', description: 'Detects Alpha vs Vegas/Shadow Odds.', status: AgentStatus.IDLE, lastAction: 'Polling RapidAPI', model: 'RapidAPI' },
-  { id: 4, name: 'Analyst', role: 'Optimist Brain', description: 'Alpha Generation & Structural Reasoning.', status: AgentStatus.IDLE, lastAction: 'Ready for analysis', model: 'Gemini 1.5 Pro' },
-  { id: 5, name: 'Scientist', role: 'Sim Engine', description: 'Runs 10,000 Monte Carlo iterations for EV.', status: AgentStatus.IDLE, lastAction: 'Awaiting data', model: 'NumPy' },
-  { id: 6, name: 'Auditor', role: 'Pessimist Auditor', description: 'Risk Assessment & Veto Power.', status: AgentStatus.WORKING, lastAction: 'Auditing signals', model: 'Llama 3.1 70B' },
-  { id: 7, name: 'Sniper', role: 'Orderbook Analyst', description: 'Depth Analysis & Spread Detection.', status: AgentStatus.WORKING, lastAction: 'Monitoring orderbook', model: 'Python/Kalshi' },
-  { id: 8, name: 'Executioner', role: 'Silent Sniper', description: 'Kelly Sizing & Limit Order Execution.', status: AgentStatus.IDLE, lastAction: 'Standing by', model: 'Kalshi V2' },
-  { id: 9, name: 'Accountant', role: 'Portfolio Audit', description: 'Budget monitoring & Vault updates.', status: AgentStatus.SUCCESS, lastAction: 'Balance audited', model: 'Python' },
-  { id: 10, name: 'Historian', role: 'Event Archive', description: 'Archiving bus events to local history.', status: AgentStatus.WORKING, lastAction: 'Logging events', model: 'Async IO' },
-  { id: 11, name: 'Mechanic', role: 'Health Monitor', description: 'System Diagnostics & Resource Tracking.', status: AgentStatus.SUCCESS, lastAction: 'Stats: CPU 12%', model: 'Psutil' },
-  { id: 12, name: 'Ragnarok', role: 'Kill Switch', description: 'Global Emergency Shutdown Protocol.', status: AgentStatus.IDLE, lastAction: 'Armed', model: 'System' },
-  { id: 13, name: 'Fixer', role: 'AI Debugger', description: 'Root Cause Analysis & Hotfix suggestions.', status: AgentStatus.IDLE, lastAction: 'Monitoring errors', model: 'Gemini 1.5 Pro', hidden: true },
+  {
+    id: 1,
+    name: 'Soul',
+    role: 'System, Memory & Evolution',
+    description: 'Executive Director. Pre-flight, self-optimization, safety enforcement.',
+    status: AgentStatus.WORKING,
+    lastAction: 'System initialization',
+    model: 'Gemini 1.5 Pro'
+  },
+  {
+    id: 2,
+    name: 'Senses',
+    role: 'Surveillance & Signal Detection',
+    description: '24/7 Observer. Passive scanning, odds sync, value gap detection.',
+    status: AgentStatus.IDLE,
+    lastAction: 'Scanning markets',
+    model: 'Python/Asyncio'
+  },
+  {
+    id: 3,
+    name: 'Brain',
+    role: 'Intelligence & Decision',
+    description: 'Decision Maker. AI debate, Monte Carlo simulation, confidence scoring.',
+    status: AgentStatus.IDLE,
+    lastAction: 'Awaiting opportunities',
+    model: 'Gemini 1.5 Pro'
+  },
+  {
+    id: 4,
+    name: 'Hand',
+    role: 'Precision Strike & Vault',
+    description: 'Tactical Executioner. Snipe, Kelly sizing, execution, vault lock.',
+    status: AgentStatus.IDLE,
+    lastAction: 'Standing by',
+    model: 'Kalshi V2'
+  },
 ];
 
 export const MOCK_LOGS: string[] = [
-  "Agent 2: Scanned 42 active markets. Found 3 candidates > $2k liquidity.",
-  "Agent 3: Shadow Odds Alert! Kalshi 45% vs Vegas 52%. Delta +7%.",
-  "Agent 9: Current daily spend $0.42. Budget operating at 36%.",
-  "Agent 6: VETO. Market #291 has irregular whale movement. Suspected trap.",
-  "Agent 5: Simulating 10,000 runs... EV: +$12.50. Variance: 14%.",
-  "Agent 7: Sniper entry found at $0.46. Front-running order ID #992.",
-  "Agent 1: Profit target $50.00 hit. Locking $300 Principal. Trading House Money.",
-  "Agent 11: Rate limit warning. Rotating to Backup API Key C.",
-  "Agent 4: Hypothesis confirmed. Injuries weight 40% favors YES.",
-  "Agent 10: RAG updated. 'Avoid low liquidity NBA props' rule added.",
+  "Soul: Pre-flight handshake complete. All APIs online.",
+  "Soul: Loaded 24h history. 3 wins, 1 loss. Evolving instructions...",
+  "Senses: Scanning 42 active markets. Zero token cost.",
+  "Senses: Value Gap Alert! Kalshi 45% vs Vegas 52%. Delta +7%.",
+  "Brain: Opportunity queued. Running internal debate...",
+  "Brain: Confidence 87%. Simulation variance 14%. Pushing to execution.",
+  "Hand: Snipe check passed. Entry at $0.46 with zero slippage.",
+  "Hand: Order executed. Profit $12.50. Vault locked at $350.",
 ];
 
 export const WORKFLOW_STEPS: Record<number, string> = {
-  1: "GHOST: Verifying authorization and maintenance windows...",
-  2: "SCOUT: Scanning Kalshi markets for high-liquidity active trades...",
-  3: "INTERCEPTOR: Fetching RapidAPI shadow odds for delta discovery...",
-  4: "ANALYST: Gemini Pro convening optimist alpha debate...",
-  5: "SCIENTIST: NumPy running 10,000 Monte Carlo iterations...",
-  6: "AUDITOR: Llama 3.1 70B performing risk audit and veto check...",
-  7: "SNIPER: Analyzing orderbook depth and calculating snipe price...",
-  8: "EXECUTIONER: Placing limit orders via RSA-signed V2 request...",
-  9: "ACCOUNTANT: Auditing portfolio balance and daily spend limits...",
-  10: "HISTORIAN: Archiving bus event stream to local cycle log...",
-  11: "MECHANIC: Monitoring system resources (CPU/MEM/Latency)...",
-  12: "RAGNAROK: Standing by for emergency kill signal...",
-  13: "FIXER: AI-driven autonomous error recovery protocol...",
-  14: "GATEWAY: Transmitting bus telemetry to dashboard bridge...",
+  1: "SOUL: Pre-flight handshake, evolution, safety enforcement...",
+  2: "SENSES: Passive surveillance, odds sync, value gap detection...",
+  3: "BRAIN: AI debate, Monte Carlo simulation, decision scoring...",
+  4: "HAND: Snipe check, Kelly sizing, execution, vault lock...",
 };
 
-// Phase Configuration for Cycle-Based Completion
-export const PHASE_ORDER = [0, 1, 2, 3, 4, 5] as const;
+// 4-Phase Configuration (One per Mega-Agent)
+export const PHASE_ORDER = [1, 2, 3, 4] as const;
 
 export interface PhaseConfig {
   id: number;
@@ -57,80 +69,60 @@ export interface PhaseConfig {
   borderColor: string;
   icon: string;
   bg: string;
-  requiredAgents: number[]; // Agents that must complete in this phase
+  requiredAgents: number[];
 }
 
 export const PHASES: Record<number, PhaseConfig> = {
-  0: {
-    id: 0,
-    title: 'PHASE 0',
-    subtitle: 'System Init',
-    color: 'text-gray-400',
-    borderColor: 'border-gray-800',
-    icon: '⏻',
-    bg: 'bg-gray-900/20',
-    requiredAgents: [1, 11], // Ghost + Mechanic
-  },
   1: {
     id: 1,
-    title: 'PHASE 1',
+    title: 'SOUL',
+    subtitle: 'System & Evolution',
+    color: 'text-purple-400',
+    borderColor: 'border-purple-500/30',
+    icon: '👁️',
+    bg: 'bg-purple-900/10',
+    requiredAgents: [1],
+  },
+  2: {
+    id: 2,
+    title: 'SENSES',
     subtitle: 'Surveillance',
     color: 'text-blue-400',
     borderColor: 'border-blue-500/30',
     icon: '📡',
     bg: 'bg-blue-900/10',
-    requiredAgents: [2, 3, 7], // Scout + Interceptor + Sniper
+    requiredAgents: [2],
   },
-  2: {
-    id: 2,
-    title: 'PHASE 2',
+  3: {
+    id: 3,
+    title: 'BRAIN',
     subtitle: 'Intelligence',
     color: 'text-pink-400',
     borderColor: 'border-pink-500/30',
     icon: '🧠',
     bg: 'bg-pink-900/10',
-    requiredAgents: [4, 5, 6], // Analyst + Scientist + Auditor
-  },
-  3: {
-    id: 3,
-    title: 'PHASE 3',
-    subtitle: 'Execution',
-    color: 'text-emerald-400',
-    borderColor: 'border-emerald-500/30',
-    icon: '⚡',
-    bg: 'bg-emerald-900/10',
-    requiredAgents: [8], // Executioner
+    requiredAgents: [3],
   },
   4: {
     id: 4,
-    title: 'PHASE 4',
-    subtitle: 'Accounting',
-    color: 'text-amber-400',
-    borderColor: 'border-amber-500/30',
-    icon: '💾',
-    bg: 'bg-amber-900/10',
-    requiredAgents: [9, 10], // Accountant + Historian
-  },
-  5: {
-    id: 5,
-    title: 'PHASE 5',
-    subtitle: 'Protection',
-    color: 'text-red-400',
-    borderColor: 'border-red-500/30',
-    icon: '🛡️',
-    bg: 'bg-red-900/10',
-    requiredAgents: [12, 14], // Ragnarok + Sentinel
+    title: 'HAND',
+    subtitle: 'Execution',
+    color: 'text-emerald-400',
+    borderColor: 'border-emerald-500/30',
+    icon: '✋',
+    bg: 'bg-emerald-900/10',
+    requiredAgents: [4],
   },
 };
 
-// Special phase for interventions
+// Emergency intervention phase (error handling)
 export const INTERVENTION_PHASE: PhaseConfig = {
-  id: 13,
+  id: 99,
   title: 'INTERVENTION',
-  subtitle: 'Auto-Fix',
+  subtitle: 'Error Recovery',
   color: 'text-red-500',
   borderColor: 'border-red-500/50',
   icon: '🔧',
   bg: 'bg-red-900/20',
-  requiredAgents: [13], // Fixer
+  requiredAgents: [],
 };
