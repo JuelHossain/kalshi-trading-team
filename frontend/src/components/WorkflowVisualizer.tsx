@@ -202,8 +202,8 @@ const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (i
                             )}
 
                             {/* --- SUMMARY POPUP (Smooth Animation) --- */}
-                            {/* Check for Hover OR Active for the expanded view */}
-                            {isHovered && (
+                            {/* Check for Hover OR Active (ONLY for ERROR/FIXER) for the expanded view */}
+                            {(isHovered || (isActive && isError)) && (
                                 <div className={`
                             absolute top-1/2 pointer-events-none origin-center
                             ${pos.x > 60 ? 'right-full mr-8' : 'left-full ml-8'} 
