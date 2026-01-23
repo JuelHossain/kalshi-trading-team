@@ -6,11 +6,9 @@ The **Sentient Alpha HUD** is a premium, cyber-command interface designed to vis
 The HUD utilizes a **"Neural Trace"** aesthetic:
 - **Glassmorphism**: High-blur translucent panels with electromagnetic border glows.
 - **Cyber-Terminal**: Custom monospaced logging with level-based color coding.
-- **Topological Trace**: A dynamic visual representation of the 13 agents and their current lifecycle stage.
 - **Performance Metrics**: Real-time balance, cycle counting, and PnL heatmaps.
 
 ## 🏗 Key Components
-- **WorkflowVisualizer**: The main stage depicting the active path of the trading cycle.
 - **Terminal**: A high-performance log-streamer optimized for rapid AI output.
 - **MarketAnalysis**: Deep-dive view of markets currently under "Analyst" debate.
 - **SystemHealth**: Real-time status of API keys, engine connection, and agent health.

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
-import WorkflowVisualizer from './components/WorkflowVisualizer';
+
 import Terminal from './components/Terminal';
 import AgentsPage from './components/AgentsPage';
 import MarketAnalysis from './components/MarketAnalysis';
@@ -188,28 +188,7 @@ const App: React.FC = () => {
                             <div className="grid grid-cols-12 gap-10 h-full animate-scale-in">
                                 {/* Left Content: Visualizer & Charts */}
                                 <div className="col-span-12 xl:col-span-8 flex flex-col gap-10">
-                                    <div className="glass-panel p-8 rounded-[2rem] organic-glow relative overflow-hidden group min-h-[500px] flex flex-col">
-                                        <div className="absolute top-0 right-0 p-6 flex flex-col items-end gap-1">
-                                            <div className="text-[9px] font-mono text-gray-700 uppercase tracking-[0.4em] group-hover:text-emerald-500/40 transition-colors">SENTIENT_V2.0_MAPPED</div>
-                                            <div className="w-24 h-[1px] bg-gradient-to-l from-emerald-500/20 to-transparent"></div>
-                                        </div>
 
-                                        <div className="mb-8">
-                                            <h3 className="text-xs font-tech font-bold text-gray-500 flex items-center gap-3 tracking-[0.2em]">
-                                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]"></span>
-                                                TOPOLOGICAL_TRACE
-                                            </h3>
-                                        </div>
-
-                                        <div className="flex-1 min-h-0">
-                                            <WorkflowVisualizer
-                                                agents={AGENTS}
-                                                activeAgentId={orchestratorProps.activeAgentId}
-                                                completedAgents={orchestratorProps.completedAgents}
-                                                currentPhaseId={orchestratorProps.currentPhaseId}
-                                            />
-                                        </div>
-                                    </div>
 
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
