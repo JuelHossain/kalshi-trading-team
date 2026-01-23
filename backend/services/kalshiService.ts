@@ -18,17 +18,26 @@ export const authenticateWithKeys = async (keyId: string, privateKey: string, is
     }
 
     // Basic Validation of PEM format
-    if (!privateKey.includes('BEGIN RSA PRIVATE KEY')) {
-        throw new Error("Invalid Key Format: Must be PEM (RSA PRIVATE KEY).");
+    if (!privateKey.includes('BEGIN')) {
+        throw new Error("Invalid Key Format: Must be PEM format.");
     }
 
     session = {
         keyId: keyId,
         privateKey: privateKey,
-        isDemo: false
+        isDemo: isPaper
     };
 
     console.log(`[Agent 8] Keys Loaded. Crypto-Engine Online.`);
+
+    // Pro-check: Verify connection immediately
+    try {
+        await checkConnection(isPaper);
+        console.log(`[Agent 8] Identity Verified on ${isPaper ? 'SANDBOX' : 'PROD'}.`);
+    } catch (e) {
+        console.warn(`[Agent 8] Pre-flight Check Failed, but keys are cached. Error:`, e);
+    }
+
     return true;
 }
 

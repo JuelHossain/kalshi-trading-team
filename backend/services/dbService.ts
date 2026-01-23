@@ -17,6 +17,7 @@ export const logToDb = async (table: string, data: any) => {
     if (error) console.error(`[DB Service] Error inserting into ${table}:`, error);
 };
 
+
 export const sendHeartbeat = async (agentId: number, name: string, status: string = 'ACTIVE') => {
     if (!supabase) return;
 
@@ -30,5 +31,50 @@ export const sendHeartbeat = async (agentId: number, name: string, status: strin
         }, { onConflict: 'agent_id' });
 
     if (error) console.error(`[DB Service] Heartbeat Failed for Agent ${agentId}:`, error);
+};
+
+export const getPnLHistory = async (hours: number = 24) => {
+    if (!supabase) return [];
+    
+    const startTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    
+    // Assuming balance_history has created_at and balance_cents
+    const { data, error } = await supabase
+        .from('balance_history')
+        .select('created_at, balance_cents')
+        .gte('created_at', startTime)
+        .order('created_at', { ascending: true });
+        
+    if (error) {
+        console.error("[DB Service] Failed to fetch PnL history:", error);
+        return [];
+    }
+    
+    return data.map((d: any) => ({
+        timestamp: d.created_at,
+        balance: d.balance_cents / 100
+    }));
+};
+
+export const getDailyPnL = async (days: number = 365) => {
+    if (!supabase) return [];
+    
+    const startTime = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    
+    // For heatmap, we need daily close balances.
+    // This is a simplification; ideally we'd use a postgres view or aggregate query.
+    // Fetching all might be heavy, but for <365 days it's likely okay for now.
+    const { data, error } = await supabase
+        .from('balance_history')
+        .select('created_at, balance_cents')
+        .gte('created_at', startTime)
+        .order('created_at', { ascending: true });
+        
+    if (error) {
+        console.error("[DB Service] Failed to fetch Daily PnL:", error);
+        return [];
+    }
+    
+    return data;
 };
 

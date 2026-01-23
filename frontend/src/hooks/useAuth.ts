@@ -21,14 +21,14 @@ export const useAuth = (addLog: (msg: string, id: number, level: string) => void
         if (!silent) addLog(`SYSTEM: Initiating V2 Handshake via Backend...`, 0, 'WARN');
 
         try {
+            const authBody = isPaperTrading 
+                ? { useSystemAuth: true, isPaperTrading: true }
+                : { keyId: apiKeyId || FALLBACK_DEMO_KEY, privateKey: apiSecret || FALLBACK_DEMO_SECRET, isPaperTrading };
+
             const response = await fetch(`${BACKEND_URL}/api/auth`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    keyId: apiKeyId || FALLBACK_DEMO_KEY,
-                    privateKey: apiSecret || FALLBACK_DEMO_SECRET,
-                    isPaperTrading
-                })
+                body: JSON.stringify(authBody)
             });
 
             if (!response.ok) {

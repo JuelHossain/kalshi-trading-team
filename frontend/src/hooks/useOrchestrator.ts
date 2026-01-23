@@ -21,6 +21,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
 
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
+            console.log('[SSE] Received event:', data.type);
             if (data.type === 'INIT') {
                 setLogs(data.state.logs || []);
                 setIsProcessing(data.state.isProcessing);
@@ -44,8 +45,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
         };
 
         eventSource.onerror = (err) => {
-            console.error("SSE Connection Error:", err);
-            eventSource.close();
+            console.error("SSE Connection Error (will retry):", err);
         };
 
         return () => eventSource.close();
@@ -71,8 +71,12 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     };
 
     const handleTerminate = async () => {
-        // Implement termination API if needed
         console.log("Termination requested via API");
+        try {
+            await fetch(`${BACKEND_URL}/api/reset`, { method: 'POST' });
+        } catch (e) {
+            console.error("Termination failed", e);
+        }
     };
 
     const handleAgentTest = async (agentId: number) => {

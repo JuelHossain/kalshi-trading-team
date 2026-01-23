@@ -32,16 +32,33 @@ const App: React.FC = () => {
         apiSecret,
         setApiSecret,
         isLoggedIn,
+        isAuthenticating,
         authError,
         handleLogin
     } = useAuth(addLogToOrchestrator, isPaperTrading);
 
     const orchestratorProps = useOrchestrator(isLoggedIn, isPaperTrading);
 
-    // Bypass login for Paper Trading (Demo Sandbox)
-    const shouldShowLogin = !isLoggedIn && (!isPaperTrading || !orchestratorProps.isProcessing);
-    // Actually, useAuth now handles isAuthenticating. 
-    // If isPaperTrading is true, we want to show the dashboard immediately.
+    const [viewedAgentId, setViewedAgentId] = useState<number | null>(null);
+
+    const handleSelectAgent = (id: number) => {
+        setViewedAgentId(id);
+    };
+
+    // Header Status Logic
+    const getStatusColor = () => {
+        if (isAuthenticating) return 'bg-blue-500 shadow-[0_0_10px_#3b82f6]';
+        if (!isLoggedIn) return 'bg-red-500 shadow-[0_0_10px_#ef4444]';
+        if (orchestratorProps.isProcessing) return 'bg-emerald-500 shadow-[0_0_10px_#10b981]';
+        return 'bg-orange-500 shadow-[0_0_10px_#f97316]';
+    };
+
+    const getStatusText = () => {
+        if (isAuthenticating) return 'Neural Link Establishing...';
+        if (!isLoggedIn) return 'Neural Link Offline';
+        if (orchestratorProps.isProcessing) return 'Neural Link Active';
+        return 'Neural Link Standby';
+    };
 
     if (!isLoggedIn && !isPaperTrading) {
         return (
@@ -68,11 +85,11 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-8">
                         <div className="flex items-center gap-3">
                             <div className="relative">
-                                <div className={`w-3 h-3 rounded-full ${orchestratorProps.isProcessing ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-orange-500 shadow-[0_0_10px_#f97316]'}`}></div>
-                                {orchestratorProps.isProcessing && <div className="absolute inset-0 bg-emerald-500 rounded-full animate-ping opacity-50"></div>}
+                                <div className={`w-3 h-3 rounded-full ${getStatusColor()}`}></div>
+                                {(orchestratorProps.isProcessing || isAuthenticating) && <div className={`absolute inset-0 ${isAuthenticating ? 'bg-blue-500' : 'bg-emerald-500'} rounded-full animate-ping opacity-50`}></div>}
                             </div>
                             <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-emerald-500/80">
-                                {orchestratorProps.isProcessing ? 'Neural Link Active' : 'Neural Link Standby'}
+                                {getStatusText()}
                             </span>
                         </div>
 
@@ -189,8 +206,10 @@ const App: React.FC = () => {
                         {activeTab === 'agents' && (
                             <div className="animate-scale-in">
                                 <AgentsPage
-                                    agents={AGENTS}
+                                    onTestAgent={orchestratorProps.handleAgentTest}
+                                    onSelectAgent={handleSelectAgent}
                                     activeAgentId={orchestratorProps.activeAgentId}
+                                    viewedAgentId={viewedAgentId}
                                 />
                             </div>
                         )}

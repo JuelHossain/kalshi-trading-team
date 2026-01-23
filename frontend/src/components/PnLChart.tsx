@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ComposedChart,
   Line,
@@ -11,19 +11,11 @@ import {
   ReferenceLine
 } from 'recharts';
 
-const data = [
-  { time: '09:00', pnl: 300, velocity: 12 },
-  { time: '10:00', pnl: 302, velocity: 8 },
-  { time: '11:00', pnl: 298, velocity: -4 },
-  { time: '12:00', pnl: 305, velocity: 15 },
-  { time: '13:00', pnl: 315, velocity: 22 },
-  { time: '14:00', pnl: 322, velocity: 18 },
-  { time: '15:00', pnl: 345, velocity: 40 },
-  { time: '16:00', pnl: 352, velocity: 10 },
-  { time: '17:00', pnl: 368, velocity: 25 },
-  { time: '18:00', pnl: 385, velocity: 30 },
-  { time: '19:00', pnl: 405, velocity: 45 },
-];
+interface ChartData {
+  time: string;
+  pnl: number;
+  velocity: number;
+}
 
 interface CustomTooltipProps {
   active?: boolean;
@@ -42,10 +34,10 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
       <div className="bg-black/90 border border-emerald-500/50 p-3 rounded-sm shadow-[0_0_20px_rgba(16,185,129,0.2)] backdrop-blur-md">
         <div className="text-[10px] text-gray-400 font-mono mb-1 border-b border-gray-800 pb-1">{label} HRS</div>
         <div className="text-lg font-bold text-emerald-400 font-mono">
-          ${payload[0].value}
+          ${payload[0].value.toFixed(2)}
         </div>
         <div className="text-[9px] text-emerald-600 uppercase tracking-wider font-mono mt-1">
-          Velocity: {payload[0].payload.velocity} bps
+          Velocity: {payload[0].payload.velocity.toFixed(2)} bps
         </div>
       </div>
     );
@@ -75,10 +67,63 @@ const PulsingDot = (props: PulsingDotProps) => {
 };
 
 const PnLChart: React.FC = () => {
-  const currentPnL = 405;
+  const [data, setData] = useState<ChartData[]>([]);
+  const [currentPnL, setCurrentPnL] = useState(300);
+  const [percent, setPercent] = useState("0.00");
+  const [loading, setLoading] = useState(true);
+
+  // Hardcoded Principal for now
   const startPrincipal = 300;
-  const profit = currentPnL - startPrincipal;
-  const percent = ((profit / startPrincipal) * 100).toFixed(2);
+
+  useEffect(() => {
+    const fetchData = async () => {
+        try {
+            // In a real app, use the backend URL /api/pnl
+            // For dev/preview, we assume proxy or CORS is handled, or use absolute URL
+            const url = `http://${window.location.hostname}:3001/api/pnl`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("Failed to fetch");
+            const raw = await res.json();
+            
+            if (raw.length === 0) {
+                 setData([]);
+                 setLoading(false);
+                 return;
+            }
+
+            // Transform
+            const transformed: ChartData[] = raw.map((d: any, i: number) => {
+                const prev = i > 0 ? raw[i-1].balance : d.balance;
+                const velocity = d.balance - prev;
+                const time = new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                return {
+                    time,
+                    pnl: d.balance,
+                    velocity
+                };
+            });
+
+            setData(transformed);
+            const last = transformed[transformed.length - 1];
+            setCurrentPnL(last.pnl);
+            const diff = last.pnl - startPrincipal;
+            setPercent(((diff / startPrincipal) * 100).toFixed(2));
+            setLoading(false);
+
+        } catch (e) {
+            console.error("PnL Fetch Error:", e);
+            setLoading(false);
+        }
+    };
+    
+    fetchData();
+    const interval = setInterval(fetchData, 30000); // Poll every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  if (loading && data.length === 0) {
+       return <div className="h-full w-full flex items-center justify-center text-xs text-gray-500 font-mono animate-pulse">ACQUIRING FEED...</div>;
+  }
 
   return (
     <div className="h-full w-full relative bg-black/40 rounded-2xl border border-white/5 overflow-hidden flex flex-col backdrop-blur-sm group">
@@ -96,13 +141,13 @@ const PnLChart: React.FC = () => {
             <span className="text-3xl font-black text-white font-tech tracking-tighter drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]">
               ${currentPnL.toFixed(2)}
             </span>
-            <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-900/20 px-1.5 py-0.5 rounded border border-emerald-500/20">
-              +{percent}%
+            <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded border border-white/10 ${Number(percent) >= 0 ? 'text-emerald-400 bg-emerald-900/20' : 'text-red-400 bg-red-900/20'}`}>
+              {Number(percent) >= 0 ? '+' : ''}{percent}%
             </span>
           </div>
         </div>
 
-        {/* Technical Stats Right */}
+        {/* Technical Stats Right - Static for now, can be hooked up if metrics exist */}
         <div className="text-right hidden sm:block">
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-end gap-2 text-[9px] font-mono text-gray-500 uppercase">
@@ -121,7 +166,7 @@ const PnLChart: React.FC = () => {
       </div>
 
       {/* Chart Container */}
-      <div className="flex-1 w-full min-h-0 relative z-10 -ml-2">
+      <div className="flex-1 w-full min-h-[200px] relative z-10 -ml-2">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
@@ -151,12 +196,12 @@ const PnLChart: React.FC = () => {
             />
 
             {/* Hide Y Axis but keep scale */}
-            <YAxis domain={['dataMin - 20', 'dataMax + 20']} hide />
+            <YAxis domain={['dataMin - 5', 'dataMax + 5']} hide />
 
             <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#333', strokeWidth: 1, strokeDasharray: '4 4' }} />
 
             {/* The "Floor" (Principal) */}
-            <ReferenceLine y={300} stroke="#333" strokeDasharray="5 5" strokeWidth={1} label={{ position: 'right', value: 'PRINCIPAL', fill: '#444', fontSize: 8, fontFamily: 'monospace' }} />
+            <ReferenceLine y={startPrincipal} stroke="#333" strokeDasharray="5 5" strokeWidth={1} label={{ position: 'right', value: 'PRINCIPAL', fill: '#444', fontSize: 8, fontFamily: 'monospace' }} />
 
             {/* The Area Glow */}
             <Area

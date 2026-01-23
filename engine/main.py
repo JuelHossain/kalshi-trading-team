@@ -226,13 +226,28 @@ class GhostEngine:
             queue = asyncio.Queue()
             self.sse_clients.append(queue)
             
+            # Start heartbeat task
+            async def heartbeat():
+                while True:
+                    await asyncio.sleep(15)
+                    try:
+                        await response.write(b": keepalive\n\n")
+                    except:
+                        break
+            
+            heartbeat_task = asyncio.create_task(heartbeat())
+            
             try:
                 while True:
-                    event = await queue.get()
-                    await response.write(f"data: {json.dumps(event)}\n\n".encode())
-            except asyncio.CancelledError:
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        await response.write(f"data: {json.dumps(event)}\n\n".encode())
+                    except asyncio.TimeoutError:
+                        await response.write(b": keepalive\n\n")
+            except (asyncio.CancelledError, ConnectionResetError):
                 pass
             finally:
+                heartbeat_task.cancel()
                 self.sse_clients.remove(queue)
             
             return response

@@ -1,20 +1,46 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Sentient Alpha Trading Bot
 
-# Run and deploy your AI Studio app
+**Status:** Active | **Architecture:** Monorepo (Node/React/Python)
 
-This contains everything you need to run your app locally.
+## 📌 Project Overview
+Sentient Alpha is an autonomous trading system that uses a committee of AI agents to analyze markets on Kalshi, debate strategies, simulation outcomes, and execute trades.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1ZudZkkL33lPimGF59lbjifXKd1zKctXw
+**For a detailed architectural breakdown, see [blueprint.md](./blueprint.md).**
 
-## Run Locally
+## 📂 Structure
+- **/frontend**: React + Vite + TailwindCSS application (The "Cockpit").
+- **/backend**: Node.js + Express orchestrator (The "Nervous System").
+- **/engine**: Python 3.12 + Asyncio AI Logic (The "Brain").
+- **/shared**: Shared TypeScript types and constants.
+- **/logs**: System logs and output streams.
 
-**Prerequisites:**  Node.js
+## 🚀 Quick Start
 
+### 1. Prerequisites
+- Node.js (v18+)
+- Python 3.12+ (with virtualenv)
+- Supabase Account
+- API Keys (Gemini, Groq, Kalshi) in `.env`
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### 2. Setup
+```bash
+# Install Node dependencies (Root + Sub-packages)
+npm install
+
+# Setup Python Environment
+cd engine
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cd ..
+```
+
+### 3. Running the System
+We use PM2 to orchestrate all services.
+
+```bash
+# Start Backend, Frontend, and Engine
+npm run dev
+```
+
+*Access the dashboard at http://localhost:3000*
