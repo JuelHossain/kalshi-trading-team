@@ -1,12 +1,13 @@
 import React from 'react';
 import { Agent } from '@shared/types';
-import { WORKFLOW_STEPS } from '@shared/constants';
+import { WORKFLOW_STEPS, PHASES } from '@shared/constants';
 
 interface WorkflowVisualizerProps {
     agents: Agent[];
     activeAgentId: number | null;
     completedAgents: number[];
     agentData?: Record<number, any>;
+    currentPhaseId?: number;
 }
 
 // Funnel Topology: Wide Left -> Narrow Center -> Execution Right
@@ -62,8 +63,11 @@ const CONNECTIONS = [
     { from: 13, to: 4 }, { from: 13, to: 8 }, { from: 13, to: 1 }
 ];
 
-const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (id: number) => void }> = ({ agents, activeAgentId, completedAgents, agentData = {}, onAgentClick }) => {
+const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (id: number) => void }> = ({ agents, activeAgentId, completedAgents, agentData = {}, currentPhaseId = 0, onAgentClick }) => {
     const [hoveredAgentId, setHoveredAgentId] = React.useState<number | null>(null);
+
+    // Get agents in current phase for phase-sync highlighting
+    const phaseAgents = PHASES[currentPhaseId]?.requiredAgents || [];
 
     return (
         <div className="h-full w-full relative overflow-hidden rounded-3xl glass-panel bg-black/80 shadow-2xl flex items-center justify-center p-8 border border-white/5">
@@ -126,6 +130,7 @@ const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (i
                     const isCompleted = completedAgents.includes(agent.id);
                     const isHovered = hoveredAgentId === agent.id;
                     const isError = agent.id === 13;
+                    const isInCurrentPhase = phaseAgents.includes(agent.id);
                     const data = agentData[agent.id];
 
                     // Hide the fixer unless active or error OR explicitly hovered (to test it)
@@ -176,7 +181,9 @@ const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (i
                                             ? 'w-3 h-3 bg-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.6)] scale-110'
                                             : isCompleted
                                                 ? 'w-2.5 h-2.5 bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.8)]'
-                                                : 'w-1.5 h-1.5 bg-gray-600 opacity-60'}
+                                                : isInCurrentPhase
+                                                    ? 'w-2 h-2 bg-blue-400 shadow-[0_0_12px_rgba(59,130,246,0.7)] scale-105'
+                                                    : 'w-1.5 h-1.5 bg-gray-600 opacity-60'}
                         `}>
                                     {/* Flare active effect */}
                                     {isActive && (
@@ -184,9 +191,9 @@ const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (i
                                     )}
                                 </div>
 
-                                {/* 3. Ambient Glow Field (Active or Hovered) */}
-                                {(isActive || isHovered) && (
-                                    <div className={`absolute inset-0 ${isError ? 'bg-red-500/20' : 'bg-emerald-500/20'} blur-xl rounded-full animate-pulse pointer-events-none`}></div>
+                                {/* 3. Ambient Glow Field (Active, Hovered, or Phase-Synced) */}
+                                {(isActive || isHovered || isInCurrentPhase) && (
+                                    <div className={`absolute inset-0 ${isError ? 'bg-red-500/20' : isInCurrentPhase && !isActive && !isHovered ? 'bg-blue-500/10' : 'bg-emerald-500/20'} blur-xl rounded-full ${isActive || isHovered ? 'animate-pulse' : ''} pointer-events-none`}></div>
                                 )}
                             </div>
 

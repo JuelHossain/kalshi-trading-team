@@ -99,7 +99,7 @@ const App: React.FC = () => {
                         <div className="hidden md:flex items-center gap-6">
                             <div className="flex flex-col">
                                 <span className="text-[8px] font-mono text-gray-600 uppercase tracking-widest">Operational Bankroll</span>
-                                <span className="text-sm font-mono font-bold text-white tracking-tighter">${orchestratorProps.currentBalance.toFixed(2)}</span>
+                                <span className="text-sm font-mono font-bold text-white tracking-tighter">${(orchestratorProps.currentBalance ?? 0).toFixed(2)}</span>
                             </div>
                             <div className="flex flex-col">
                                 <span className="text-[8px] font-mono text-gray-600 uppercase tracking-widest">Active Cycle</span>
@@ -206,6 +206,7 @@ const App: React.FC = () => {
                                                 agents={AGENTS}
                                                 activeAgentId={orchestratorProps.activeAgentId}
                                                 completedAgents={orchestratorProps.completedAgents}
+                                                currentPhaseId={orchestratorProps.currentPhaseId}
                                             />
                                         </div>
                                     </div>

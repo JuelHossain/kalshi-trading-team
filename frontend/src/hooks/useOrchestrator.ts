@@ -26,6 +26,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     const [isProcessing, setIsProcessing] = useState(false);
     const [cycleCount, setCycleCount] = useState(0);
     const [autoPilot, setAutoPilot] = useState(false);
+    const [currentPhaseId, setCurrentPhaseId] = useState(0);
 
     // Specific states for quick access if needed (optional)
     const [vault, setVault] = useState<VaultState | undefined>(undefined);
@@ -95,6 +96,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
                         data: log
                     };
                     if (log.agentId) setActiveAgentId(log.agentId);
+                    if (log.phaseId !== undefined) setCurrentPhaseId(log.phaseId);
                 } else if (['SIMULATION', 'VAULT', 'MARKET', 'INTERCEPT'].includes(eventType)) {
                     // Inject synthetic phase ID
                     const phaseId = getPhaseForType(eventType, rawData.state);
@@ -161,6 +163,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
         logs: timelineEvents.filter(e => e.type === 'LOG').map(e => e.data as LogEntry), // Backwards compat
         isProcessing,
         cycleCount,
+        currentPhaseId,
         autoPilot,
         setAutoPilot,
         runOrchestrator,
