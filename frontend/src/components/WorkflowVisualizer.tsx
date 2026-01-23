@@ -6,6 +6,7 @@ interface WorkflowVisualizerProps {
     agents: Agent[];
     activeAgentId: number | null;
     completedAgents: number[];
+    agentData?: Record<number, any>;
 }
 
 // Funnel Topology: Wide Left -> Narrow Center -> Execution Right
@@ -61,7 +62,7 @@ const CONNECTIONS = [
     { from: 13, to: 4 }, { from: 13, to: 8 }, { from: 13, to: 1 }
 ];
 
-const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (id: number) => void }> = ({ agents, activeAgentId, completedAgents, onAgentClick }) => {
+const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (id: number) => void }> = ({ agents, activeAgentId, completedAgents, agentData = {}, onAgentClick }) => {
     const [hoveredAgentId, setHoveredAgentId] = React.useState<number | null>(null);
 
     return (
@@ -125,6 +126,7 @@ const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (i
                     const isCompleted = completedAgents.includes(agent.id);
                     const isHovered = hoveredAgentId === agent.id;
                     const isError = agent.id === 13;
+                    const data = agentData[agent.id];
 
                     // Hide the fixer unless active or error OR explicitly hovered (to test it)
                     if (agent.id === 13 && !isActive && !isHovered) return null;
@@ -240,10 +242,37 @@ const WorkflowVisualizer: React.FC<WorkflowVisualizerProps & { onAgentClick?: (i
                                             <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/50"></div>
                                             <div className="flex gap-2">
                                                 <span className={`text-[10px] mt-[2px] ${isError ? 'text-red-500' : 'text-emerald-500'}`}>►</span>
-                                                <p className="text-[11px] text-gray-200 font-mono leading-relaxed">
-                                                    {/* If hovering, show static description. If active, show current step */}
-                                                    {isActive ? WORKFLOW_STEPS[agent.id] : agent.description}
-                                                </p>
+                                                <div className="text-[11px] text-gray-200 font-mono leading-relaxed w-full">
+                                                    {/* DATA DISPLAY LOGIC */}
+                                                    {data ? (
+                                                        <div className="space-y-1">
+                                                            {agent.id === 4 && (
+                                                                <>
+                                                                    <div className="flex justify-between"><span className="text-gray-500">Verdict:</span> <span className="text-white font-bold">{data.judgeVerdict}</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-500">Confidence:</span> <span className="text-emerald-400">{data.confidenceScore}%</span></div>
+                                                                </>
+                                                            )}
+                                                            {agent.id === 7 && (
+                                                                <>
+                                                                    <div className="flex justify-between"><span className="text-gray-500">Snipe:</span> <span className="text-white font-bold">{data.snipe_price}c</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-500">Spread:</span> <span className="text-emerald-400">{data.spread}c</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-500">Liquid:</span> <span className={data.is_liquid ? "text-emerald-400" : "text-red-400"}>{data.is_liquid ? "YES" : "NO"}</span></div>
+                                                                </>
+                                                            )}
+                                                            {agent.id === 5 && (
+                                                                <>
+                                                                    <div className="flex justify-between"><span className="text-gray-500">EV Score:</span> <span className="text-white font-bold">{data.evScore?.toFixed(2)}</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-500">Win Rate:</span> <span className="text-emerald-400">{(data.winRate * 100)?.toFixed(1)}%</span></div>
+                                                                </>
+                                                            )}
+                                                            {![4, 5, 7].includes(agent.id) && (
+                                                                <p className="text-[10px] text-gray-400 wrap-text">{JSON.stringify(data).substring(0, 50)}...</p>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <p>{isActive ? WORKFLOW_STEPS[agent.id] : agent.description}</p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
 

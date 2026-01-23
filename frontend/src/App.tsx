@@ -171,6 +171,7 @@ const App: React.FC = () => {
                                                 agents={AGENTS}
                                                 activeAgentId={orchestratorProps.activeAgentId}
                                                 completedAgents={orchestratorProps.completedAgents}
+                                                agentData={orchestratorProps.agentData}
                                             />
                                         </div>
                                     </div>

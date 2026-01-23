@@ -21,6 +21,7 @@ interface SystemState {
     logs: LogEntry[];
     activeAgentId: number | null;
     completedAgents: number[];
+    agentData: Record<number, any>;
 }
 
 // In-memory state for demonstration
@@ -29,7 +30,8 @@ let systemState: SystemState = {
     cycleCount: 0,
     logs: [],
     activeAgentId: null,
-    completedAgents: []
+    completedAgents: [],
+    agentData: {}
 };
 
 interface SSEClient {
@@ -156,6 +158,8 @@ const connectToEngine = () => {
                                 systemState.logs = [...systemState.logs.slice(-499), data.log];
                             } else if (data.type === 'STATE') {
                                 systemState = { ...systemState, ...data.state };
+                            } else if (data.type === 'AGENT_DATA') {
+                                systemState.agentData[data.agentId] = data.data;
                             }
                         } catch (e) {
                             // Skip

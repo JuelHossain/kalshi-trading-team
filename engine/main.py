@@ -259,6 +259,8 @@ class GhostEngine:
         await self.bus.subscribe("SYSTEM_LOG", self._broadcast_to_sse)
         await self.bus.subscribe("VAULT_UPDATE", self._broadcast_to_sse)
         await self.bus.subscribe("SIM_RESULT", self._broadcast_to_sse)
+        await self.bus.subscribe("ANALYST_VERDICT", self._broadcast_to_sse)
+        await self.bus.subscribe("SNIPE_ANALYSIS", self._broadcast_to_sse)
         
     async def _broadcast_to_sse(self, message):
         """Broadcast bus events to all SSE clients with proper formatting for the frontend."""
@@ -308,6 +310,18 @@ class GhostEngine:
              formatted_event = {
                 "type": "STATE",
                 "state": payload
+            }
+        elif event_type == "ANALYST_VERDICT":
+            formatted_event = {
+                "type": "AGENT_DATA",
+                "agentId": 4, 
+                "data": payload
+            }
+        elif event_type == "SNIPE_ANALYSIS":
+            formatted_event = {
+                "type": "AGENT_DATA",
+                "agentId": 7,
+                "data": payload
             }
             
         if formatted_event:

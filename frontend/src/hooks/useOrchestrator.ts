@@ -1,9 +1,13 @@
 import { LogEntry, VaultState, SimulationState, SystemHealthData } from '@shared/types';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const BACKEND_URL = `http://${window.location.hostname}:3001`;
 
+// Cinematic Pacing: Process one event every 250ms
+const PLAYBACK_SPEED_MS = 250;
+
 export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) => {
+    // React State (The "Screen" State)
     const [activeAgentId, setActiveAgentId] = useState<number | null>(null);
     const [completedAgents, setCompletedAgents] = useState<number[]>([]);
     const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -16,31 +20,25 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     const [simulation, setSimulation] = useState<SimulationState | undefined>(undefined);
     const [health, setHealth] = useState<SystemHealthData | undefined>(undefined);
 
+    // Event Buffer
+    const eventBuffer = useRef<any[]>([]);
+
     useEffect(() => {
         const eventSource = new EventSource(`${BACKEND_URL}/api/stream`);
 
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            console.log('[SSE] Received event:', data.type);
+
+            // Immediate handling for Initial State
             if (data.type === 'INIT') {
+                eventBuffer.current = []; // Clear buffer on init
                 setLogs(data.state.logs || []);
                 setIsProcessing(data.state.isProcessing);
                 setActiveAgentId(data.state.activeAgentId);
                 setCompletedAgents(data.state.completedAgents || []);
-            } else if (data.type === 'LOG') {
-                setLogs(prev => [...prev.slice(-499), data.log]);
-            } else if (data.type === 'STATE') {
-                if (data.state.isProcessing !== undefined) setIsProcessing(data.state.isProcessing);
-                if (data.state.activeAgentId !== undefined) setActiveAgentId(data.state.activeAgentId);
-                if (data.state.completedAgents !== undefined) setCompletedAgents(data.state.completedAgents);
-                if (data.state.cycleCount !== undefined) setCycleCount(data.state.cycleCount);
-            } else if (data.type === 'VAULT') {
-                setVault(data.state);
-                setCurrentBalance(data.state.total);
-            } else if (data.type === 'SIMULATION') {
-                setSimulation(data.state);
-            } else if (data.type === 'HEALTH') {
-                setHealth(data.state);
+            } else {
+                // Queue all other live events
+                eventBuffer.current.push(data);
             }
         };
 
@@ -49,6 +47,43 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
         };
 
         return () => eventSource.close();
+    }, []);
+
+    // Cinematic Playback Loop
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (eventBuffer.current.length === 0) return;
+
+            // Process TWO events per tick if backlog gets too large (>20 events)
+            const count = eventBuffer.current.length > 20 ? 2 : 1;
+
+            for (let i = 0; i < count; i++) {
+                const data = eventBuffer.current.shift();
+                if (!data) break;
+
+                // console.log('[Playback] Processing:', data.type);
+
+                if (data.type === 'LOG') {
+                    setLogs(prev => [...prev.slice(-499), data.log]);
+                    // Auto-set active agent based on log sender to keep UI lively
+                    if (data.log.agentId) setActiveAgentId(data.log.agentId);
+                } else if (data.type === 'STATE') {
+                    if (data.state.isProcessing !== undefined) setIsProcessing(data.state.isProcessing);
+                    if (data.state.activeAgentId !== undefined) setActiveAgentId(data.state.activeAgentId);
+                    if (data.state.completedAgents !== undefined) setCompletedAgents(data.state.completedAgents);
+                    if (data.state.cycleCount !== undefined) setCycleCount(data.state.cycleCount);
+                } else if (data.type === 'VAULT') {
+                    setVault(data.state);
+                    setCurrentBalance(data.state.total);
+                } else if (data.type === 'SIMULATION') {
+                    setSimulation(data.state);
+                } else if (data.type === 'HEALTH') {
+                    setHealth(data.state);
+                }
+            }
+        }, PLAYBACK_SPEED_MS);
+
+        return () => clearInterval(interval);
     }, []);
 
     const runOrchestrator = async () => {
@@ -71,6 +106,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     };
 
     const handleTerminate = async () => {
+        // Implement termination API if needed
         console.log("Termination requested via API");
         try {
             await fetch(`${BACKEND_URL}/api/reset`, { method: 'POST' });
@@ -96,7 +132,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
         setAutoPilot,
         runOrchestrator,
         handleTerminate,
-        addLog: (msg: string, id: number, level: any) => console.log("Direct logging disabled in split-mode", msg),
+        addLog: (msg: string, id: number, level: any) => console.log("Direct logging disabled in playback mode", msg),
         handleAgentTest,
         viewedAgentId: null,
         setViewedAgentId: () => { },
