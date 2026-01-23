@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import http from 'http';
 import dotenv from 'dotenv';
 import { LogEntry } from '@shared/types';
 import { CONFIG } from '../config';
@@ -87,20 +88,32 @@ const initializeBackend = async () => {
             console.log(`System: Backend Authorized [${isProd ? 'LIVE_NET' : 'SANDBOX'}].`);
 
             // Agent 14: Start Sentinel for Principal Protection
-            // console.log("[DEBUG] Starting Sentinel...");
-            // await startSentinel(!isProd);
-            // console.log("[DEBUG] Sentinel Started.");
+            console.log("System: Starting Sentinel...");
+            await startSentinel(!isProd);
+            console.log("System: Sentinel Started.");
 
             // Agent 14: Logic Audit
-            // console.log("[DEBUG] Starting Audit...");
-            // const auditPassed = auditCodebase();
-            // console.log("[DEBUG] Audit Complete.");
-            // if (!auditPassed) {
-            //    console.error("[Agent 14] VETO TRIGGERED: Critical Codebase Violations. Shutting down.");
-            //    process.exit(1);
-            // }
+            console.log("System: Starting Audit...");
+            const auditPassed = auditCodebase();
+            console.log("System: Audit Complete.");
+            if (!auditPassed) {
+                console.warn("[Agent 14] AUDIT WARNING: Potential issues detected but continuing startup.");
+            }
 
             // --- ENGINE LOG BRIDGE ---
+            console.log("System: Synchronizing Engine State...");
+            try {
+                const healthRes = await fetch('http://127.0.0.1:3002/health');
+                if (healthRes.ok) {
+                    const healthData = await healthRes.json();
+                    systemState.cycleCount = healthData.cycleCount;
+                    systemState.isProcessing = healthData.isProcessing;
+                    console.log(`System: Engine Synced (Cycle ${systemState.cycleCount}).`);
+                }
+            } catch (e) {
+                console.log("System: Engine Health Check Failed (Pre-Sync).");
+            }
+
             console.log("System: Connecting to Python Engine Link...");
             connectToEngine();
 
@@ -111,7 +124,6 @@ const initializeBackend = async () => {
 };
 
 const connectToEngine = () => {
-    // Attempt to connect to Python Engine SSE
     const connect = async () => {
         try {
             const response = await fetch('http://127.0.0.1:3002/stream');
@@ -128,26 +140,25 @@ const connectToEngine = () => {
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                console.log(`[BRIDGE] Received chunk: ${value.length} bytes`);
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const data = JSON.parse(line.slice(6));
-                            // Rebroadcast to frontend clients
-                            broadcast(data);
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine || trimmedLine.startsWith(':')) continue;
 
-                            // Keep in-memory state updated for INIT events
+                    if (trimmedLine.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(trimmedLine.slice(6));
+                            broadcast(data);
                             if (data.type === 'LOG') {
                                 systemState.logs = [...systemState.logs.slice(-499), data.log];
                             } else if (data.type === 'STATE') {
                                 systemState = { ...systemState, ...data.state };
                             }
                         } catch (e) {
-                            // Skip malformed JSON
+                            // Skip
                         }
                     }
                 }

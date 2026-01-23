@@ -34,9 +34,10 @@ export const startSentinel = async (isPaperTrading: boolean) => {
         }, 5000); // Check every 5 seconds
 
     } catch (e) {
-        console.error("[Agent 14] Sentinel Failed to Start!", e);
-        // Sentinel failure is a critical failure of the safety system
-        process.exit(1);
+        console.error("[Agent 14] Sentinel Failed to Start (Likely missing or invalid Kalshi Keys)!", e);
+        // We will stand down instead of crashing the whole server for now, 
+        // to allow the user to fix keys in the UI or .env
+        console.warn("[Agent 14] Safety Sentinel STANDING DOWN. Principal protection NOT active.");
     }
 };
 

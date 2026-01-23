@@ -24,11 +24,11 @@ class KalshiClient:
         
         if is_paper:
             self.key_id = os.getenv("KALSHI_DEMO_KEY_ID")
-            self.base_url = "https://demo-api.kalshi.com/trade-api/v2"
+            self.base_url = "https://demo-api.kalshi.co/trade-api/v2"
             pk_pem = os.getenv("KALSHI_DEMO_PRIVATE_KEY")
         else:
             self.key_id = os.getenv("KALSHI_PROD_KEY_ID")
-            self.base_url = "https://trading-api.kalshi.com/trade-api/v2"
+            self.base_url = "https://api.kalshi.co/trade-api/v2"
             pk_pem = os.getenv("KALSHI_PROD_PRIVATE_KEY")
         if pk_pem:
             try:
