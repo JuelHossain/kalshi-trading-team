@@ -1,26 +1,37 @@
-import { LogEntry, VaultState, SimulationState, SystemHealthData } from '@shared/types';
+import { LogEntry, VaultState, SimulationState, SystemHealthData, TimelineEvent, TimelineEventType } from '@shared/types';
 import { useState, useEffect, useRef } from 'react';
 
 const BACKEND_URL = `http://${window.location.hostname}:3001`;
-
-// Cinematic Pacing: Process one event every 250ms
 const PLAYBACK_SPEED_MS = 250;
 
+// Helper to determine phase for data events
+const getPhaseForType = (type: string, data: any): number => {
+    switch (type) {
+        case 'MARKET': return 1; // Surveillance
+        case 'SIMULATION': return 2; // Intelligence
+        case 'INTERCEPT': return 2; // Intelligence
+        case 'VAULT': return 4; // Accounting
+        case 'TRADE': return 3; // Execution
+        default: return 0;
+    }
+}
+
 export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) => {
-    // React State (The "Screen" State)
     const [activeAgentId, setActiveAgentId] = useState<number | null>(null);
     const [completedAgents, setCompletedAgents] = useState<number[]>([]);
-    const [logs, setLogs] = useState<LogEntry[]>([]);
+
+    // Unified Timeline State
+    const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
+
     const [isProcessing, setIsProcessing] = useState(false);
     const [cycleCount, setCycleCount] = useState(0);
-    const [targetMarket, setTargetMarket] = useState<any>(null);
-    const [currentBalance, setCurrentBalance] = useState(300.00);
     const [autoPilot, setAutoPilot] = useState(false);
+
+    // Specific states for quick access if needed (optional)
     const [vault, setVault] = useState<VaultState | undefined>(undefined);
     const [simulation, setSimulation] = useState<SimulationState | undefined>(undefined);
     const [health, setHealth] = useState<SystemHealthData | undefined>(undefined);
 
-    // Event Buffer
     const eventBuffer = useRef<any[]>([]);
 
     useEffect(() => {
@@ -29,15 +40,24 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
 
-            // Immediate handling for Initial State
             if (data.type === 'INIT') {
-                eventBuffer.current = []; // Clear buffer on init
-                setLogs(data.state.logs || []);
+                eventBuffer.current = [];
+                // Initialize with logs converted to unified events
+                const initLogs: LogEntry[] = data.state.logs || [];
+                const initEvents: TimelineEvent[] = initLogs.map(l => ({
+                    id: l.id,
+                    type: 'LOG',
+                    timestamp: l.timestamp,
+                    cycleId: l.cycleId,
+                    phaseId: l.phaseId,
+                    data: l
+                }));
+
+                setTimelineEvents(initEvents);
                 setIsProcessing(data.state.isProcessing);
                 setActiveAgentId(data.state.activeAgentId);
                 setCompletedAgents(data.state.completedAgents || []);
             } else {
-                // Queue all other live events
                 eventBuffer.current.push(data);
             }
         };
@@ -54,64 +74,78 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
         const interval = setInterval(() => {
             if (eventBuffer.current.length === 0) return;
 
-            // Process TWO events per tick if backlog gets too large (>20 events)
             const count = eventBuffer.current.length > 20 ? 2 : 1;
 
             for (let i = 0; i < count; i++) {
-                const data = eventBuffer.current.shift();
-                if (!data) break;
+                const rawData = eventBuffer.current.shift();
+                if (!rawData) break;
 
-                // console.log('[Playback] Processing:', data.type);
+                const eventType = rawData.type;
+                let newEvent: TimelineEvent | null = null;
+                const timestamp = new Date().toISOString();
 
-                if (data.type === 'LOG') {
-                    setLogs(prev => [...prev.slice(-499), data.log]);
-                    // Auto-set active agent based on log sender to keep UI lively
-                    if (data.log.agentId) setActiveAgentId(data.log.agentId);
-                } else if (data.type === 'STATE') {
-                    if (data.state.isProcessing !== undefined) setIsProcessing(data.state.isProcessing);
-                    if (data.state.activeAgentId !== undefined) setActiveAgentId(data.state.activeAgentId);
-                    if (data.state.completedAgents !== undefined) setCompletedAgents(data.state.completedAgents);
-                    if (data.state.cycleCount !== undefined) setCycleCount(data.state.cycleCount);
-                } else if (data.type === 'VAULT') {
-                    setVault(data.state);
-                    setCurrentBalance(data.state.total);
-                } else if (data.type === 'SIMULATION') {
-                    setSimulation(data.state);
-                } else if (data.type === 'HEALTH') {
-                    setHealth(data.state);
+                if (eventType === 'LOG') {
+                    const log = rawData.log;
+                    newEvent = {
+                        id: log.id,
+                        type: 'LOG',
+                        timestamp: log.timestamp,
+                        cycleId: log.cycleId,
+                        phaseId: log.phaseId,
+                        data: log
+                    };
+                    if (log.agentId) setActiveAgentId(log.agentId);
+                } else if (['SIMULATION', 'VAULT', 'MARKET', 'INTERCEPT'].includes(eventType)) {
+                    // Inject synthetic phase ID
+                    const phaseId = getPhaseForType(eventType, rawData.state);
+                    newEvent = {
+                        id: `evt-${Date.now()}-${Math.random()}`,
+                        type: eventType as TimelineEventType,
+                        timestamp: timestamp,
+                        cycleId: cycleCount, // Use current known cycle
+                        phaseId: phaseId,
+                        data: rawData.state || rawData // Handle structure differences
+                    };
+
+                    // Side effects
+                    if (eventType === 'VAULT') setVault(rawData.state);
+                    if (eventType === 'SIMULATION') setSimulation(rawData.state);
+                } else if (eventType === 'STATE') {
+                    // State updates don't become timeline events, just state
+                    if (rawData.state.isProcessing !== undefined) setIsProcessing(rawData.state.isProcessing);
+                    if (rawData.state.activeAgentId !== undefined) setActiveAgentId(rawData.state.activeAgentId);
+                    if (rawData.state.completedAgents !== undefined) setCompletedAgents(rawData.state.completedAgents);
+                    if (rawData.state.cycleCount !== undefined) setCycleCount(rawData.state.cycleCount);
+                } else if (eventType === 'HEALTH') {
+                    setHealth(rawData.state);
+                }
+
+                if (newEvent) {
+                    setTimelineEvents(prev => [...prev.slice(-499), newEvent!]);
                 }
             }
         }, PLAYBACK_SPEED_MS);
 
         return () => clearInterval(interval);
-    }, []);
+    }, [cycleCount]); // Dependency on cycleCount for synthetic events
 
     const runOrchestrator = async () => {
-        console.log('[Orchestrator] runOrchestrator called');
         try {
-            console.log(`[Orchestrator] POSTING to ${BACKEND_URL}/api/run`);
-            const response = await fetch(`${BACKEND_URL}/api/run`, {
+            await fetch(`${BACKEND_URL}/api/run`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ isPaperTrading })
             });
-            console.log('[Orchestrator] response status:', response.status);
-            if (!response.ok) {
-                const err = await response.json();
-                console.error('[Orchestrator] error response:', err);
-            }
         } catch (error) {
             console.error('[Orchestrator] Failed to trigger backend:', error);
         }
     };
 
-    const handleTerminate = async () => {
-        // Implement termination API if needed
-        console.log("Termination requested via API");
+    const handleKillSwitch = async () => {
         try {
-            await fetch(`${BACKEND_URL}/api/reset`, { method: 'POST' });
+            await fetch(`${BACKEND_URL}/api/kill-switch`, { method: 'POST' });
         } catch (e) {
-            console.error("Termination failed", e);
+            console.error("Kill switch activation failed", e);
         }
     };
 
@@ -123,15 +157,14 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     return {
         activeAgentId,
         completedAgents,
-        logs,
+        timelineEvents, // EXPORTED NOW
+        logs: timelineEvents.filter(e => e.type === 'LOG').map(e => e.data as LogEntry), // Backwards compat
         isProcessing,
         cycleCount,
-        targetMarket,
-        currentBalance,
         autoPilot,
         setAutoPilot,
         runOrchestrator,
-        handleTerminate,
+        handleKillSwitch,
         addLog: (msg: string, id: number, level: any) => console.log("Direct logging disabled in playback mode", msg),
         handleAgentTest,
         viewedAgentId: null,
@@ -140,6 +173,8 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
         setShowHealth: () => { },
         vault,
         simulation,
-        health
+        health,
+        targetMarket: null,
+        currentBalance: vault?.total || 0
     };
 };

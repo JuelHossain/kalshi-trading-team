@@ -46,6 +46,7 @@ class GhostEngine:
         self.agents: List[BaseAgent] = []
         self.cycle_count: int = 0
         self.is_processing: bool = False
+        self.manual_kill_switch: bool = False
 
     async def initialize_system(self):
         print(f"{Fore.MAGENTA}=========================================={Style.RESET_ALL}")
@@ -103,6 +104,11 @@ class GhostEngine:
         Agent 1: Strategic Authorization
         Checks Kill Switch and Maintenance Windows.
         """
+        # 0. Manual Kill Switch (UI Triggered)
+        if self.manual_kill_switch:
+            print(f"{Fore.RED}[GHOST] 💀 MANUAL KILL SWITCH ACTIVE. ALL OPERATIONS HALTED.{Style.RESET_ALL}")
+            return False
+
         # 1. Kill Switch
         if os.getenv("KILL_SWITCH") == "true":
             print(f"{Fore.RED}[GHOST] ENV KILL SWITCH ACTIVE. HALTING.{Style.RESET_ALL}")
@@ -205,13 +211,34 @@ class GhostEngine:
                 "isProcessing": self.is_processing
             })
         
+            })
+        
+        async def activate_kill_switch(request):
+            self.manual_kill_switch = True
+            
+            # Log the emergency event
+            await self.bus.publish("SYSTEM_LOG", {
+                "level": "ERROR", 
+                "message": "[GHOST] 💀 MANUAL KILL SWITCH ACTIVATED BY USER",
+                "agent_id": 1,
+                "timestamp": datetime.now().isoformat()
+            }, "GHOST")
+            
+            # Also reset processing state to allow immediate graceful failure of current loop if possible
+            # (In this simple architecture, existing cycle completes, but next one is blocked)
+            
+            return web.json_response({
+                "status": "killed",
+                "message": "Manual Kill Switch Activated. Engine locked."
+            })
+
         async def health_check(request):
             return web.json_response({
                 "status": "online",
                 "cycleCount": self.cycle_count,
                 "isProcessing": self.is_processing,
                 "vaultLocked": self.vault.is_locked,
-                "killSwitch": self.vault.kill_switch_active
+                "killSwitch": self.vault.kill_switch_active or self.manual_kill_switch
             })
         
         async def stream_logs(request):
@@ -245,6 +272,7 @@ class GhostEngine:
         
         app = web.Application()
         app.router.add_post('/trigger', trigger_cycle)
+        app.router.add_post('/kill-switch', activate_kill_switch)
         app.router.add_get('/health', health_check)
         app.router.add_get('/stream', stream_logs)
         

@@ -321,6 +321,46 @@ app.post('/api/reset', (req: Request, res: Response) => {
     res.json({ message: 'System reset successfully' });
 });
 
+app.post('/api/kill-switch', async (req: Request, res: Response) => {
+    console.log("[BRIDGE] 🚨 KILL SWITCH ACTIVATED 🚨");
+
+    // 1. Reset Backend State
+    systemState.isProcessing = false;
+    systemState.activeAgentId = null;
+
+    // 2. Broadcast Emergency Stop to Frontend
+    broadcast({
+        type: 'LOG',
+        log: {
+            id: 'kill-' + Date.now(),
+            timestamp: new Date().toISOString(),
+            agentId: 0,
+            cycleId: systemState.cycleCount,
+            level: 'ERROR',
+            message: '🚨 EMERGENCY KILL SWITCH ACTIVATED BY USER'
+        }
+    });
+
+    broadcast({ type: 'STATE', state: systemState });
+
+    // 3. Trigger Python Engine Kill Switch
+    try {
+        const response = await fetch('http://127.0.0.1:3002/kill-switch', {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            console.error("[BRIDGE] Failed to trigger Python Kill Switch. Status:", response.status);
+        } else {
+            console.log("[BRIDGE] Python Engine Kill Switch Triggered Successfully.");
+        }
+    } catch (e: any) {
+        console.error("[BRIDGE] Failed to reach Python Engine during Kill Switch:", e.message);
+    }
+
+    res.json({ message: 'Kill switch executed' });
+});
+
 
 app.get('/api/pnl', async (req: Request, res: Response) => {
     try {
