@@ -20,6 +20,9 @@ class AuditorAgent(BaseAgent):
     
     CONSENSUS_THRESHOLD = 85  # 85% average confidence required
 
+    def __init__(self, agent_id: int, bus: EventBus):
+        super().__init__("AUDITOR", agent_id, bus)
+
     async def setup(self):
         self.api_key = os.getenv("GROQ_API_KEY")
         if not self.api_key:

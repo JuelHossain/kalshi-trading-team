@@ -15,6 +15,9 @@ class SimScientistAgent(BaseAgent):
     SIMULATION_COUNT = 10000
     VETO_THRESHOLD = 0.58  # 58% Win Rate
 
+    def __init__(self, agent_id: int, bus: EventBus):
+        super().__init__("SCIENTIST", agent_id, bus)
+
 
     async def setup(self):
         await self.log("Monte Carlo Engine Online. Preparing 10,000 iterations.")

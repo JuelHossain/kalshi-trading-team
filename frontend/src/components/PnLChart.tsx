@@ -77,52 +77,52 @@ const PnLChart: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-        try {
-            // In a real app, use the backend URL /api/pnl
-            // For dev/preview, we assume proxy or CORS is handled, or use absolute URL
-            const url = `http://${window.location.hostname}:3001/api/pnl`;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error("Failed to fetch");
-            const raw = await res.json();
-            
-            if (raw.length === 0) {
-                 setData([]);
-                 setLoading(false);
-                 return;
-            }
+      try {
+        // In a real app, use the backend URL /api/pnl
+        // For dev/preview, we assume proxy or CORS is handled, or use absolute URL
+        const url = `http://${window.location.hostname}:3001/api/pnl`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Failed to fetch");
+        const raw = await res.json();
 
-            // Transform
-            const transformed: ChartData[] = raw.map((d: any, i: number) => {
-                const prev = i > 0 ? raw[i-1].balance : d.balance;
-                const velocity = d.balance - prev;
-                const time = new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                return {
-                    time,
-                    pnl: d.balance,
-                    velocity
-                };
-            });
-
-            setData(transformed);
-            const last = transformed[transformed.length - 1];
-            setCurrentPnL(last.pnl);
-            const diff = last.pnl - startPrincipal;
-            setPercent(((diff / startPrincipal) * 100).toFixed(2));
-            setLoading(false);
-
-        } catch (e) {
-            console.error("PnL Fetch Error:", e);
-            setLoading(false);
+        if (raw.length === 0) {
+          setData([]);
+          setLoading(false);
+          return;
         }
+
+        // Transform
+        const transformed: ChartData[] = raw.map((d: any, i: number) => {
+          const prev = i > 0 ? raw[i - 1].balance : d.balance;
+          const velocity = d.balance - prev;
+          const time = new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          return {
+            time,
+            pnl: d.balance,
+            velocity
+          };
+        });
+
+        setData(transformed);
+        const last = transformed[transformed.length - 1];
+        setCurrentPnL(last.pnl);
+        const diff = last.pnl - startPrincipal;
+        setPercent(((diff / startPrincipal) * 100).toFixed(2));
+        setLoading(false);
+
+      } catch (e) {
+        console.error("PnL Fetch Error:", e);
+        setLoading(false);
+      }
     };
-    
+
     fetchData();
     const interval = setInterval(fetchData, 30000); // Poll every 30s
     return () => clearInterval(interval);
   }, []);
 
   if (loading && data.length === 0) {
-       return <div className="h-full w-full flex items-center justify-center text-xs text-gray-500 font-mono animate-pulse">ACQUIRING FEED...</div>;
+    return <div className="h-full w-full flex items-center justify-center text-xs text-gray-500 font-mono animate-pulse">ACQUIRING FEED...</div>;
   }
 
   return (
@@ -166,8 +166,8 @@ const PnLChart: React.FC = () => {
       </div>
 
       {/* Chart Container */}
-      <div className="flex-1 w-full min-h-[200px] relative z-10 -ml-2">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="flex-1 w-full min-h-[200px] relative z-10 -ml-2" style={{ minHeight: '200px' }}>
+        <ResponsiveContainer width="100%" height="100%" minHeight={200}>
           <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="cyberGradient" x1="0" y1="0" x2="0" y2="1">
