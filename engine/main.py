@@ -47,6 +47,7 @@ class GhostEngine:
         self.cycle_count: int = 0
         self.is_processing: bool = False
         self.manual_kill_switch: bool = False
+        self.fixer_active: bool = False  # Lockdown flag for Fixer
 
     async def initialize_system(self):
         print(f"{Fore.MAGENTA}=========================================={Style.RESET_ALL}")
@@ -81,6 +82,9 @@ class GhostEngine:
                 # Accountant and Gateway need the vault reference
                 if cls in [AccountantAgent, GatewayAgent]:
                     agent = cls(agent_id, self.bus, vault=self.vault)
+                # Fixer needs engine reference for lockdown control
+                elif cls == FixerAgent:
+                    agent = cls(agent_id, self.bus, engine=self)
                 else:
                     agent = cls(agent_id, self.bus)
                 
@@ -124,6 +128,10 @@ class GhostEngine:
         now = datetime.now()
         if now.hour == 23 and now.minute >= 55:
             print(f"{Fore.YELLOW}[GHOST] MAINTENANCE WINDOW. STANDING DOWN.{Style.RESET_ALL}")
+            return False
+        # 4. Fixer Active (System Lockdown)
+        if self.fixer_active:
+            print(f"{Fore.RED}[GHOST] FIXER ACTIVE. SYSTEM LOCKED DOWN UNTIL ERROR RESOLUTION.{Style.RESET_ALL}")
             return False
 
         return True

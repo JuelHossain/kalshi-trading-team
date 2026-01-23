@@ -18,8 +18,9 @@ class FixerAgent(BaseAgent):
     Triggers on system errors to provide suggested hotfixes.
     """
     
-    def __init__(self, agent_id: int, bus: EventBus):
+    def __init__(self, agent_id: int, bus: EventBus, engine=None):
         super().__init__("FIXER", agent_id, bus)
+        self.engine = engine  # Reference to GhostEngine for lockdown control
     
 
     async def setup(self):
@@ -39,22 +40,45 @@ class FixerAgent(BaseAgent):
         level = message.payload.get('level')
         if level == "ERROR":
             error_msg = message.payload.get('message')
-            await self.log(f"Detected Error: {error_msg}. Analyzing Root Cause...")
             
-            analysis = await self.analyze_error(error_msg)
+            # --- LOCKDOWN START ---
+            if self.engine:
+                self.engine.fixer_active = True
+                # Broadcast state to frontend so UI shows Agent 13 as active
+                await self.bus.publish("SYSTEM_STATE", {
+                    "activeAgentId": 13,
+                    "isProcessing": True,
+                    "fixerActive": True
+                }, self.name)
             
-            # Publish Fix proposal
-            await self.bus.publish("ERROR_FIX", analysis, self.name)
+            try:
+                await self.log(f"Detected Error: {error_msg}. Analyzing Root Cause...")
+                
+                analysis = await self.analyze_error(error_msg)
+                
+                # Publish Fix proposal
+                await self.bus.publish("ERROR_FIX", analysis, self.name)
+                
+                # If confidence is high, log it explicitly
+                if analysis.get('confidence', 0) > 80:
+                    await self.log(f"{Fore.GREEN}FIX PROPOSAL: {analysis['suggestedFix']}{Style.RESET_ALL}")
+                
+                # CRITICAL CIRCUIT BREAKER: Pause if confidence is extreme
+                if analysis.get('confidence', 0) > 95:
+                    from core.db import set_system_status
+                    await self.log(f"{Fore.RED}EXTREME ERROR DETECTED. AUTO-PAUSING SYSTEM.{Style.RESET_ALL}")
+                    await set_system_status("PAUSED", f"Fixer Auto-Pause: {analysis.get('rootCause')}")
             
-            # If confidence is high, log it explicitly
-            if analysis.get('confidence', 0) > 80:
-                await self.log(f"{Fore.GREEN}FIX PROPOSAL: {analysis['suggestedFix']}{Style.RESET_ALL}")
-            
-            # CRITICAL CIRCUIT BREAKER: Pause if confidence is extreme
-            if analysis.get('confidence', 0) > 95:
-                from core.db import set_system_status
-                await self.log(f"{Fore.RED}EXTREME ERROR DETECTED. AUTO-PAUSING SYSTEM.{Style.RESET_ALL}")
-                await set_system_status("PAUSED", f"Fixer Auto-Pause: {analysis.get('rootCause')}")
+            finally:
+                # --- LOCKDOWN END ---
+                if self.engine:
+                    self.engine.fixer_active = False
+                    await self.bus.publish("SYSTEM_STATE", {
+                        "activeAgentId": None,
+                        "isProcessing": False,
+                        "fixerActive": False
+                    }, self.name)
+                await self.log("Fixer analysis complete. System lockdown released.")
 
 
     async def analyze_error(self, error_message: str) -> Dict[str, Any]:
