@@ -1,5 +1,5 @@
 import { SchemaType } from '@google/generative-ai';
-import { DebateResponse } from '../../shared/types';
+import { DebateResponse } from '@shared/types';
 import { initGenAI, queryGroq, queryGemini } from '../../services/aiService';
 import { retrieveReflexiveMemory } from '../agent-10-historian';
 
