@@ -48,10 +48,11 @@ const getHeaders = (method: string, path: string, body: string = '') => {
   const timestamp = Date.now().toString();
   const payload = timestamp + method + path + body;
 
-  const sig = new KJUR.crypto.Signature({ alg: 'SHA256withRSA' });
-  sig.init(session.privateKey);
-  sig.updateString(payload);
-  const signature = sig.sign();
+   const sig = new KJUR.crypto.Signature({ alg: 'SHA256withRSA' });
+   sig.init(session.privateKey);
+   sig.updateString(payload);
+   const signatureHex = sig.sign();
+   const signature = btoa(String.fromCharCode(...signatureHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16))));
 
   return {
     'Content-Type': 'application/json',

@@ -176,30 +176,28 @@ const App: React.FC = () => {
               <div className="grid grid-cols-12 gap-10 h-full animate-scale-in">
                 {/* Left Content: Visualizer & Charts */}
                 <div className="col-span-12 xl:col-span-8 flex flex-col gap-10">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    <VaultGauge vault={orchestratorProps.vault} />
-                    <SimulationResults simulation={orchestratorProps.simulation} />
-                  </div>
+                   <LogisticsCenter
+                     opportunityQueue={opportunityQueue}
+                     executionQueue={executionQueue}
+                     scoutStatus={scoutStatus}
+                     brainStatus={brainStatus}
+                     sniperStatus={sniperStatus}
+                   />
 
-                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                     <div className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors md:col-span-1">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                     <VaultGauge vault={orchestratorProps.vault} />
+                     <SimulationResults simulation={orchestratorProps.simulation} />
+                   </div>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                     <div className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors">
                        <PnLChart />
                      </div>
-                     <div className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors md:col-span-1">
+                     <div className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors">
                        <PnLHeatmap />
                      </div>
-
-                     <div className="md:col-span-2">
-                       <LogisticsCenter
-                         opportunityQueue={opportunityQueue}
-                         executionQueue={executionQueue}
-                         scoutStatus={scoutStatus}
-                         brainStatus={brainStatus}
-                         sniperStatus={sniperStatus}
-                       />
-                     </div>
                    </div>
-                </div>
+                 </div>
 
                 {/* Right Content: Terminal */}
                 <div className="col-span-12 xl:col-span-4 flex flex-col min-h-[600px]">

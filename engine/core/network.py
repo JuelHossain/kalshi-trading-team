@@ -3,6 +3,7 @@ import aiohttp
 import time
 import base64
 import os
+import json
 from typing import Dict, Any, Optional, List
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -51,12 +52,12 @@ class KalshiClient:
             )
         return self._session
 
-    def _get_headers(self, method: str, path: str) -> Dict[str, str]:
+    def _get_headers(self, method: str, path: str, body: str = "") -> Dict[str, str]:
         if not self.private_key:
             return {"Content-Type": "application/json"}
 
         timestamp = str(int(time.time() * 1000))
-        msg = f"{timestamp}{method}{path}"
+        msg = f"{timestamp}{method}{path}{body}"
 
         signature_bytes = self.private_key.sign(
             msg.encode(),
@@ -86,8 +87,9 @@ class KalshiClient:
         session = await self.get_session()
         url = f"{self.base_url}{path}"
 
+        body_str = json.dumps(json_data) if json_data else ""
         for attempt in range(retries):
-            headers = self._get_headers(method, path)
+            headers = self._get_headers(method, path, body_str)
             try:
                 async with session.request(
                     method, url, headers=headers, params=params, json=json_data

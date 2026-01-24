@@ -22,7 +22,7 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
   sniperStatus,
 }) => {
   return (
-    <div className="glass-panel rounded-2xl p-6 md:p-8 shadow-xl hover:border-emerald-500/20 transition-all duration-300">
+    <div className="glass-panel rounded-2xl p-6 md:p-8 shadow-xl hover:border-emerald-500/20 transition-all duration-300 flex-1">
       <div className="text-center mb-8">
         <h3 className="text-sm text-blue-400 font-mono uppercase tracking-widest flex items-center justify-center gap-3">
           <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse shadow-lg shadow-blue-500/50"></span>
@@ -31,9 +31,9 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
         <p className="text-xs text-gray-500 mt-2">Real-time operational dashboard</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
         {/* Scout Monitor */}
-        <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-xl p-6 border border-white/10 hover:border-green-500/30 transition-all duration-300 group relative overflow-hidden">
+        <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-xl p-6 border border-white/10 hover:border-green-500/30 transition-all duration-300 group relative overflow-hidden flex flex-col">
           <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
           <div className="relative">
             <div className="flex justify-between items-start mb-6">
@@ -52,11 +52,11 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
               </span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 flex-1">
               <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
                 Opportunity Queue ({opportunityQueue.length})
               </div>
-              <div className="max-h-32 overflow-y-auto space-y-2">
+               <div className="max-h-full overflow-y-auto space-y-2 flex-1">
                 {opportunityQueue.length === 0 ? (
                   <div className="text-xs text-gray-500 font-mono italic p-3 bg-black/20 rounded-lg">
                     No opportunities queued
@@ -83,7 +83,7 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
         </div>
 
         {/* Intelligence Hub */}
-        <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-xl p-6 border border-white/10 hover:border-purple-500/30 transition-all duration-300 group relative overflow-hidden">
+        <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-xl p-6 border border-white/10 hover:border-purple-500/30 transition-all duration-300 group relative overflow-hidden flex flex-col">
           <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
           <div className="relative">
             <div className="flex justify-between items-start mb-6">
@@ -102,7 +102,7 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
               </span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 flex-1">
               <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
                 Brain Status
               </div>
@@ -128,7 +128,7 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
         </div>
 
         {/* Sniper Console */}
-        <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-xl p-6 border border-white/10 hover:border-red-500/30 transition-all duration-300 group relative overflow-hidden">
+        <div className="bg-gradient-to-br from-white/5 to-white/2 rounded-xl p-6 border border-white/10 hover:border-red-500/30 transition-all duration-300 group relative overflow-hidden flex flex-col">
           <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
           <div className="relative">
             <div className="flex justify-between items-start mb-6">
@@ -147,11 +147,11 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
               </span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-3 flex-1">
               <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
                 Execution Queue ({executionQueue.length})
               </div>
-              <div className="max-h-32 overflow-y-auto space-y-2">
+               <div className="max-h-full overflow-y-auto space-y-2 flex-1">
                 {executionQueue.length === 0 ? (
                   <div className="text-xs text-gray-500 font-mono italic p-3 bg-black/20 rounded-lg">
                     No executions queued
