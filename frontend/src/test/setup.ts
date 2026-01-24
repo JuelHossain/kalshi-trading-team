@@ -3,9 +3,9 @@ import { vi } from 'vitest';
 
 // Mock ResizeObserver which is used by Recharts but not provided by jsdom
 class ResizeObserver {
-    observe() { }
-    unobserve() { }
-    disconnect() { }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
 }
 
 vi.stubGlobal('ResizeObserver', ResizeObserver);

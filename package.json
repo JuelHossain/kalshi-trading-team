@@ -2,7 +2,15 @@
     "name": "kalshi-sentient-alpha-root",
     "private": true,
     "devDependencies": {
-        "concurrently": "^8.2.2"
+        "concurrently": "^8.2.2",
+        "@typescript-eslint/eslint-plugin": "^7.0.0",
+        "@typescript-eslint/parser": "^7.0.0",
+        "eslint": "^8.57.0",
+        "eslint-plugin-react": "^7.34.0",
+        "eslint-plugin-react-hooks": "^4.6.0",
+        "prettier": "^3.2.5",
+        "eslint-config-prettier": "^9.1.0",
+        "eslint-plugin-prettier": "^5.1.3"
     },
     "scripts": {
         "build:backend": "cd backend && npm install && npm run build",
@@ -14,6 +22,10 @@
         "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"python3 engine/main.py\"",
         "dev:backend": "cd backend && npm run dev",
         "dev:frontend": "cd frontend && npm run dev",
+        "lint": "eslint . --ext .ts,.tsx --fix",
+        "lint:frontend": "cd frontend && eslint src --ext .ts,.tsx --fix",
+        "format": "prettier --write .",
+        "format:frontend": "cd frontend && prettier --write src/**/*.{ts,tsx}",
         "test": "npm run test:backend && npm run test:frontend",
         "test:backend": "cd backend && npm run test",
         "test:frontend": "cd frontend && npm run test"

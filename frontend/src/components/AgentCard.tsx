@@ -31,16 +31,23 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, isActive }) => {
     if (isActive) return 'animate-[ping_1s_cubic-bezier(0,0,0.2,1)_infinite] bg-emerald-400';
 
     switch (status) {
-      case AgentStatus.WORKING: return 'animate-pulse bg-emerald-500';
-      case AgentStatus.WARNING: return 'animate-[bounce_1s_infinite] bg-amber-500'; // Slow bounce/blink
-      case AgentStatus.CRITICAL: return 'animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)_infinite] bg-red-500'; // Rapid ping
-      case AgentStatus.SUCCESS: return 'bg-blue-500 shadow-[0_0_5px_#3b82f6]'; // Steady glow
-      default: return 'bg-gray-600';
+      case AgentStatus.WORKING:
+        return 'animate-pulse bg-emerald-500';
+      case AgentStatus.WARNING:
+        return 'animate-[bounce_1s_infinite] bg-amber-500'; // Slow bounce/blink
+      case AgentStatus.CRITICAL:
+        return 'animate-[ping_0.5s_cubic-bezier(0,0,0.2,1)_infinite] bg-red-500'; // Rapid ping
+      case AgentStatus.SUCCESS:
+        return 'bg-blue-500 shadow-[0_0_5px_#3b82f6]'; // Steady glow
+      default:
+        return 'bg-gray-600';
     }
   };
 
   return (
-    <div className={`relative p-4 rounded-sm border backdrop-blur-sm transition-all duration-300 group ${getStatusStyles(agent.status)}`}>
+    <div
+      className={`relative p-4 rounded-sm border backdrop-blur-sm transition-all duration-300 group ${getStatusStyles(agent.status)}`}
+    >
       {/* Active scanning line effect for active card */}
       {isActive && (
         <div className="absolute inset-0 overflow-hidden rounded-sm pointer-events-none">
@@ -61,11 +68,17 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, isActive }) => {
           {isActive && <span className="text-emerald-400 text-xs animate-pulse">▶</span>}
           {agent.name}
         </h4>
-        <div className={`w-2 h-2 rounded-full ${getStatusDot(agent.status)} shadow-[0_0_8px_currentColor]`} />
+        <div
+          className={`w-2 h-2 rounded-full ${getStatusDot(agent.status)} shadow-[0_0_8px_currentColor]`}
+        />
       </div>
 
-      <div className="text-xs font-mono text-gray-400 mb-2 min-h-[1.5em] opacity-80">{agent.role}</div>
-      <div className="text-xs text-gray-300 mb-3 line-clamp-2 min-h-[3em] leading-relaxed">{agent.description}</div>
+      <div className="text-xs font-mono text-gray-400 mb-2 min-h-[1.5em] opacity-80">
+        {agent.role}
+      </div>
+      <div className="text-xs text-gray-300 mb-3 line-clamp-2 min-h-[3em] leading-relaxed">
+        {agent.description}
+      </div>
 
       <div className="border-t border-white/5 pt-2 mt-2">
         <div className="flex justify-between items-center text-[9px] font-mono uppercase tracking-wide opacity-60">
@@ -74,7 +87,7 @@ const AgentCard: React.FC<AgentCardProps> = ({ agent, isActive }) => {
         </div>
         <div className="mt-1.5 text-[10px] truncate font-mono flex items-center gap-2">
           <span className="text-gray-600">{'>'}</span>
-          <span className={isActive ? "text-emerald-400 font-bold animate-pulse" : "text-gray-400"}>
+          <span className={isActive ? 'text-emerald-400 font-bold animate-pulse' : 'text-gray-400'}>
             {isActive ? 'EXECUTING DIRECTIVE...' : agent.lastAction}
           </span>
         </div>

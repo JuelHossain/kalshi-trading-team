@@ -23,26 +23,31 @@ const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
       const response = await fetch(`${BACKEND_URL}/api/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query })
+        body: JSON.stringify({ query }),
       });
 
       if (!response.ok) throw new Error('Analysis failed');
 
       const data = await response.json();
 
-      if (data.optimistArg.includes("[LOCAL_FALLBACK]")) {
+      if (data.optimistArg.includes('[LOCAL_FALLBACK]')) {
         if (onLog) {
-          onLog("Agent 4: Connection to Gemini Matrix failed.", 4, 'ERROR');
-          onLog("Agent 4: Engaging fallback: Python NLTK Heuristics.", 4, 'WARN');
+          onLog('Agent 4: Connection to Gemini Matrix failed.', 4, 'ERROR');
+          onLog('Agent 4: Engaging fallback: Python NLTK Heuristics.', 4, 'WARN');
         }
       } else {
-        if (onLog) onLog("Agent 4: Committee Debate successfully convened via Gemini 3 Flash.", 4, 'SUCCESS');
+        if (onLog)
+          onLog(
+            'Agent 4: Committee Debate successfully convened via Gemini 3 Flash.',
+            4,
+            'SUCCESS'
+          );
       }
 
       setResult(data);
     } catch (e) {
       console.error(e);
-      if (onLog) onLog("Agent 4: CRITICAL FAILURE. Unable to generate analysis.", 4, 'ERROR');
+      if (onLog) onLog('Agent 4: CRITICAL FAILURE. Unable to generate analysis.', 4, 'ERROR');
     } finally {
       setLoading(false);
     }
@@ -79,9 +84,7 @@ const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
           disabled={loading}
           className="bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-4 rounded-2xl font-bold transition-all uppercase text-xs tracking-widest shadow-lg hover:shadow-purple-500/30 hover:-translate-y-0.5 active:translate-y-0"
         >
-          {loading ? (
-            <span className="animate-pulse">thinking...</span>
-          ) : 'ANALYZE'}
+          {loading ? <span className="animate-pulse">thinking...</span> : 'ANALYZE'}
         </button>
       </div>
 
@@ -92,7 +95,9 @@ const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
               <div className="absolute inset-0 border-4 border-purple-500/30 rounded-full"></div>
               <div className="absolute inset-0 border-4 border-t-purple-500 rounded-full animate-spin"></div>
             </div>
-            <div className="text-purple-400 font-mono text-xs animate-pulse">Processing High-Dimensional Context...</div>
+            <div className="text-purple-400 font-mono text-xs animate-pulse">
+              Processing High-Dimensional Context...
+            </div>
           </div>
         )}
 
@@ -105,7 +110,9 @@ const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
                 <h3 className="text-emerald-400 font-bold mb-3 text-xs uppercase tracking-widest flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span> The Optimist
                 </h3>
-                <p className="text-gray-300 text-sm leading-relaxed font-mono opacity-90">{result.optimistArg}</p>
+                <p className="text-gray-300 text-sm leading-relaxed font-mono opacity-90">
+                  {result.optimistArg}
+                </p>
               </div>
 
               {/* Pessimist Card */}
@@ -114,17 +121,25 @@ const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
                 <h3 className="text-red-400 font-bold mb-3 text-xs uppercase tracking-widest flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-red-500"></span> The Pessimist
                 </h3>
-                <p className="text-gray-300 text-sm leading-relaxed font-mono opacity-90">{result.pessimistArg}</p>
+                <p className="text-gray-300 text-sm leading-relaxed font-mono opacity-90">
+                  {result.pessimistArg}
+                </p>
               </div>
             </div>
 
             {/* Verdict Card */}
             <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-500/30 p-8 rounded-3xl relative overflow-hidden shadow-2xl">
               <div className="flex justify-between items-start mb-4 relative z-10">
-                <h3 className="text-blue-300 font-bold text-xl uppercase tracking-widest font-tech">Final Verdict</h3>
+                <h3 className="text-blue-300 font-bold text-xl uppercase tracking-widest font-tech">
+                  Final Verdict
+                </h3>
                 <div className="px-4 py-1.5 rounded-full bg-black/40 border border-white/10 flex items-center gap-2">
-                  <span className="text-[10px] text-gray-400 uppercase tracking-widest">Confidence</span>
-                  <span className={`text-lg font-mono font-bold ${result.confidenceScore > 70 ? 'text-emerald-400' : result.confidenceScore > 40 ? 'text-yellow-400' : 'text-red-400'}`}>
+                  <span className="text-[10px] text-gray-400 uppercase tracking-widest">
+                    Confidence
+                  </span>
+                  <span
+                    className={`text-lg font-mono font-bold ${result.confidenceScore > 70 ? 'text-emerald-400' : result.confidenceScore > 40 ? 'text-yellow-400' : 'text-red-400'}`}
+                  >
                     {result.confidenceScore}%
                   </span>
                 </div>
@@ -139,7 +154,9 @@ const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
         {!loading && !result && (
           <div className="flex flex-col items-center justify-center h-full opacity-20">
             <div className="text-6xl mb-4 grayscale">⚖️</div>
-            <span className="font-mono text-xs uppercase tracking-[0.2em]">Awaiting Hypothesis</span>
+            <span className="font-mono text-xs uppercase tracking-[0.2em]">
+              Awaiting Hypothesis
+            </span>
           </div>
         )}
       </div>

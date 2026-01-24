@@ -8,7 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine
+  ReferenceLine,
 } from 'recharts';
 
 interface ChartData {
@@ -32,7 +32,9 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-black/90 border border-emerald-500/50 p-3 rounded-sm shadow-[0_0_20px_rgba(16,185,129,0.2)] backdrop-blur-md">
-        <div className="text-[10px] text-gray-400 font-mono mb-1 border-b border-gray-800 pb-1">{label} HRS</div>
+        <div className="text-[10px] text-gray-400 font-mono mb-1 border-b border-gray-800 pb-1">
+          {label} HRS
+        </div>
         <div className="text-lg font-bold text-emerald-400 font-mono">
           ${payload[0].value.toFixed(2)}
         </div>
@@ -69,7 +71,7 @@ const PulsingDot = (props: PulsingDotProps) => {
 const PnLChart: React.FC = () => {
   const [data, setData] = useState<ChartData[]>([]);
   const [currentPnL, setCurrentPnL] = useState(300);
-  const [percent, setPercent] = useState("0.00");
+  const [percent, setPercent] = useState('0.00');
   const [loading, setLoading] = useState(true);
 
   // Hardcoded Principal for now
@@ -82,7 +84,7 @@ const PnLChart: React.FC = () => {
         // For dev/preview, we assume proxy or CORS is handled, or use absolute URL
         const url = `http://${window.location.hostname}:3001/api/pnl`;
         const res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch");
+        if (!res.ok) throw new Error('Failed to fetch');
         const raw = await res.json();
 
         if (raw.length === 0) {
@@ -95,11 +97,14 @@ const PnLChart: React.FC = () => {
         const transformed: ChartData[] = raw.map((d: any, i: number) => {
           const prev = i > 0 ? raw[i - 1].balance : d.balance;
           const velocity = d.balance - prev;
-          const time = new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const time = new Date(d.timestamp).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
           return {
             time,
             pnl: d.balance,
-            velocity
+            velocity,
           };
         });
 
@@ -109,9 +114,8 @@ const PnLChart: React.FC = () => {
         const diff = last.pnl - startPrincipal;
         setPercent(((diff / startPrincipal) * 100).toFixed(2));
         setLoading(false);
-
       } catch (e) {
-        console.error("PnL Fetch Error:", e);
+        console.error('PnL Fetch Error:', e);
         setLoading(false);
       }
     };
@@ -122,7 +126,11 @@ const PnLChart: React.FC = () => {
   }, []);
 
   if (loading && data.length === 0) {
-    return <div className="h-full w-full flex items-center justify-center text-xs text-gray-500 font-mono animate-pulse">ACQUIRING FEED...</div>;
+    return (
+      <div className="h-full w-full flex items-center justify-center text-xs text-gray-500 font-mono animate-pulse">
+        ACQUIRING FEED...
+      </div>
+    );
   }
 
   return (
@@ -141,8 +149,11 @@ const PnLChart: React.FC = () => {
             <span className="text-3xl font-black text-white font-tech tracking-tighter drop-shadow-[0_0_10px_rgba(16,185,129,0.5)]">
               ${currentPnL.toFixed(2)}
             </span>
-            <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded border border-white/10 ${Number(percent) >= 0 ? 'text-emerald-400 bg-emerald-900/20' : 'text-red-400 bg-red-900/20'}`}>
-              {Number(percent) >= 0 ? '+' : ''}{percent}%
+            <span
+              className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded border border-white/10 ${Number(percent) >= 0 ? 'text-emerald-400 bg-emerald-900/20' : 'text-red-400 bg-red-900/20'}`}
+            >
+              {Number(percent) >= 0 ? '+' : ''}
+              {percent}%
             </span>
           </div>
         </div>
@@ -166,7 +177,10 @@ const PnLChart: React.FC = () => {
       </div>
 
       {/* Chart Container */}
-      <div className="flex-1 w-full min-h-[200px] relative z-10 -ml-2" style={{ minHeight: '200px' }}>
+      <div
+        className="flex-1 w-full min-h-[200px] relative z-10 -ml-2"
+        style={{ minHeight: '200px' }}
+      >
         <ResponsiveContainer width="100%" height="100%" minHeight={200}>
           <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
@@ -198,18 +212,28 @@ const PnLChart: React.FC = () => {
             {/* Hide Y Axis but keep scale */}
             <YAxis domain={['dataMin - 5', 'dataMax + 5']} hide />
 
-            <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#333', strokeWidth: 1, strokeDasharray: '4 4' }} />
+            <Tooltip
+              content={<CustomTooltip />}
+              cursor={{ stroke: '#333', strokeWidth: 1, strokeDasharray: '4 4' }}
+            />
 
             {/* The "Floor" (Principal) */}
-            <ReferenceLine y={startPrincipal} stroke="#333" strokeDasharray="5 5" strokeWidth={1} label={{ position: 'right', value: 'PRINCIPAL', fill: '#444', fontSize: 8, fontFamily: 'monospace' }} />
+            <ReferenceLine
+              y={startPrincipal}
+              stroke="#333"
+              strokeDasharray="5 5"
+              strokeWidth={1}
+              label={{
+                position: 'right',
+                value: 'PRINCIPAL',
+                fill: '#444',
+                fontSize: 8,
+                fontFamily: 'monospace',
+              }}
+            />
 
             {/* The Area Glow */}
-            <Area
-              type="monotone"
-              dataKey="pnl"
-              stroke="none"
-              fill="url(#cyberGradient)"
-            />
+            <Area type="monotone" dataKey="pnl" stroke="none" fill="url(#cyberGradient)" />
 
             {/* The Sharp Line */}
             <Line

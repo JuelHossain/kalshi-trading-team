@@ -1,0 +1,16 @@
+node_modules
+dist
+build
+coverage
+*.min.js
+*.log
+.DS_Store
+.vscode
+.idea
+*.lock
+package-lock.json
+yarn.lock
+engine/
+legacy/
+logs/
+ecosystem.config.cjs

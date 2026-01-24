@@ -100,7 +100,7 @@ class SensesAgent(BaseAgent):
             if len(filtered) == 0 and len(markets) > 0:
                 await self.log("WARNING: All Kalshi markets filtered out due to low liquidity", level="WARN")
             elif len(markets) == 0:
-                await self.log("ERROR: No active markets returned from Kalshi API - possible API issue", level="ERROR")
+                await self.log("WARNING: No active markets returned from Kalshi API - markets may be closed or API issue", level="WARN")
             return filtered
         except Exception as e:
             await self.log(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
@@ -209,10 +209,7 @@ class SensesAgent(BaseAgent):
                 # Fetch Kalshi markets
                 markets = await self.fetch_kalshi_markets()
                 if len(markets) == 0:
-                    await self.log("ERROR: Scanned 0 Kalshi markets - agent cannot function without market data", level="ERROR")
-                    await self.bus.publish("SYSTEM_KILL", {"reason": "No Kalshi markets available - cannot proceed"}, self.name)
-                    await asyncio.sleep(10)  # Wait before retry
-                    continue
+                    await self.log("WARNING: Scanned 0 Kalshi markets - will retry in next scan cycle", level="WARN")
                 else:
                     await self.log(f"Scanned {len(markets)} Kalshi markets.")
 
