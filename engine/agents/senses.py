@@ -99,7 +99,8 @@ class SensesAgent(BaseAgent):
             markets = await self.kalshi_client.get_active_markets()
             await self.log(f"DEBUG: Raw Kalshi API response received: {len(markets) if markets else 0} markets", level="INFO")
             if markets and len(markets) > 0:
-                await self.log(f"DEBUG: Sample market keys: {list(markets[0].keys()) if markets[0] else 'None'}", level="INFO")
+                sample_market = markets[0]
+                await self.log(f"DEBUG: Sample market - ID: {sample_market.get('id', 'N/A')}, Title: {sample_market.get('title', 'N/A')[:50]}...", level="INFO")
             if markets is None:
                 await self.log(
                     "ERROR: Kalshi API request failed - check network and credentials",
