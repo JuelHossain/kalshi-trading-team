@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CONFIG } from '../config';
 
-const BACKEND_URL = `http://${window.location.hostname}:3001`;
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || `http://${window.location.hostname}:3001`;
 
 export const useAuth = (addLog: (msg: string, id: number, level: string) => void, isPaperTrading: boolean) => {
     // Fallback demo credentials if none provided in CONFIG
