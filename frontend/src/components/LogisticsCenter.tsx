@@ -52,11 +52,11 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
               </span>
             </div>
 
-            <div className="space-y-3 flex-1">
+            <div className="space-y-3">
               <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
                 Opportunity Queue ({opportunityQueue.length})
               </div>
-               <div className="max-h-full overflow-y-auto space-y-2 flex-1">
+               <div className="max-h-64 overflow-y-auto space-y-2">
                 {opportunityQueue.length === 0 ? (
                   <div className="text-xs text-gray-500 font-mono italic p-3 bg-black/20 rounded-lg">
                     No opportunities queued
@@ -102,7 +102,7 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
               </span>
             </div>
 
-            <div className="space-y-3 flex-1">
+            <div className="space-y-3">
               <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
                 Brain Status
               </div>
@@ -147,11 +147,11 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
               </span>
             </div>
 
-            <div className="space-y-3 flex-1">
+            <div className="space-y-3">
               <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
                 Execution Queue ({executionQueue.length})
               </div>
-               <div className="max-h-full overflow-y-auto space-y-2 flex-1">
+               <div className="max-h-64 overflow-y-auto space-y-2">
                 {executionQueue.length === 0 ? (
                   <div className="text-xs text-gray-500 font-mono italic p-3 bg-black/20 rounded-lg">
                     No executions queued

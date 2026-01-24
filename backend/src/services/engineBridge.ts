@@ -1,9 +1,9 @@
 import { CONFIG } from '../../config';
 import { authenticateWithKeys, isAuthenticated } from '../services/kalshiService';
-import { startSentinel, auditCodebase } from '../agents/exports';
+import { startSentinel, auditCodebase } from '../agents/agent-14-qa-chaos';
 import { SSEManager, SystemState } from '../middleware/sse';
 import { StateManager } from './stateManager';
-import { runCommitteeDebate } from '../agents/exports';
+import { runCommitteeDebate } from '../agents/agent-4-analyst';
 
 export class EngineBridge {
   private sseManager: SSEManager;

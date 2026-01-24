@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { SSEManager } from '../middleware/sse';
 import { StateManager } from '../services/stateManager';
 import { EngineBridge } from '../services/engineBridge';
-import { runCommitteeDebate } from '../agents/exports';
+import { runCommitteeDebate } from '../agents/agent-4-analyst';
 import { getPnLHistory, getDailyPnL } from '../services/dbService';
 import { CONFIG } from '../../config';
 
