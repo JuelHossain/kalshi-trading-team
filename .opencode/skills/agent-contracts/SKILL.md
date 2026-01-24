@@ -1,4 +1,7 @@
-# SKILL-AGENT-CONTRACTS.md - Agent Contract & Service Boundaries
+---
+name: agent-contracts
+description: Agent Contract & Service Boundaries for clean inter-agent communication
+---
 
 ## Overview
 This skill enforces the Agent Contract & Service Boundaries pillar, ensuring clean decoupled communication and validation across all agents.

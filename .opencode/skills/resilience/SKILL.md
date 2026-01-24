@@ -1,4 +1,7 @@
-# SKILL-RESILIENCE.md - Resilience & Scalability
+---
+name: resilience
+description: Resilience & Scalability practices for system reliability and efficiency
+---
 
 ## Overview
 This skill enforces the Resilience & Scalability pillar, ensuring robust operation and efficient resource usage.

@@ -1,4 +1,7 @@
-# SKILL-GIT-WORKFLOW.md - Engineering & Git Workflow
+---
+name: git-workflow
+description: Engineering & Git Workflow practices for version control and development
+---
 
 ## Overview
 This skill enforces the Engineering & Git Workflow pillar, ensuring clean version control and proper development practices.

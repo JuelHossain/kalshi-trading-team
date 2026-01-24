@@ -1,4 +1,7 @@
-# SKILL-SAFETY-SECURITY.md - Safety & Operational Security
+---
+name: safety-security
+description: Safety & Operational Security protocols for trading system
+---
 
 ## Overview
 This skill enforces the Safety & Operational Security pillar of the Kalshi Trading Team constitution. It ensures all trading operations prioritize risk management and credential protection.

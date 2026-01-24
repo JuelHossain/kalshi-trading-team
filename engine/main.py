@@ -254,6 +254,11 @@ class GhostEngine:
 
         finally:
             self.is_processing = False
+            await self.bus.publish(
+                "SYSTEM_STATE",
+                {"isProcessing": False, "activeAgentId": None},
+                "GHOST",
+            )
 
     async def shutdown(self):
         print(f"\n{Fore.RED}[GHOST] SHUTDOWN PROTOCOL INITIATED.{Style.RESET_ALL}")
