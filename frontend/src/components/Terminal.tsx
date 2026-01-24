@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useMemo } from 'react';
 import {
   LogEntry,
   TimelineEvent,
@@ -99,6 +100,7 @@ const LogLine: React.FC<{ log: LogEntry }> = ({ log }) => {
       </span>
       <span className="break-words flex-1 group-hover:text-gray-200">
         {log.message.replace(/^Agent \d+: /, '')}
+        {log.count > 1 && <span className="text-gray-500"> ({log.count}x)</span>}
       </span>
     </div>
   );
@@ -268,6 +270,32 @@ const Terminal: React.FC<TerminalProps> = ({ timelineEvents }) => {
   const lastEvent = cycleEvents[cycleEvents.length - 1];
   const currentPhaseId = lastEvent?.phaseId || 0;
 
+  // Compress consecutive identical logs
+  const compressLogs = (events: TimelineEvent[]) => {
+    const compressed = [];
+    let lastLog = null;
+    for (const event of events) {
+      if (event.type === 'LOG') {
+        const log = event.data as LogEntry;
+        if (lastLog && lastLog.message === log.message && lastLog.level === log.level) {
+          lastLog.count = (lastLog.count || 1) + 1;
+          lastLog.timestamp = log.timestamp;
+        } else {
+          if (lastLog) compressed.push(lastLog.event);
+          lastLog = { message: log.message, level: log.level, timestamp: log.timestamp, count: 1, event };
+        }
+      } else {
+        if (lastLog) {
+          compressed.push(lastLog.event);
+          lastLog = null;
+        }
+        compressed.push(event);
+      }
+    }
+    if (lastLog) compressed.push(lastLog.event);
+    return compressed;
+  };
+
   // Group into phases
   const eventsByPhase = useMemo(() => {
     const groups: Record<number, TimelineEvent[]> = {};
@@ -277,6 +305,12 @@ const Terminal: React.FC<TerminalProps> = ({ timelineEvents }) => {
       if (!groups[e.phaseId]) groups[e.phaseId] = [];
       groups[e.phaseId].push(e);
     });
+
+    // Compress logs in each phase
+    for (const phaseId in groups) {
+      groups[phaseId] = compressLogs(groups[phaseId]);
+    }
+
     return groups;
   }, [cycleEvents]);
 
