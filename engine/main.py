@@ -181,10 +181,10 @@ class GhostEngine:
             return False
 
         # Maintenance window
-        now = datetime.now()
-        if now.hour == 23 and now.minute >= 55:
-            print(f"{Fore.YELLOW}[GHOST] MAINTENANCE WINDOW. STANDING DOWN.{Style.RESET_ALL}")
-            return False
+        # now = datetime.now()
+        # if now.hour == 23 and now.minute >= 55:
+        #     print(f"{Fore.YELLOW}[GHOST] MAINTENANCE WINDOW. STANDING DOWN.{Style.RESET_ALL}")
+        #     return False
 
         return True
 
