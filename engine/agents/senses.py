@@ -72,7 +72,7 @@ class SensesAgent(BaseAgent):
                 for opp in opportunities:
                     await self.queue_opportunity(opp)
             else:
-                await self.log("No significant value gaps detected.")
+                await self.log("WARNING: No significant value gaps detected", level="WARN")
 
             # 4. Signal Brain if opportunities exist
             if self.opportunity_queue:
@@ -226,8 +226,8 @@ class SensesAgent(BaseAgent):
                 markets = await self.fetch_kalshi_markets()
                 if len(markets) == 0:
                     await self.log(
-                        "WARNING: Scanned 0 Kalshi markets - will retry in next scan cycle",
-                        level="WARN",
+                        "ERROR: Scanned 0 Kalshi markets - API not responding with market data",
+                        level="ERROR",
                     )
                 else:
                     await self.log(f"Scanned {len(markets)} Kalshi markets.")
@@ -244,7 +244,7 @@ class SensesAgent(BaseAgent):
                     await self.queue_opportunity(opp_queue, opp)
 
                 if not opportunities:
-                    await self.log("No significant value gaps detected.")
+                    await self.log("WARNING: No significant value gaps detected", level="WARN")
 
             except Exception as e:
                 await self.log(f"Surveillance error: {str(e)[:100]}", level="ERROR")
