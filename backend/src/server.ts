@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import http from 'http';
 import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
 import { LogEntry } from '@shared/types';
 import { CONFIG } from '../config';
 import { authenticateWithKeys, isAuthenticated } from '../services/kalshiService';
@@ -41,6 +42,30 @@ interface SSEClient {
 
 // SSE Clients
 let clients: SSEClient[] = [];
+
+// JWT Auth
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
+
+const authenticateToken = (req: Request, res: Response, next: Function) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.sendStatus(401);
+    jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+        if (err) return res.sendStatus(403);
+        (req as any).user = user;
+        next();
+    });
+};
+
+app.post('/api/login', (req: Request, res: Response) => {
+    const { username, password } = req.body;
+    if (username === 'admin' && password === 'password') {
+        const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '1h' });
+        res.json({ token });
+    } else {
+        res.status(401).json({ error: 'Invalid credentials' });
+    }
+});
 
 // Auto-Authentication on Startup
 const initializeBackend = async () => {
@@ -228,7 +253,7 @@ app.post('/api/analyze', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/api/auth', async (req: Request, res: Response) => {
+app.post('/api/auth', authenticateToken, async (req: Request, res: Response) => {
     const { keyId, privateKey, isPaperTrading, useSystemAuth } = req.body;
     try {
         if (useSystemAuth) {
@@ -256,7 +281,7 @@ app.post('/api/auth', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/api/run', async (req: Request, res: Response) => {
+app.post('/api/run', authenticateToken, async (req: Request, res: Response) => {
     if (systemState.isProcessing) {
         return res.status(400).json({ error: 'System busy. Cycle already in progress.' });
     }
@@ -311,7 +336,7 @@ app.post('/api/run', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/api/reset', (req: Request, res: Response) => {
+app.post('/api/reset', authenticateToken, (req: Request, res: Response) => {
     // Forcefully reset system state
     systemState.isProcessing = false;
     systemState.activeAgentId = null;
@@ -321,7 +346,7 @@ app.post('/api/reset', (req: Request, res: Response) => {
     res.json({ message: 'System reset successfully' });
 });
 
-app.post('/api/kill-switch', async (req: Request, res: Response) => {
+app.post('/api/kill-switch', authenticateToken, async (req: Request, res: Response) => {
     console.log("[BRIDGE] 🚨 KILL SWITCH ACTIVATED 🚨");
 
     // 1. Reset Backend State
