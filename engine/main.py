@@ -331,14 +331,31 @@ class GhostEngine:
         await self.bus.subscribe("VAULT_UPDATE", self._broadcast_to_sse)
         await self.bus.subscribe("SIM_RESULT", self._broadcast_to_sse)
         await self.bus.subscribe("SYSTEM_STATE", self._broadcast_to_sse)
+        await self.bus.subscribe("SYSTEM_KILL", self._handle_kill)
         
+    async def _handle_kill(self, message):
+        """Handle system kill events."""
+        payload = message.payload
+        reason = payload.get('reason', 'Unknown')
+        print(f"{Fore.RED}[GHOST] SYSTEM KILL TRIGGERED: {reason}{Style.RESET_ALL}")
+        self.manual_kill_switch = True
+        await self.bus.publish("SYSTEM_LOG", {
+            "id": f"log-{int(time.time() * 1000)}",
+            "timestamp": datetime.now().isoformat(),
+            "agentId": 0,
+            "cycleId": self.cycle_count,
+            "phaseId": 0,
+            "level": "ERROR",
+            "message": f"SYSTEM HALTED: {reason}"
+        }, "SYSTEM")
+
     async def _broadcast_to_sse(self, message):
         """Broadcast bus events to all SSE clients."""
         event_type = message.topic
         payload = message.payload
-        
+
         formatted_event = None
-        
+
         # 4-Agent Phase Mapping
         AGENT_TO_PHASE = {
             1: 1,  # SOUL

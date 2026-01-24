@@ -31,5 +31,11 @@ export const CONFIG = {
         ENABLED: true,
         START_HOUR: 23,
         START_MINUTE: 55
-    }
+    },
+
+    // App Constants
+    DEFAULT_DEBATE_PRICE: 50,
+    LOG_LIMIT: 499,
+    HEARTBEAT_INTERVAL: 15000,
+    ENGINE_RETRY_DELAY: 5000
 };

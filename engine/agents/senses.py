@@ -210,6 +210,9 @@ class SensesAgent(BaseAgent):
                 markets = await self.fetch_kalshi_markets()
                 if len(markets) == 0:
                     await self.log("ERROR: Scanned 0 Kalshi markets - agent cannot function without market data", level="ERROR")
+                    await self.bus.publish("SYSTEM_KILL", {"reason": "No Kalshi markets available - cannot proceed"}, self.name)
+                    await asyncio.sleep(10)  # Wait before retry
+                    continue
                 else:
                     await self.log(f"Scanned {len(markets)} Kalshi markets.")
 
