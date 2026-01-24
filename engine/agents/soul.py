@@ -54,8 +54,8 @@ class SoulAgent(BaseAgent):
         await self.bus.subscribe("CYCLE_START", self.on_cycle_start)
         await self.bus.subscribe("TRADE_RESULT", self.on_trade_result)
 
-    async def on_cycle_start(self, message):
-        """Pre-flight sequence for every cycle"""
+    async def run_pre_flight(self):
+        """Pre-flight sequence"""
         await self.log("Initiating pre-flight sequence...")
         
         # 1. Safety Check - Hard Floor

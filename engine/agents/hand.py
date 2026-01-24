@@ -18,6 +18,7 @@ from typing import Dict, Any, Optional
 from agents.base import BaseAgent
 from core.bus import EventBus
 from core.vault import RecursiveVault
+from core.db import log_to_db
 
 
 class HandAgent(BaseAgent):
@@ -186,6 +187,42 @@ class HandAgent(BaseAgent):
                 await self.log("Push notification sent.")
         except Exception as e:
             await self.log(f"Notification failed: {str(e)[:30]}", level="ERROR")
+
+    async def run_execution(self, exec_queue: asyncio.Queue):
+        """Execute trades from execution queue."""
+        while True:
+            try:
+                # Get next execution
+                execution = await exec_queue.get()
+                await self.log(f"Executing: {execution['signal_id']} | Size: ${execution['suggested_size']}")
+
+                # Placeholder: extract ticker from signal_id or add ticker to execution
+                ticker = execution.get('ticker', 'PLACEHOLDER')  # Need to fix in brain
+                price = 50  # Placeholder, should get from orderbook
+                stake = execution['suggested_size']
+
+                result = await self.execute_order(ticker, price, stake)
+
+                if result.get('success'):
+                    await log_to_db("trade_log", {
+                        "signal_id": execution['signal_id'],
+                        "ticker": ticker,
+                        "stake": stake,
+                        "result": result
+                    })
+                    await self.send_notification(ticker, stake, result)
+                    await self.log(f"Trade executed: {ticker} | Stake: ${stake}")
+                else:
+                    await self.log(f"Trade failed: {result.get('error')}", level="ERROR")
+
+            except Exception as e:
+                await self.log(f"Execution error: {str(e)[:100]}", level="ERROR")
+                await asyncio.sleep(1)
+
+            await asyncio.sleep(1)
+
+    async def on_tick(self, payload: Dict[str, Any]):
+        pass  # Hand is event-driven
 
     async def on_tick(self, payload: Dict[str, Any]):
         """Periodic vault state broadcast"""

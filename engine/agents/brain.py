@@ -16,6 +16,8 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 from agents.base import BaseAgent
 from core.bus import EventBus
+from core.db import log_to_db
+import uuid
 
 try:
     import google.generativeai as genai
@@ -183,18 +185,63 @@ Respond in JSON format:
             "variance": variance
         }
 
-    async def queue_for_execution(self, target: Dict):
-        """Push approved target to execution queue for Hand"""
-        self.execution_queue.append(target)
+    async def queue_for_execution(self, exec_queue: asyncio.Queue, target: Dict):
+        """Push approved target to execution queue and Supabase"""
+        execution_package = {
+            "signal_id": str(uuid.uuid4()),
+            "ticker": target.get('ticker', ''),
+            "confidence": target.get('confidence', 0),
+            "monte_carlo_ev": target.get('ev', 0),
+            "reasoning": target.get('reasoning', ''),
+            "suggested_size": target.get('suggested_size', 0),
+            "status": "READY_TO_STRIKE"
+        }
+        await exec_queue.put(execution_package)
+        await log_to_db("execution_queue", execution_package)
         await self.bus.publish("EXECUTION_READY", {
-            "ticker": target.get('ticker'),
-            "confidence": target.get('confidence'),
-            "ev": target.get('ev')
+            "signal_id": execution_package["signal_id"],
+            "confidence": execution_package["confidence"],
+            "ev": execution_package["monte_carlo_ev"]
         }, self.name)
 
     def pop_execution_target(self) -> Optional[Dict]:
         """Get next target for Hand to execute"""
         return self.execution_queue.pop(0) if self.execution_queue else None
+
+    async def run_intelligence(self, opp_queue: asyncio.Queue, exec_queue: asyncio.Queue):
+        """Process opportunities into execution decisions."""
+        while True:
+            try:
+                # Get next opportunity
+                opportunity = await opp_queue.get()
+                await self.log(f"Processing opportunity: {opportunity['market_id']}")
+
+                # Run debate
+                debate_result = await self.run_committee_debate(opportunity)
+                confidence = debate_result.get('confidence', 0)
+
+                # Run simulation
+                sim_result = await self.run_monte_carlo_simulation(opportunity, debate_result)
+
+                target = {
+                    "ticker": opportunity['market_id'],
+                    "confidence": confidence,
+                    "ev": sim_result.get('ev', 0),
+                    "reasoning": debate_result.get('reasoning', ''),
+                    "suggested_size": self.calculate_kelly_stake(confidence, sim_result.get('ev', 0))
+                }
+
+                if confidence > 85:
+                    await self.queue_for_execution(exec_queue, target)
+                    await self.log(f"Approved for execution: {target['ticker']} | Conf: {confidence}%")
+                else:
+                    await self.log(f"Rejected: {target['ticker']} | Conf: {confidence}% too low")
+
+            except Exception as e:
+                await self.log(f"Intelligence error: {str(e)[:100]}", level="ERROR")
+                await asyncio.sleep(1)
+
+            await asyncio.sleep(1)  # Process frequently
 
     async def on_tick(self, payload: Dict[str, Any]):
         pass  # Brain is event-driven

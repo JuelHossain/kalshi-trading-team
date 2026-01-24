@@ -53,6 +53,43 @@ class GhostEngine:
         self.is_processing: bool = False
         self.manual_kill_switch: bool = False
         self.sse_clients: List[asyncio.Queue] = []
+
+        # Double-Entry Queues
+        self.opp_queue: asyncio.Queue = asyncio.Queue()
+        self.exec_queue: asyncio.Queue = asyncio.Queue()
+
+    async def run_soul(self):
+        """SOUL: Pre-flight and oversight."""
+        while self.running:
+            if not self.manual_kill_switch:
+                await self.soul.run_pre_flight()
+            await asyncio.sleep(60)  # Check every minute
+
+    async def run_senses(self):
+        """SENSES: Continuous scanning and queueing opportunities."""
+        while self.running:
+            if not self.manual_kill_switch:
+                await self.senses.run_scout(self.opp_queue)
+            await asyncio.sleep(10)  # Scan every 10 seconds
+
+    async def run_brain(self):
+        """BRAIN: Process opportunities into executions."""
+        while self.running:
+            if not self.manual_kill_switch:
+                await self.brain.run_intelligence(self.opp_queue, self.exec_queue)
+            await asyncio.sleep(1)  # Check queue frequently
+
+    async def run_hand(self):
+        """HAND: Execute trades from queue."""
+        while self.running:
+            if not self.manual_kill_switch:
+                await self.hand.run_execution(self.exec_queue)
+            await asyncio.sleep(1)  # Check queue frequently
+
+    async def keep_alive(self):
+        """Keep the event loop alive."""
+        while self.running:
+            await asyncio.sleep(1)
         
         # Mega-Agent references for inter-agent communication
         self.soul: Optional[SoulAgent] = None
@@ -340,12 +377,18 @@ class GhostEngine:
                     pass
         
     async def run(self):
-        """Main event loop."""
+        """Main event loop with continuous queue processing."""
         await self.initialize_system()
         await self.start_http_server()
-        
-        while self.running:
-            await asyncio.sleep(1)
+
+        # Continuous agent operations with queues
+        await asyncio.gather(
+            self.run_soul(),
+            self.run_senses(),
+            self.run_brain(),
+            self.run_hand(),
+            self.keep_alive()
+        )
         
     def start(self):
         loop = asyncio.new_event_loop()

@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from agents.base import BaseAgent
 from core.bus import EventBus
+from core.db import log_to_db
 
 # RapidAPI Configuration
 RAPIDAPI_KEY = os.environ.get("RAPID_API_KEY", "")
@@ -165,10 +166,19 @@ class SensesAgent(BaseAgent):
         opportunities.sort(key=lambda x: x['value_gap'], reverse=True)
         return opportunities[:5]  # Top 5 only
 
-    async def queue_opportunity(self, opportunity: Dict):
-        """Add opportunity to queue for Brain to process"""
-        self.opportunity_queue.append(opportunity)
-        await self.log(f"Queued: {opportunity['ticker']} | Gap: {opportunity['value_gap']*100:.1f}%")
+    async def queue_opportunity(self, opp_queue: asyncio.Queue, opportunity: Dict):
+        """Add opportunity to queue and Supabase"""
+        signal_package = {
+            "market_id": opportunity['ticker'],
+            "source": opportunity.get('source', 'Kalshi'),
+            "gap_delta": opportunity['value_gap'] * 100,  # As percentage
+            "pinnacle_odds": opportunity['vegas_prob'],
+            "kalshi_price": opportunity['kalshi_price'],
+            "status": "QUEUED"
+        }
+        await opp_queue.put(signal_package)
+        await log_to_db("opportunity_queue", signal_package)
+        await self.log(f"Queued: {signal_package['market_id']} | Gap: {signal_package['gap_delta']:.1f}%")
 
     def pop_opportunity(self) -> Optional[Dict]:
         """Get next opportunity for Brain"""
@@ -181,6 +191,35 @@ class SensesAgent(BaseAgent):
             {"ticker": "NFL-CHIEFS-WIN", "yes_price": 52, "volume": 8000},
             {"ticker": "WEATHER-RAIN-NYC", "yes_price": 30, "volume": 3000},
         ]
+
+    async def run_scout(self, opp_queue: asyncio.Queue):
+        """Continuous scanning and queueing opportunities."""
+        while True:
+            try:
+                await self.log("Initiating passive market scan (zero token cost)...")
+
+                # Fetch Kalshi markets
+                markets = await self.fetch_kalshi_markets()
+                await self.log(f"Scanned {len(markets)} Kalshi markets.")
+
+                # Sync Vegas odds
+                await self.sync_vegas_odds()
+
+                # Filter for value gaps
+                opportunities = await self.filter_value_gaps(markets)
+                await self.log(f"Found {len(opportunities)} value gaps.")
+
+                # Queue opportunities
+                for opp in opportunities:
+                    await self.queue_opportunity(opp_queue, opp)
+
+                if not opportunities:
+                    await self.log("No significant value gaps detected.")
+
+            except Exception as e:
+                await self.log(f"Surveillance error: {str(e)[:100]}", level="ERROR")
+
+            await asyncio.sleep(10)  # Scan every 10 seconds
 
     async def on_tick(self, payload: Dict[str, Any]):
         pass  # Surveillance is event-driven, not tick-based
