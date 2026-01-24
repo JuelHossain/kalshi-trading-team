@@ -93,9 +93,17 @@ class SensesAgent(BaseAgent):
         try:
             # Use shared Kalshi client
             markets = await self.kalshi_client.get_active_markets()
-            return [m for m in markets if m.get('volume', 0) >= self.MIN_LIQUIDITY]
+            if markets is None:
+                await self.log("ERROR: Kalshi API request failed - check network and credentials", level="ERROR")
+                return []
+            filtered = [m for m in markets if m.get('volume', 0) >= self.MIN_LIQUIDITY]
+            if len(filtered) == 0 and len(markets) > 0:
+                await self.log("WARNING: All Kalshi markets filtered out due to low liquidity", level="WARN")
+            elif len(markets) == 0:
+                await self.log("ERROR: No active markets returned from Kalshi API - possible API issue", level="ERROR")
+            return filtered
         except Exception as e:
-            await self.log(f"Kalshi fetch error: {str(e)[:50]}", level="ERROR")
+            await self.log(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
             return []
 
     async def sync_vegas_odds(self):
@@ -200,7 +208,10 @@ class SensesAgent(BaseAgent):
 
                 # Fetch Kalshi markets
                 markets = await self.fetch_kalshi_markets()
-                await self.log(f"Scanned {len(markets)} Kalshi markets.")
+                if len(markets) == 0:
+                    await self.log("ERROR: Scanned 0 Kalshi markets - agent cannot function without market data", level="ERROR")
+                else:
+                    await self.log(f"Scanned {len(markets)} Kalshi markets.")
 
                 # Sync Vegas odds
                 await self.sync_vegas_odds()

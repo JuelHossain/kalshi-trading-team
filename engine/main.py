@@ -62,7 +62,8 @@ class GhostEngine:
         """SOUL: Pre-flight and oversight."""
         while self.running:
             if not self.manual_kill_switch:
-                await self.soul.run_pre_flight()
+                message = {"cycle_id": 1, "paper_trading": True}
+                await self.soul.on_cycle_start(message)
             await asyncio.sleep(60)  # Check every minute
 
     async def run_senses(self):
