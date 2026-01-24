@@ -5,7 +5,7 @@ interface MarketAnalysisProps {
   onLog?: (message: string, agentId: number, level: LogEntry['level']) => void;
 }
 
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = ''; // Relative path handled by proxy
 
 const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
   const [query, setQuery] = useState('');

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CONFIG } from '../config';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || `http://${window.location.hostname}:3001`;
+const BACKEND_URL = ''; // Use relative path (proxied by Vite)
 
 export const useAuth = (
   addLog: (msg: string, id: number, level: string) => void,
@@ -13,9 +13,7 @@ export const useAuth = (
     '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAyDemoKeyForTestingPurposesOnly123456789ABCDEFGH\n-----END RSA PRIVATE KEY-----';
 
   const [apiKeyId, setApiKeyId] = useState(CONFIG.KALSHI.DEMO_KEY_ID || FALLBACK_DEMO_KEY);
-  const [apiSecret, setApiSecret] = useState(
-    CONFIG.KALSHI.DEMO_PRIVATE_KEY || FALLBACK_DEMO_SECRET
-  );
+  const [apiSecret, setApiSecret] = useState(FALLBACK_DEMO_SECRET);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);

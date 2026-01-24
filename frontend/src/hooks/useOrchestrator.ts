@@ -8,7 +8,7 @@ import {
 } from '@shared/types';
 import { useState, useEffect, useRef } from 'react';
 
-const BACKEND_URL = `http://${window.location.hostname}:3002`;
+const BACKEND_URL = ''; // Relative path handled by Vite proxy
 const PLAYBACK_SPEED_MS = 250;
 
 // Helper to determine phase for data events
@@ -49,7 +49,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
   const eventBuffer = useRef<any[]>([]);
 
   useEffect(() => {
-    const eventSource = new EventSource(`${BACKEND_URL}/stream`);
+    const eventSource = new EventSource(`${BACKEND_URL}/api/stream`);
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -154,7 +154,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
   const runOrchestrator = async () => {
     setIsProcessing(true);
     try {
-      await fetch(`${BACKEND_URL}/trigger`, {
+      await fetch(`${BACKEND_URL}/api/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isPaperTrading }),
@@ -167,7 +167,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
 
   const handleKillSwitch = async () => {
     try {
-      await fetch(`${BACKEND_URL}/kill-switch`, { method: 'POST' });
+      await fetch(`${BACKEND_URL}/api/kill-switch`, { method: 'POST' });
     } catch (e) {
       console.error('Kill switch activation failed', e);
     }

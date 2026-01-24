@@ -281,7 +281,13 @@ const Terminal: React.FC<TerminalProps> = ({ timelineEvents }) => {
           lastLog.timestamp = log.timestamp;
         } else {
           if (lastLog) compressed.push(lastLog.event);
-          lastLog = { message: log.message, level: log.level, timestamp: log.timestamp, count: 1, event };
+          lastLog = {
+            message: log.message,
+            level: log.level,
+            timestamp: log.timestamp,
+            count: 1,
+            event,
+          };
         }
       } else {
         if (lastLog) {

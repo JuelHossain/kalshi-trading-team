@@ -49,7 +49,7 @@ const PnLHeatmap: React.FC = () => {
   const fetchHeatmapData = async () => {
     setLoading(true);
     try {
-      const url = `http://${window.location.hostname}:3001/api/pnl/heatmap`;
+      const url = '/api/pnl/heatmap';
       const res = await fetch(url);
       if (!res.ok) throw new Error('API Failure');
       const raw = await res.json();

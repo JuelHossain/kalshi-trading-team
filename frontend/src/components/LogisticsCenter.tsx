@@ -39,7 +39,9 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
             <div className="flex justify-between items-start mb-6">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <h4 className="text-xs font-bold text-green-400 uppercase tracking-wider">Scout Monitor</h4>
+                <h4 className="text-xs font-bold text-green-400 uppercase tracking-wider">
+                  Scout Monitor
+                </h4>
               </div>
               <span
                 className={`text-xs uppercase px-3 py-1 rounded-full font-bold border ${
@@ -56,7 +58,7 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
               <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
                 Opportunity Queue ({opportunityQueue.length})
               </div>
-               <div className="max-h-64 overflow-y-auto space-y-2">
+              <div className="max-h-64 overflow-y-auto space-y-2">
                 {opportunityQueue.length === 0 ? (
                   <div className="text-xs text-gray-500 font-mono italic p-3 bg-black/20 rounded-lg">
                     No opportunities queued
@@ -89,7 +91,9 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
             <div className="flex justify-between items-start mb-6">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 bg-purple-500 rounded-full animate-pulse"></span>
-                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider">Intelligence Hub</h4>
+                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider">
+                  Intelligence Hub
+                </h4>
               </div>
               <span
                 className={`text-xs uppercase px-3 py-1 rounded-full font-bold border ${
@@ -116,8 +120,14 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
                   <div className="flex items-center gap-2 mt-3">
                     <div className="flex space-x-1">
                       <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce"></div>
-                      <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      <div
+                        className="w-1 h-1 bg-purple-500 rounded-full animate-bounce"
+                        style={{ animationDelay: '0.1s' }}
+                      ></div>
+                      <div
+                        className="w-1 h-1 bg-purple-500 rounded-full animate-bounce"
+                        style={{ animationDelay: '0.2s' }}
+                      ></div>
                     </div>
                     <span className="text-xs text-purple-300">Processing...</span>
                   </div>
@@ -134,7 +144,9 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
             <div className="flex justify-between items-start mb-6">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider">Sniper Console</h4>
+                <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider">
+                  Sniper Console
+                </h4>
               </div>
               <span
                 className={`text-xs uppercase px-3 py-1 rounded-full font-bold border ${
@@ -151,7 +163,7 @@ const LogisticsCenter: React.FC<LogisticsCenterProps> = ({
               <div className="text-xs text-gray-400 uppercase tracking-wider font-semibold">
                 Execution Queue ({executionQueue.length})
               </div>
-               <div className="max-h-64 overflow-y-auto space-y-2">
+              <div className="max-h-64 overflow-y-auto space-y-2">
                 {executionQueue.length === 0 ? (
                   <div className="text-xs text-gray-500 font-mono italic p-3 bg-black/20 rounded-lg">
                     No executions queued

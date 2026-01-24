@@ -56,7 +56,7 @@ export class SSEManager {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
-     if (res.socket) res.socket.setTimeout(0);
+    if (res.socket) res.socket.setTimeout(0);
     res.flushHeaders();
 
     this.addClient(res);

@@ -57,11 +57,14 @@ const getHeaders = (method: string, path: string, body: string = '') => {
   signer.update(payload);
   signer.end();
 
-  const signature = signer.sign({
-    key: session.privateKey,
-    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-    saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST
-  }, 'base64');
+  const signature = signer.sign(
+    {
+      key: session.privateKey,
+      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+    },
+    'base64'
+  );
 
   return {
     'Content-Type': 'application/json',

@@ -58,17 +58,20 @@ class KalshiClient:
         if not self.private_key:
             return {"Content-Type": "application/json"}
 
+        # Fix: Signature requires /trade-api/v2 prefix
+        full_path = f"/trade-api/v2{path}"
         timestamp = str(int(time.time() * 1000))
-        msg = f"{timestamp}{method}{path}{body}"
+        msg = f"{timestamp}{method}{full_path}{body}"
         print(f"[NETWORK] Signing message: {msg}")
 
+        # Fix: Use salt_length=32 (SHA256 digest length) to match Node's RSA_PSS_SALTLEN_DIGEST
         signature_bytes = self.private_key.sign(
             msg.encode(),
-            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=32),
             hashes.SHA256(),
         )
         signature = base64.b64encode(signature_bytes).decode()
-        print(f"[NETWORK] Generated signature: {signature}")
+        # print(f"[NETWORK] Generated signature: {signature}")
 
         return {
             "KALSHI-ACCESS-KEY": self.key_id,
@@ -93,21 +96,18 @@ class KalshiClient:
 
         body_str = json.dumps(json_data) if json_data else ""
         for attempt in range(retries):
+            # Pass original path here, _get_headers now handles the prefix
             headers = self._get_headers(method, path, body_str)
             try:
                 async with session.request(
                     method, url, headers=headers, params=params, json=json_data
                 ) as resp:
-                    print(f"[NETWORK] API Response: {resp.status} for {method} {path}")
                     if resp.status == 200:
                         data = await resp.json()
-                        print(f"[NETWORK] Response data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
                         return data
 
                     if resp.status == 429 or 500 <= resp.status <= 504:
-                        error_text = await resp.text()
-                        print(f"[NETWORK] Error response: {error_text}")
-                        wait = (2**attempt) + (time.time() % 1)  # Exponential backoff + jitter
+                        wait = (2**attempt) + (time.time() % 1)
                         print(
                             f"{Fore.YELLOW}[NETWORK] Attempt {attempt+1} failed ({resp.status}). Retrying in {wait:.2f}s...{Style.RESET_ALL}"
                         )
@@ -116,7 +116,7 @@ class KalshiClient:
 
                     error_text = await resp.text()
                     print(
-                        f"{Fore.RED}[NETWORK] API Error {resp.status}: {error_text}{Style.RESET_ALL}"
+                        f"{Fore.RED}[NETWORK] API Error {resp.status} ({method} {path}): {error_text}{Style.RESET_ALL}"
                     )
                     return None
 
@@ -134,6 +134,14 @@ class KalshiClient:
         params = {"limit": limit, "status": status}
         res = await self.request("GET", path, params=params)
         return res.get("markets", []) if res else []
+
+    async def get_balance(self) -> int:
+        """Fetch current balance. Returns cents."""
+        path = "/portfolio/balance"
+        res = await self.request("GET", path)
+        if res and "balance" in res:
+            return int(res["balance"])
+        return 0
 
     async def get_orderbook(self, ticker: str) -> Optional[Dict]:
         path = f"/markets/{ticker}/orderbook"

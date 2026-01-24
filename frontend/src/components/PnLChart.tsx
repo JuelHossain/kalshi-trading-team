@@ -80,9 +80,8 @@ const PnLChart: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // In a real app, use the backend URL /api/pnl
-        // For dev/preview, we assume proxy or CORS is handled, or use absolute URL
-        const url = `http://${window.location.hostname}:3001/api/pnl`;
+        // Use relative path (proxied by Vite)
+        const url = '/api/pnl';
         const res = await fetch(url);
         if (!res.ok) throw new Error('Failed to fetch');
         const raw = await res.json();

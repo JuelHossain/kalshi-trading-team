@@ -18,3 +18,10 @@ npm-debug.log*
 .idea
 .DS_Store
 *.sw?
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.mypy_cache/
+.pytest_cache/

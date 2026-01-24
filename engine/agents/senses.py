@@ -46,8 +46,10 @@ class SensesAgent(BaseAgent):
         self.is_scanning = True
         await self.log("Initiating passive market scan (zero token cost)...")
 
-        # Run surveillance loop
-        await self.surveillance_loop()
+        # Run surveillance loop continuously
+        while self.is_scanning:
+            await self.surveillance_loop()
+            await asyncio.sleep(10)  # Scan every 10 seconds
 
     async def stop_scan(self, message):
         """Stop scanning at cycle end"""
