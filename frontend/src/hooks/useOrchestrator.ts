@@ -60,6 +60,11 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
                 setCompletedAgents(data.state.completedAgents || []);
             } else {
                 eventBuffer.current.push(data);
+                if (data.type === 'STATE') {
+                    setIsProcessing(data.state.isProcessing);
+                    setActiveAgentId(data.state.activeAgentId);
+                    setCompletedAgents(data.state.completedAgents || []);
+                }
             }
         };
 
@@ -132,6 +137,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     }, [cycleCount]); // Dependency on cycleCount for synthetic events
 
     const runOrchestrator = async () => {
+        setIsProcessing(true);
         try {
             await fetch(`${BACKEND_URL}/api/run`, {
                 method: 'POST',
@@ -140,6 +146,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
             });
         } catch (error) {
             console.error('[Orchestrator] Failed to trigger backend:', error);
+            setIsProcessing(false);
         }
     };
 

@@ -18,7 +18,6 @@ import LogisticsCenter from './components/LogisticsCenter';
 const App: React.FC = () => {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isPaperTrading, setIsPaperTrading] = useState(true);
-    const [showKillConfirm, setShowKillConfirm] = useState(false);
 
     // Queue states for Logistics Center
     const [opportunityQueue, setOpportunityQueue] = useState<any[]>([]);
@@ -137,58 +136,16 @@ const App: React.FC = () => {
                         <div className="h-6 w-px bg-white/10"></div>
 
                         <button
-                            onClick={() => orchestratorProps.runOrchestrator()}
-                            disabled={orchestratorProps.isProcessing}
-                            className={`btn-primary !py-1.5 !px-5 !text-[10px] tracking-widest ${orchestratorProps.isProcessing ? 'opacity-30 cursor-not-allowed grayscale' : 'hover:scale-105 active:scale-95'}`}
+                            onClick={() => orchestratorProps.isProcessing ? orchestratorProps.handleKillSwitch() : orchestratorProps.runOrchestrator()}
+                            className={`btn-primary !py-1.5 !px-5 !text-[10px] tracking-widest ${orchestratorProps.isProcessing ? 'bg-red-500/20 hover:bg-red-500/30 text-red-500 border-red-500/30' : 'hover:scale-105 active:scale-95'}`}
                         >
-                            {orchestratorProps.isProcessing ? 'PROCESS RUNNING' : 'INITIATE CYCLE'}
-                        </button>
-
-                        <button
-                            onClick={() => setShowKillConfirm(true)}
-                            className="flex items-center gap-2 px-4 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 rounded-full transition-all group"
-                        >
-                            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                            <span className="text-[10px] font-bold tracking-widest group-hover:text-red-400">KILL SWITCH</span>
+                            {orchestratorProps.isProcessing ? 'CANCEL CYCLE' : 'INITIATE CYCLE'}
                         </button>
                     </div>
                 </div>
 
                 {/* Kill Switch Modal */}
-                {showKillConfirm && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
-                        <div className="bg-[#0a0a0a] border border-red-500/50 p-8 rounded-2xl max-w-md w-full shadow-[0_0_50px_rgba(239,68,68,0.3)] relative overflow-hidden">
-                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent"></div>
 
-                            <h3 className="text-xl font-bold text-red-500 mb-2 flex items-center gap-3">
-                                <span className="text-2xl">☢️</span> EMERGENCY STOP
-                            </h3>
-                            <p className="text-gray-400 text-sm mb-8 leading-relaxed">
-                                Are you sure you want to activate the <span className="text-red-400 font-bold">KILL SWITCH</span>?
-                                <br /><br />
-                                This will immediately halt all engine operations, cancel pending orders, and lock the vault. This action requires manual reset.
-                            </p>
-
-                            <div className="flex gap-4">
-                                <button
-                                    onClick={() => setShowKillConfirm(false)}
-                                    className="flex-1 py-3 rounded-xl border border-white/10 text-gray-400 hover:bg-white/5 hover:text-white transition-all text-sm font-bold tracking-widest"
-                                >
-                                    ABORT
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        orchestratorProps.handleKillSwitch();
-                                        setShowKillConfirm(false);
-                                    }}
-                                    className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-black transition-all text-sm font-bold tracking-widest shadow-[0_0_20px_rgba(220,38,38,0.4)]"
-                                >
-                                    ACTIVATE
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
 
                 <div className="flex-1 overflow-y-auto no-scrollbar relative z-0 p-6 lg:p-10">
                     <div className="max-w-[1600px] mx-auto h-full">
