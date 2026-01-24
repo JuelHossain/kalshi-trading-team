@@ -134,7 +134,7 @@ class HandAgent(BaseAgent):
             return 0
         
         # Simplified Kelly with 25% fraction (quarter Kelly for safety)
-        kelly_fraction = min(confidence - 0.5, 0.25) * 0.25
+        kelly_fraction = max(0, (confidence - 0.5) * 0.5) * 0.25
         
         # Calculate stake in cents
         available = min(self.vault.current_balance, self.MAX_STAKE_CENTS)
@@ -151,6 +151,9 @@ class HandAgent(BaseAgent):
             self.vault.current_balance -= stake
             return {"success": True, "order_id": "SIM-001", "simulated": True}
         
+        if price <= 0 or stake <= 0:
+            return {"success": False, "error": "Invalid price or stake"}
+
         try:
             result = await self.kalshi_client.place_order(
                 ticker=ticker,
