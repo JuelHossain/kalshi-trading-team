@@ -4,8 +4,8 @@ This file outlines the coding standards, tools, and rules for all agents and dev
 
 ## Project Overview
 - **Type**: Monorepo with TypeScript/JavaScript (frontend/backend/shared) and Python (engine)
-- **Architecture**: AI-driven trading system with modular agents
-- **Tools**: ESLint, Prettier, Ruff, Black, Husky
+- **Architecture**: AI-driven trading system with modular agents and OpenCode skills
+- **Tools**: ESLint, Prettier, Ruff, Black, Husky, OpenCode skills system
 
 ## Coding Standards
 
@@ -40,19 +40,26 @@ This file outlines the coding standards, tools, and rules for all agents and dev
 - `backend/`: Node/Express API (TypeScript)
 - `engine/`: Python AI agents (asyncio)
 - `shared/`: Common types/constants
+- `.opencode/skills/`: Project-specific skills and guidelines
 - `DESIGN_GUIDE.md`: Architectural standards
 
 ## Agent-Specific Rules
-- **Frontend Agents**: Focus on UI/UX, accessibility, responsive design
-- **Backend Agents**: API design, security, performance
-- **Engine Agents**: AI logic, async efficiency, error resilience
-- **All Agents**: Follow DESIGN_GUIDE.md, commit clean code, test changes
+- **Frontend Agents**: Focus on UI/UX, accessibility, responsive design (load ui-design skill)
+- **Backend Agents**: API design, security, performance (load safety-security skill)
+- **Engine Agents**: AI logic, async efficiency, error resilience (load agent-contracts skill)
+- **All Agents**: Follow DESIGN_GUIDE.md, load relevant skills, commit clean code, test changes
 
 ## Quality Gates
 - No ESLint errors (warnings minimized)
 - No Ruff/Black formatting issues
 - Tests pass before commit
 - Code reviewed for consistency
+
+## Task Completion Requirements
+- **Build & Deploy**: Always build and deploy changes after task completion to verify in UI
+- **Git Workflow**: Commit changes with conventional messages, push to opencode branch
+- **Verification**: Test thoroughly before marking task complete
+- **Constitution Compliance**: Follow all 4 pillars of the project constitution
 
 ## Commands Reference
 - `npm run lint`: Lint all code
