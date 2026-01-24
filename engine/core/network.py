@@ -108,7 +108,7 @@ class KalshiClient:
         
         return None
 
-    async def get_markets(self, limit: int = 100, status: str = "open") -> List[Dict]:
+    async def get_active_markets(self, limit: int = 100, status: str = "open") -> List[Dict]:
         path = "/markets"
         params = {"limit": limit, "status": status}
         res = await self.request("GET", path, params=params)

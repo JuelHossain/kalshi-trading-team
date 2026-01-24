@@ -18,7 +18,7 @@ from agents.base import BaseAgent
 from core.bus import EventBus
 
 # RapidAPI Configuration
-RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY", "")
+RAPIDAPI_KEY = os.environ.get("RAPID_API_KEY", "")
 RAPIDAPI_HOST = "odds.p.rapidapi.com"
 
 
