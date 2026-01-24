@@ -253,7 +253,7 @@ app.post('/api/analyze', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/api/auth', authenticateToken, async (req: Request, res: Response) => {
+app.post('/api/auth', async (req: Request, res: Response) => {
     const { keyId, privateKey, isPaperTrading, useSystemAuth } = req.body;
     try {
         if (useSystemAuth) {
