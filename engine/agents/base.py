@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from core.bus import EventBus, Message
 
+
 class BaseAgent(ABC):
     def __init__(self, name: str, agent_id: int, bus: EventBus):
         self.name = name
@@ -26,9 +27,9 @@ class BaseAgent(ABC):
 
     async def _handle_tick_internal(self, message):
         from core.db import send_heartbeat
+
         await send_heartbeat(self.agent_id, self.name)
         await self.on_tick(message.payload)
-
 
     async def on_tick(self, payload: Any):
         """Handler for periodic ticks."""
@@ -40,10 +41,10 @@ class BaseAgent(ABC):
             "message": message,
             "agent_id": self.agent_id,
             "agent_name": self.name,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         await self.bus.publish("SYSTEM_LOG", payload, self.name)
-        
+
         if os.getenv("JSON_LOGS") == "true":
             print(json.dumps({"type": "LOG", "data": payload}))
         else:

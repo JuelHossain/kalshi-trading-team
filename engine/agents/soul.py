@@ -20,6 +20,7 @@ from core.vault import RecursiveVault
 
 try:
     import google.generativeai as genai
+
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -27,9 +28,9 @@ except ImportError:
 
 class SoulAgent(BaseAgent):
     """The Executive Director - System, Memory & Evolution"""
-    
+
     HARD_FLOOR_CENTS = 25500  # $255 (15% of $300 principal = $255 floor)
-    
+
     def __init__(self, agent_id: int, bus: EventBus, vault: RecursiveVault):
         super().__init__("SOUL", agent_id, bus)
         self.vault = vault
@@ -37,13 +38,13 @@ class SoulAgent(BaseAgent):
         self.mistakes_log = []
         self.strengths_list = []
         self.is_locked_down = False
-        
+
         # Initialize Gemini for self-evolution
         if GEMINI_AVAILABLE:
             api_key = os.environ.get("GEMINI_API_KEY")
             if api_key:
                 genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel('gemini-1.5-pro')
+                self.model = genai.GenerativeModel("gemini-1.5-pro")
             else:
                 self.model = None
         else:
@@ -57,24 +58,33 @@ class SoulAgent(BaseAgent):
     async def on_cycle_start(self, message):
         """Pre-flight sequence"""
         await self.log("Initiating pre-flight sequence...")
-        
+
         # 1. Safety Check - Hard Floor
         if self.vault.current_balance < self.HARD_FLOOR_CENTS:
-            await self.log(f"🛑 EMERGENCY: Balance ${self.vault.current_balance/100:.2f} below $255 floor. LOCKDOWN.", level="ERROR")
+            await self.log(
+                f"🛑 EMERGENCY: Balance ${self.vault.current_balance/100:.2f} below $255 floor. LOCKDOWN.",
+                level="ERROR",
+            )
             self.is_locked_down = True
             await self.bus.publish("SYSTEM_LOCKDOWN", {"reason": "Hard floor breach"}, self.name)
             return
-        
+
         # 2. Health Check (absorbed from Mechanic)
         await self.log("Health check: All systems nominal.")
-        
+
         # 3. Publish pre-flight complete
-        await self.bus.publish("PREFLIGHT_COMPLETE", {
-            "balance": self.vault.current_balance,
-            "is_locked": self.is_locked_down,
-            "instructions": self.trading_instructions[:200] if self.trading_instructions else "Default"
-        }, self.name)
-        
+        await self.bus.publish(
+            "PREFLIGHT_COMPLETE",
+            {
+                "balance": self.vault.current_balance,
+                "is_locked": self.is_locked_down,
+                "instructions": (
+                    self.trading_instructions[:200] if self.trading_instructions else "Default"
+                ),
+            },
+            self.name,
+        )
+
         await self.log("Pre-flight complete. Handing off to SENSES.")
 
     async def on_trade_result(self, message):
@@ -82,7 +92,7 @@ class SoulAgent(BaseAgent):
         payload = message.payload
         outcome = payload.get("outcome", "unknown")
         details = payload.get("details", "")
-        
+
         if outcome == "win":
             self.strengths_list.append(details)
             await self.log(f"Win recorded. Strength: {details[:50]}...")
@@ -95,7 +105,7 @@ class SoulAgent(BaseAgent):
         if not self.model:
             await self.log("Gemini unavailable. Using default instructions.")
             return
-        
+
         prompt = f"""You are an AI trading strategist. Based on the following recent performance:
 
 WINS: {self.strengths_list[-5:] if self.strengths_list else 'None yet'}
@@ -115,10 +125,15 @@ Write a concise set of 5 trading rules to maximize wins and avoid losses. Be spe
     async def on_tick(self, payload: Dict[str, Any]):
         """Periodic self-check"""
         # Emit vault state for UI
-        await self.bus.publish("VAULT_UPDATE", {
-            "principal": self.vault.PRINCIPAL_CAPITAL_CENTS / 100,
-            "currentProfit": (self.vault.current_balance - self.vault.start_of_day_balance) / 100,
-            "lockThreshold": self.vault.DAILY_PROFIT_THRESHOLD_CENTS / 100,
-            "isLocked": self.vault.is_locked,
-            "total": self.vault.current_balance / 100
-        }, self.name)
+        await self.bus.publish(
+            "VAULT_UPDATE",
+            {
+                "principal": self.vault.PRINCIPAL_CAPITAL_CENTS / 100,
+                "currentProfit": (self.vault.current_balance - self.vault.start_of_day_balance)
+                / 100,
+                "lockThreshold": self.vault.DAILY_PROFIT_THRESHOLD_CENTS / 100,
+                "isLocked": self.vault.is_locked,
+                "total": self.vault.current_balance / 100,
+            },
+            self.name,
+        )

@@ -9,8 +9,8 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       host: '0.0.0.0',
       fs: {
-        allow: ['..'] // Allow access to shared folder
-      }
+        allow: ['..'], // Allow access to shared folder
+      },
     },
     plugins: [react()],
     define: {
@@ -23,13 +23,13 @@ export default defineConfig(({ mode }) => {
       'process.env.KALSHI_DEMO_PRIVATE_KEY': JSON.stringify(env.KALSHI_DEMO_PRIVATE_KEY),
       'process.env.KALSHI_PROD_KEY_ID': JSON.stringify(env.KALSHI_PROD_KEY_ID),
       'process.env.KALSHI_PROD_PRIVATE_KEY': JSON.stringify(env.KALSHI_PROD_PRIVATE_KEY),
-      'process.env.RAPID_API_KEY': JSON.stringify(env.RAPID_API_KEY)
+      'process.env.RAPID_API_KEY': JSON.stringify(env.RAPID_API_KEY),
     },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
-        '@shared': path.resolve(__dirname, '../shared')
-      }
-    }
+        '@shared': path.resolve(__dirname, '../shared'),
+      },
+    },
   };
 });

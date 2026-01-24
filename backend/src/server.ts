@@ -28,9 +28,9 @@ app.use('/api', setupAPIRoutes(sseManager, stateManager, engineBridge));
 engineBridge.initializeBackend();
 
 if (process.env.NODE_ENV !== 'test') {
-    app.listen(Number(PORT), '0.0.0.0', () => {
-        console.log(`SENTIENT ALPHA ENGINE online at port ${PORT}`);
-    });
+  app.listen(Number(PORT), '0.0.0.0', () => {
+    console.log(`SENTIENT ALPHA ENGINE online at port ${PORT}`);
+  });
 }
 
 export { app };

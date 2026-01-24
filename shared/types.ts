@@ -3,7 +3,7 @@ export enum AgentStatus {
   WORKING = 'WORKING',
   WARNING = 'WARNING',
   CRITICAL = 'CRITICAL',
-  SUCCESS = 'SUCCESS'
+  SUCCESS = 'SUCCESS',
 }
 
 export interface Agent {
@@ -20,7 +20,7 @@ export interface Agent {
 export enum CycleStatus {
   IN_PROGRESS = 'IN_PROGRESS',
   COMPLETE = 'COMPLETE',
-  INCOMPLETE = 'INCOMPLETE'
+  INCOMPLETE = 'INCOMPLETE',
 }
 
 export interface LogEntry {
@@ -90,7 +90,14 @@ export interface ErrorAnalysis {
   confidence: number;
 }
 
-export type TimelineEventType = 'LOG' | 'SIMULATION' | 'VAULT' | 'MARKET' | 'INTERCEPT' | 'ERROR' | 'FIXER';
+export type TimelineEventType =
+  | 'LOG'
+  | 'SIMULATION'
+  | 'VAULT'
+  | 'MARKET'
+  | 'INTERCEPT'
+  | 'ERROR'
+  | 'FIXER';
 
 export interface FixerActivity {
   errorMessage: string;

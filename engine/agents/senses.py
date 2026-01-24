@@ -25,10 +25,10 @@ RAPIDAPI_HOST = "odds.p.rapidapi.com"
 
 class SensesAgent(BaseAgent):
     """The 24/7 Observer - Surveillance & Signal Detection"""
-    
+
     VALUE_GAP_THRESHOLD = 0.05  # 5% minimum edge required
     MIN_LIQUIDITY = 2000  # $2,000 minimum liquidity
-    
+
     def __init__(self, agent_id: int, bus: EventBus, kalshi_client=None):
         super().__init__("SENSES", agent_id, bus)
         self.kalshi_client = kalshi_client
@@ -45,7 +45,7 @@ class SensesAgent(BaseAgent):
         """Begin passive market surveillance"""
         self.is_scanning = True
         await self.log("Initiating passive market scan (zero token cost)...")
-        
+
         # Run surveillance loop
         await self.surveillance_loop()
 
@@ -60,27 +60,31 @@ class SensesAgent(BaseAgent):
             # 1. Fetch Kalshi markets
             markets = await self.fetch_kalshi_markets()
             await self.log(f"Scanned {len(markets)} Kalshi markets.")
-            
+
             # 2. Fetch shadow odds from RapidAPI
             await self.sync_vegas_odds()
-            
+
             # 3. Filter for value gaps
             opportunities = await self.filter_value_gaps(markets)
-            
+
             if opportunities:
                 await self.log(f"Found {len(opportunities)} value gap opportunities!")
                 for opp in opportunities:
                     await self.queue_opportunity(opp)
             else:
                 await self.log("No significant value gaps detected.")
-                
+
             # 4. Signal Brain if opportunities exist
             if self.opportunity_queue:
-                await self.bus.publish("OPPORTUNITIES_READY", {
-                    "count": len(self.opportunity_queue),
-                    "top": self.opportunity_queue[0] if self.opportunity_queue else None
-                }, self.name)
-                
+                await self.bus.publish(
+                    "OPPORTUNITIES_READY",
+                    {
+                        "count": len(self.opportunity_queue),
+                        "top": self.opportunity_queue[0] if self.opportunity_queue else None,
+                    },
+                    self.name,
+                )
+
         except Exception as e:
             await self.log(f"Surveillance error: {str(e)[:100]}", level="ERROR")
 
@@ -89,18 +93,29 @@ class SensesAgent(BaseAgent):
         if not self.kalshi_client:
             await self.log("Kalshi client unavailable. Using mock data.")
             return self._mock_markets()
-        
+
         try:
             # Use shared Kalshi client
             markets = await self.kalshi_client.get_active_markets()
+            await self.log(f"DEBUG: Raw Kalshi API response received: {len(markets) if markets else 0} markets", level="INFO")
+            if markets and len(markets) > 0:
+                await self.log(f"DEBUG: Sample market keys: {list(markets[0].keys()) if markets[0] else 'None'}", level="INFO")
             if markets is None:
-                await self.log("ERROR: Kalshi API request failed - check network and credentials", level="ERROR")
+                await self.log(
+                    "ERROR: Kalshi API request failed - check network and credentials",
+                    level="ERROR",
+                )
                 return []
-            filtered = [m for m in markets if m.get('volume', 0) >= self.MIN_LIQUIDITY]
+            filtered = [m for m in markets if m.get("volume", 0) >= self.MIN_LIQUIDITY]
             if len(filtered) == 0 and len(markets) > 0:
-                await self.log("WARNING: All Kalshi markets filtered out due to low liquidity", level="WARN")
+                await self.log(
+                    "WARNING: All Kalshi markets filtered out due to low liquidity", level="WARN"
+                )
             elif len(markets) == 0:
-                await self.log("WARNING: No active markets returned from Kalshi API - markets may be closed or API issue", level="WARN")
+                await self.log(
+                    "WARNING: No active markets returned from Kalshi API - markets may be closed or API issue",
+                    level="WARN",
+                )
             return filtered
         except Exception as e:
             await self.log(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
@@ -111,17 +126,14 @@ class SensesAgent(BaseAgent):
         if not RAPIDAPI_KEY:
             await self.log("RapidAPI key not configured. Skipping odds sync.")
             return
-            
+
         try:
             async with aiohttp.ClientSession() as session:
-                headers = {
-                    "X-RapidAPI-Key": RAPIDAPI_KEY,
-                    "X-RapidAPI-Host": RAPIDAPI_HOST
-                }
+                headers = {"X-RapidAPI-Key": RAPIDAPI_KEY, "X-RapidAPI-Host": RAPIDAPI_HOST}
                 async with session.get(
                     f"https://{RAPIDAPI_HOST}/v4/sports/upcoming/odds",
                     headers=headers,
-                    params={"regions": "us", "markets": "h2h"}
+                    params={"regions": "us", "markets": "h2h"},
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -133,14 +145,14 @@ class SensesAgent(BaseAgent):
     def _parse_vegas_odds(self, data: List[Dict]):
         """Parse RapidAPI response into odds cache"""
         for event in data:
-            event_id = event.get('id', '')
-            for bookmaker in event.get('bookmakers', []):
-                if bookmaker.get('key') in ['pinnacle', 'draftkings', 'fanduel']:
-                    for market in bookmaker.get('markets', []):
-                        for outcome in market.get('outcomes', []):
+            event_id = event.get("id", "")
+            for bookmaker in event.get("bookmakers", []):
+                if bookmaker.get("key") in ["pinnacle", "draftkings", "fanduel"]:
+                    for market in bookmaker.get("markets", []):
+                        for outcome in market.get("outcomes", []):
                             key = f"{event_id}_{outcome.get('name', '')}"
                             # Convert American odds to probability
-                            price = outcome.get('price', 0)
+                            price = outcome.get("price", 0)
                             if price > 0:
                                 prob = 100 / (price + 100)
                             else:
@@ -150,43 +162,47 @@ class SensesAgent(BaseAgent):
     async def filter_value_gaps(self, markets: List[Dict]) -> List[Dict]:
         """Find markets with Vegas probability > Kalshi price by threshold"""
         opportunities = []
-        
+
         for market in markets:
-            ticker = market.get('ticker', '')
-            kalshi_price = market.get('yes_price', 50) / 100  # Convert cents to probability
-            
+            ticker = market.get("ticker", "")
+            kalshi_price = market.get("yes_price", 50) / 100  # Convert cents to probability
+
             # Try to find matching Vegas odds
             vegas_prob = self.vegas_odds_cache.get(ticker, kalshi_price)
-            
+
             value_gap = vegas_prob - kalshi_price
-            
+
             if value_gap >= self.VALUE_GAP_THRESHOLD:
-                opportunities.append({
-                    "ticker": ticker,
-                    "kalshi_price": kalshi_price,
-                    "vegas_prob": vegas_prob,
-                    "value_gap": value_gap,
-                    "volume": market.get('volume', 0),
-                    "market_data": market
-                })
-                
+                opportunities.append(
+                    {
+                        "ticker": ticker,
+                        "kalshi_price": kalshi_price,
+                        "vegas_prob": vegas_prob,
+                        "value_gap": value_gap,
+                        "volume": market.get("volume", 0),
+                        "market_data": market,
+                    }
+                )
+
         # Sort by value gap (highest first)
-        opportunities.sort(key=lambda x: x['value_gap'], reverse=True)
+        opportunities.sort(key=lambda x: x["value_gap"], reverse=True)
         return opportunities[:5]  # Top 5 only
 
     async def queue_opportunity(self, opp_queue: asyncio.Queue, opportunity: Dict):
         """Add opportunity to queue and Supabase"""
         signal_package = {
-            "market_id": opportunity['ticker'],
-            "source": opportunity.get('source', 'Kalshi'),
-            "gap_delta": opportunity['value_gap'] * 100,  # As percentage
-            "pinnacle_odds": opportunity['vegas_prob'],
-            "kalshi_price": opportunity['kalshi_price'],
-            "status": "QUEUED"
+            "market_id": opportunity["ticker"],
+            "source": opportunity.get("source", "Kalshi"),
+            "gap_delta": opportunity["value_gap"] * 100,  # As percentage
+            "pinnacle_odds": opportunity["vegas_prob"],
+            "kalshi_price": opportunity["kalshi_price"],
+            "status": "QUEUED",
         }
         await opp_queue.put(signal_package)
         await log_to_db("opportunity_queue", signal_package)
-        await self.log(f"Queued: {signal_package['market_id']} | Gap: {signal_package['gap_delta']:.1f}%")
+        await self.log(
+            f"Queued: {signal_package['market_id']} | Gap: {signal_package['gap_delta']:.1f}%"
+        )
 
     def pop_opportunity(self) -> Optional[Dict]:
         """Get next opportunity for Brain"""
@@ -209,7 +225,10 @@ class SensesAgent(BaseAgent):
                 # Fetch Kalshi markets
                 markets = await self.fetch_kalshi_markets()
                 if len(markets) == 0:
-                    await self.log("WARNING: Scanned 0 Kalshi markets - will retry in next scan cycle", level="WARN")
+                    await self.log(
+                        "WARNING: Scanned 0 Kalshi markets - will retry in next scan cycle",
+                        level="WARN",
+                    )
                 else:
                     await self.log(f"Scanned {len(markets)} Kalshi markets.")
 

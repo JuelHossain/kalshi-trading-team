@@ -1,9 +1,11 @@
 # Sentient Alpha - Project Blueprint & Architecture
 
 ## 1. Project Manifesto
+
 **Project Name:** Sentient Alpha Trading Bot
 **Objective:** Autonomous, multi-phase trading system leveraging AI agents to analyze, debate, and execute trades on Kalshi.
 **Core Philosophy:**
+
 - **Modular Intelligence:** 12+ specialized agents (Scout, Analyst, Auditor, etc.) working in a directed acyclic graph (DAG).
 - **Hybrid Architecture:** High-performance Python Engine for logic/AI <-> Node.js Orchestrator for state/connectivity <-> React Frontend for visualization.
 - **Safety First:** Strict distinct phases (Surveillance -> Intelligence -> Execution -> Protection) with multiple "Veto" safeguards (Agent 14, Agent 6).
@@ -11,6 +13,7 @@
 ## 2. System Architecture
 
 ### High-Level Data Flow
+
 ```mermaid
 graph TD
     UI[React Frontend] <-->|SSE / API| NODE[Node.js Backend]
@@ -21,46 +24,51 @@ graph TD
 ```
 
 ### Components
+
 1.  **Frontend (`/frontend`)**:
-    *   **Tech**: React, Vite, TailwindCSS (Glassmorphism), Tremor/Recharts.
-    *   **Role**: Real-time visualization of the "Brain", Terminal logs, PnL tracking, and Manual Override.
-    *   **Sync Status**: Consumes `LogEntry`, `SystemState` from Backend SSE.
+    - **Tech**: React, Vite, TailwindCSS (Glassmorphism), Tremor/Recharts.
+    - **Role**: Real-time visualization of the "Brain", Terminal logs, PnL tracking, and Manual Override.
+    - **Sync Status**: Consumes `LogEntry`, `SystemState` from Backend SSE.
 2.  **Backend (`/backend`)**:
-    *   **Tech**: Node.js, Express, TypeScript.
-    *   **Role**: Orchestrator, Auth Gatekeeper, Hardware Bridge (talks to Python), API Proxy.
-    *   **Sync Status**: Defines types in `@shared/types.ts`. Manages 'System State'.
+    - **Tech**: Node.js, Express, TypeScript.
+    - **Role**: Orchestrator, Auth Gatekeeper, Hardware Bridge (talks to Python), API Proxy.
+    - **Sync Status**: Defines types in `@shared/types.ts`. Manages 'System State'.
 3.  **Engine (`/engine`)**:
-    *   **Tech**: Python 3.12, Asyncio, Aiohttp.
-    *   **Role**: The "Ghost" Brain. Runs the agent loop (Scout -> Interceptor -> Analyst...).
-    *   **Sync Status**: Mirrors TS types via manual Dict construction (Needs hardening).
+    - **Tech**: Python 3.12, Asyncio, Aiohttp.
+    - **Role**: The "Ghost" Brain. Runs the agent loop (Scout -> Interceptor -> Analyst...).
+    - **Sync Status**: Mirrors TS types via manual Dict construction (Needs hardening).
 4.  **Shared (`/shared`)**:
-    *   **Tech**: TypeScript.
-    *   **Role**: Single source of truth for Constants, Types, and Configs.
+    - **Tech**: TypeScript.
+    - **Role**: Single source of truth for Constants, Types, and Configs.
 5.  **Legacy/Auxiliary**:
-    *   `dashboard/`: Streamlit app (Python). Likely an early prototype or secondary view.
+    - `dashboard/`: Streamlit app (Python). Likely an early prototype or secondary view.
 
 ## 3. Synchronization Analysis
-*Current State of 'The Sync'*
 
-| Feature | Backend (TS) | Engine (Py) | Frontend (TS) | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| **Agent IDs** | `shared/constants.ts` | `main.py` (List) | `shared/constants.ts` | ⚠️ **Fragile**. Python uses a manual list mapping. |
-| **Phases** | `CycleStatus` Enum | `AGENT_TO_PHASE` Map | `Terminal.tsx` | ✅ **Synced** (Logic matches). |
-| **Logs** | `LogEntry` Interface | Manual JSON Dict | `Terminal` Component | ⚠️ **Implicit**. Python dict keys must match TS interface. |
-| **Config** | `.env` + `config.ts` | `.env` + `dotenv` | `config.ts` | ⚠️ **Desynced**. Multiple `.env` files. |
-| **Comms** | SSE (`/api/stream`) | SSE (`/stream`) | `EventSource` | ✅ **Functional**. |
+_Current State of 'The Sync'_
+
+| Feature       | Backend (TS)          | Engine (Py)          | Frontend (TS)         | Status                                                     |
+| :------------ | :-------------------- | :------------------- | :-------------------- | :--------------------------------------------------------- |
+| **Agent IDs** | `shared/constants.ts` | `main.py` (List)     | `shared/constants.ts` | ⚠️ **Fragile**. Python uses a manual list mapping.         |
+| **Phases**    | `CycleStatus` Enum    | `AGENT_TO_PHASE` Map | `Terminal.tsx`        | ✅ **Synced** (Logic matches).                             |
+| **Logs**      | `LogEntry` Interface  | Manual JSON Dict     | `Terminal` Component  | ⚠️ **Implicit**. Python dict keys must match TS interface. |
+| **Config**    | `.env` + `config.ts`  | `.env` + `dotenv`    | `config.ts`           | ⚠️ **Desynced**. Multiple `.env` files.                    |
+| **Comms**     | SSE (`/api/stream`)   | SSE (`/stream`)      | `EventSource`         | ✅ **Functional**.                                         |
 
 **Critical Gaps**:
+
 - **Port hardcoding**: Ports 3001 (Backend) and 3002 (Engine) are hardcoded in multiple files.
 - **Type Safety**: Python does not import TS types. A change in `LogEntry` in TS will not error in Python until runtime.
 
 ## 4. Reorganization & Optimization Plan
 
 ### Immediate Cleanup (Executed)
+
 - [ ] Move root-level log files (`*.txt`) to `logs/`.
 - [ ] Consolidate `.env` loading logic.
 
 ### Refactoring Opportunities (To Implement)
+
 1.  **Unified Config**:
     - Create `shared/config.json` or a strictly typed `.env` schema that both Python and JS load.
     - Remove hardcoded URLs (`http://localhost:3002`).
@@ -74,10 +82,12 @@ graph TD
     - Move `dashboard/` to `legacy/` if it is no longer the primary interface, to reduce noise.
 
 ## 5. Coding Standards & Best Practices (The "Codebase Manager" Rules)
+
 1.  **No "Magic Numbers"**: Agent IDs (1-14) should be Enums in both languages.
 2.  **Explicit Interfaces**: All inter-process communication (IPC) must follow a documented schema.
 3.  **Atomic Commits**: Frontend and Backend changes that affect types must be committed together.
 4.  **Log Levels**: Use standardized log levels (`INFO`, `WARN`, `ERROR`, `SUCCESS`) across the board.
 
 ---
-*Generated by Antigravity (Codebase Manager)*
+
+_Generated by Antigravity (Codebase Manager)_

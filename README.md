@@ -3,11 +3,13 @@
 **Status:** Active | **Architecture:** Monorepo (Node/React/Python)
 
 ## 📌 Project Overview
+
 Sentient Alpha is an autonomous trading system that uses a committee of AI agents to analyze markets on Kalshi, debate strategies, simulation outcomes, and execute trades.
 
 **For a detailed architectural breakdown, see [blueprint.md](./blueprint.md).**
 
 ## 📂 Structure
+
 - **/frontend**: React + Vite + TailwindCSS application (The "Cockpit").
 - **/backend**: Node.js + Express orchestrator (The "Nervous System").
 - **/engine**: Python 3.12 + Asyncio AI Logic (The "Brain").
@@ -17,12 +19,14 @@ Sentient Alpha is an autonomous trading system that uses a committee of AI agent
 ## 🚀 Quick Start
 
 ### 1. Prerequisites
+
 - Node.js (v18+)
 - Python 3.12+ (with virtualenv)
 - Supabase Account
 - API Keys (Gemini, Groq, Kalshi) in `.env`
 
 ### 2. Setup
+
 ```bash
 # Install Node dependencies (Root + Sub-packages)
 npm install
@@ -36,6 +40,7 @@ cd ..
 ```
 
 ### 3. Running the System
+
 We use PM2 to orchestrate all services.
 
 ```bash
@@ -43,4 +48,4 @@ We use PM2 to orchestrate all services.
 npm run dev
 ```
 
-*Access the dashboard at http://localhost:3000*
+_Access the dashboard at http://localhost:3000_

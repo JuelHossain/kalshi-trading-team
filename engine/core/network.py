@@ -9,19 +9,20 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import serialization
 from colorama import Fore, Style
 
+
 class KalshiClient:
     """
     Centralized, Self-Healing Kalshi API Client.
     Handles Authentication, Connection Pooling, and Exponential Backoff.
     """
-    
+
     def __init__(self):
         self._session: Optional[aiohttp.ClientSession] = None
         self.private_key = None
-        
+
         # Determine Mode
         is_paper = os.getenv("IS_PAPER_TRADING") == "true"
-        
+
         if is_paper:
             self.key_id = os.getenv("KALSHI_DEMO_KEY_ID")
             self.base_url = "https://demo-api.kalshi.co/trade-api/v2"
@@ -36,7 +37,7 @@ class KalshiClient:
                     pk_pem = pk_pem.replace("\\n", "\n")
                 if pk_pem.startswith('"') and pk_pem.endswith('"'):
                     pk_pem = pk_pem[1:-1]
-                
+
                 self.private_key = serialization.load_pem_private_key(
                     pk_pem.encode(), password=None
                 )
@@ -46,66 +47,75 @@ class KalshiClient:
     async def get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=5.0),
-                connector=aiohttp.TCPConnector(limit=10)
+                timeout=aiohttp.ClientTimeout(total=5.0), connector=aiohttp.TCPConnector(limit=10)
             )
         return self._session
 
     def _get_headers(self, method: str, path: str) -> Dict[str, str]:
         if not self.private_key:
             return {"Content-Type": "application/json"}
-            
+
         timestamp = str(int(time.time() * 1000))
         msg = f"{timestamp}{method}{path}"
-        
+
         signature_bytes = self.private_key.sign(
             msg.encode(),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
+            padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256(),
         )
         signature = base64.b64encode(signature_bytes).decode()
-        
+
         return {
             "KALSHI-ACCESS-KEY": self.key_id,
             "KALSHI-ACCESS-SIGNATURE": signature,
             "KALSHI-ACCESS-TIMESTAMP": timestamp,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
-    async def request(self, method: str, path: str, params: Optional[Dict] = None, json_data: Optional[Dict] = None, retries: int = 3) -> Optional[Dict]:
+    async def request(
+        self,
+        method: str,
+        path: str,
+        params: Optional[Dict] = None,
+        json_data: Optional[Dict] = None,
+        retries: int = 3,
+    ) -> Optional[Dict]:
         """
         Execute an HTTP request with exponential backoff for 429/50x errors.
         """
         session = await self.get_session()
         url = f"{self.base_url}{path}"
-        
+
         for attempt in range(retries):
             headers = self._get_headers(method, path)
             try:
-                async with session.request(method, url, headers=headers, params=params, json=json_data) as resp:
+                async with session.request(
+                    method, url, headers=headers, params=params, json=json_data
+                ) as resp:
                     if resp.status == 200:
                         return await resp.json()
-                    
+
                     if resp.status == 429 or 500 <= resp.status <= 504:
-                        wait = (2 ** attempt) + (time.time() % 1) # Exponential backoff + jitter
-                        print(f"{Fore.YELLOW}[NETWORK] Attempt {attempt+1} failed ({resp.status}). Retrying in {wait:.2f}s...{Style.RESET_ALL}")
+                        wait = (2**attempt) + (time.time() % 1)  # Exponential backoff + jitter
+                        print(
+                            f"{Fore.YELLOW}[NETWORK] Attempt {attempt+1} failed ({resp.status}). Retrying in {wait:.2f}s...{Style.RESET_ALL}"
+                        )
                         await asyncio.sleep(wait)
                         continue
-                    
+
                     error_text = await resp.text()
-                    print(f"{Fore.RED}[NETWORK] API Error {resp.status}: {error_text}{Style.RESET_ALL}")
+                    print(
+                        f"{Fore.RED}[NETWORK] API Error {resp.status}: {error_text}{Style.RESET_ALL}"
+                    )
                     return None
-                    
+
             except Exception as e:
                 print(f"{Fore.RED}[NETWORK] Connection Error: {e}{Style.RESET_ALL}")
                 if attempt < retries - 1:
                     await asyncio.sleep(1)
                     continue
                 return None
-        
+
         return None
 
     async def get_active_markets(self, limit: int = 100, status: str = "open") -> List[Dict]:
@@ -121,6 +131,7 @@ class KalshiClient:
     async def close(self):
         if self._session and not self._session.closed:
             await self._session.close()
+
 
 # Singleton instance
 kalshi_client = KalshiClient()

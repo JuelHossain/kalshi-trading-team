@@ -9,7 +9,7 @@ export const AGENTS: Agent[] = [
     description: 'Executive Director. Pre-flight, self-optimization, safety enforcement.',
     status: AgentStatus.WORKING,
     lastAction: 'System initialization',
-    model: 'Gemini 1.5 Pro'
+    model: 'Gemini 1.5 Pro',
   },
   {
     id: 2,
@@ -18,7 +18,7 @@ export const AGENTS: Agent[] = [
     description: '24/7 Observer. Passive scanning, odds sync, value gap detection.',
     status: AgentStatus.IDLE,
     lastAction: 'Scanning markets',
-    model: 'Python/Asyncio'
+    model: 'Python/Asyncio',
   },
   {
     id: 3,
@@ -27,7 +27,7 @@ export const AGENTS: Agent[] = [
     description: 'Decision Maker. AI debate, Monte Carlo simulation, confidence scoring.',
     status: AgentStatus.IDLE,
     lastAction: 'Awaiting opportunities',
-    model: 'Gemini 1.5 Pro'
+    model: 'Gemini 1.5 Pro',
   },
   {
     id: 4,
@@ -36,26 +36,26 @@ export const AGENTS: Agent[] = [
     description: 'Tactical Executioner. Snipe, Kelly sizing, execution, vault lock.',
     status: AgentStatus.IDLE,
     lastAction: 'Standing by',
-    model: 'Kalshi V2'
+    model: 'Kalshi V2',
   },
 ];
 
 export const MOCK_LOGS: string[] = [
-  "Soul: Pre-flight handshake complete. All APIs online.",
-  "Soul: Loaded 24h history. 3 wins, 1 loss. Evolving instructions...",
-  "Senses: Scanning 42 active markets. Zero token cost.",
-  "Senses: Value Gap Alert! Kalshi 45% vs Vegas 52%. Delta +7%.",
-  "Brain: Opportunity queued. Running internal debate...",
-  "Brain: Confidence 87%. Simulation variance 14%. Pushing to execution.",
-  "Hand: Snipe check passed. Entry at $0.46 with zero slippage.",
-  "Hand: Order executed. Profit $12.50. Vault locked at $350.",
+  'Soul: Pre-flight handshake complete. All APIs online.',
+  'Soul: Loaded 24h history. 3 wins, 1 loss. Evolving instructions...',
+  'Senses: Scanning 42 active markets. Zero token cost.',
+  'Senses: Value Gap Alert! Kalshi 45% vs Vegas 52%. Delta +7%.',
+  'Brain: Opportunity queued. Running internal debate...',
+  'Brain: Confidence 87%. Simulation variance 14%. Pushing to execution.',
+  'Hand: Snipe check passed. Entry at $0.46 with zero slippage.',
+  'Hand: Order executed. Profit $12.50. Vault locked at $350.',
 ];
 
 export const WORKFLOW_STEPS: Record<number, string> = {
-  1: "SOUL: Pre-flight handshake, evolution, safety enforcement...",
-  2: "SENSES: Passive surveillance, odds sync, value gap detection...",
-  3: "BRAIN: AI debate, Monte Carlo simulation, decision scoring...",
-  4: "HAND: Snipe check, Kelly sizing, execution, vault lock...",
+  1: 'SOUL: Pre-flight handshake, evolution, safety enforcement...',
+  2: 'SENSES: Passive surveillance, odds sync, value gap detection...',
+  3: 'BRAIN: AI debate, Monte Carlo simulation, decision scoring...',
+  4: 'HAND: Snipe check, Kelly sizing, execution, vault lock...',
 };
 
 // 4-Phase Configuration (One per Mega-Agent)

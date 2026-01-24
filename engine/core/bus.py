@@ -8,6 +8,7 @@ import re
 # Sensitive patterns to mask in logs
 SENSITIVE_KEYS = {"api_key", "secret", "private_key", "password", "token", "signature"}
 
+
 class Message(BaseModel):
     topic: str
     payload: Dict[str, Any]
@@ -16,6 +17,7 @@ class Message(BaseModel):
 
     def to_json(self) -> str:
         return self.model_dump_json()
+
 
 def mask_sensitives(data: Any) -> Any:
     """Recursively mask sensitive keys in a dictionary or list."""
@@ -28,14 +30,16 @@ def mask_sensitives(data: Any) -> Any:
         return [mask_sensitives(i) for i in data]
     return data
 
+
 class EventBus:
     """
     Asynchronous JSON Message Bus.
     The Central Nervous System of the Ghost Engine.
     """
+
     def __init__(self):
         self.subscribers: Dict[str, List[Callable[[Message], Any]]] = {}
-        self.history: List[Message] = [] # Short-term memory
+        self.history: List[Message] = []  # Short-term memory
         self._lock = asyncio.Lock()
 
     async def subscribe(self, topic: str, callback: Callable[[Message], Any]):
@@ -68,7 +72,7 @@ class EventBus:
             tasks = []
             for callback in self.subscribers[topic]:
                 tasks.append(self._safe_dispatch(callback, msg))
-            
+
             if tasks:
                 await asyncio.gather(*tasks)
 

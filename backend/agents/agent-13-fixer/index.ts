@@ -1,11 +1,14 @@
-import { ErrorAnalysis } from "@shared/types";
-import { queryGemini } from "../../services/aiService";
+import { ErrorAnalysis } from '@shared/types';
+import { queryGemini } from '../../services/aiService';
 
-export const analyzeSystemError = async (errorMessage: string, context: string): Promise<ErrorAnalysis> => {
-    // Agent 13: The Fixer
+export const analyzeSystemError = async (
+  errorMessage: string,
+  context: string
+): Promise<ErrorAnalysis> => {
+  // Agent 13: The Fixer
 
-    try {
-        const prompt = `You are a Senior DevOps Engineer and Systems Architect. 
+  try {
+    const prompt = `You are a Senior DevOps Engineer and Systems Architect. 
         A mission-critical high-frequency trading bot encountered the following error.
 
         Error Message: "${errorMessage}"
@@ -24,18 +27,20 @@ export const analyzeSystemError = async (errorMessage: string, context: string):
             "confidence": integer
         }`;
 
-        const text = await queryGemini(prompt);
+    const text = await queryGemini(prompt);
 
-        // Clean up markdown if present
-        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        return JSON.parse(jsonStr) as ErrorAnalysis;
-
-    } catch (e: any) {
-        console.error("Debugger Failed:", e);
-        return {
-            rootCause: `AI Debugger Failed: ${e.message}`,
-            suggestedFix: "Check Gemini API Key & Permissions.",
-            confidence: 0
-        };
-    }
-}
+    // Clean up markdown if present
+    const jsonStr = text
+      .replace(/```json/g, '')
+      .replace(/```/g, '')
+      .trim();
+    return JSON.parse(jsonStr) as ErrorAnalysis;
+  } catch (e: any) {
+    console.error('Debugger Failed:', e);
+    return {
+      rootCause: `AI Debugger Failed: ${e.message}`,
+      suggestedFix: 'Check Gemini API Key & Permissions.',
+      confidence: 0,
+    };
+  }
+};

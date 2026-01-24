@@ -7,6 +7,7 @@ The **Sentient Alpha Engine** is a headless autonomous trading intelligence desi
 The backend operates as a standalone Node.js service that handles the "heavy lifting" of market analysis, risk management, and execution.
 
 ### 🎭 The 13 Specialized Agents
+
 1.  **Ghost (Agent 1)**: The Security Protocol. Authorizes all final executions.
 2.  **Scout (Agent 2)**: Surveillance specialist. Scans Kalshi for high-probability markets.
 3.  **Interceptor (Agent 3)**: Signal Intelligence. Monitors external data (Vegas Odds, News etc.).
@@ -22,6 +23,7 @@ The backend operates as a standalone Node.js service that handles the "heavy lif
 13. **Fixer (Agent 13)**: Self-Healing. Analyzes system errors and suggests real-time code fixes.
 
 ## 🛠 Tech Stack
+
 - **Runtime**: Node.js (ESM)
 - **Language**: TypeScript
 - **API Framework**: Express
@@ -30,10 +32,12 @@ The backend operates as a standalone Node.js service that handles the "heavy lif
 - **Database**: Supabase (PostgreSQL)
 
 ## 📡 API Endpoints
+
 - `GET /api/stream`: SSE (Server-Sent Events) endpoint for real-time log and state streaming.
 - `POST /api/run`: Triggers a new autonomous trading cycle.
 
 ## 🚦 Getting Started
+
 1. Ensure your `.env` is configured with `KALSHI_PROD_KEY_ID` and `KALSHI_PROD_PRIVATE_KEY`.
 2. Run `npm install`.
 3. Start the engine: `npm run dev`.

@@ -1,30 +1,19 @@
 {
-    "compilerOptions": {
-        "target": "ESNext",
-        "module": "CommonJS",
-        "moduleResolution": "Node",
-        "outDir": "dist",
-        "strict": true,
-        "esModuleInterop": true,
-        "skipLibCheck": true,
-        "forceConsistentCasingInFileNames": true,
-        "resolveJsonModule": true,
-        "baseUrl": ".",
-        "paths": {
-            "@shared/*": [
-                "../shared/*"
-            ]
-        }
-    },
-    "include": [
-        "src/**/*",
-        "agents/**/*",
-        "services/**/*",
-        "config.ts",
-        "../shared/**/*"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist"
-    ]
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../shared/*"]
+    }
+  },
+  "include": ["src/**/*", "agents/**/*", "services/**/*", "config.ts", "../shared/**/*"],
+  "exclude": ["node_modules", "dist"]
 }
