@@ -281,7 +281,7 @@ app.post('/api/auth', async (req: Request, res: Response) => {
     }
 });
 
-app.post('/api/run', authenticateToken, async (req: Request, res: Response) => {
+app.post('/api/run', async (req: Request, res: Response) => {
     if (systemState.isProcessing) {
         return res.status(400).json({ error: 'System busy. Cycle already in progress.' });
     }
@@ -336,7 +336,7 @@ app.post('/api/run', authenticateToken, async (req: Request, res: Response) => {
     }
 });
 
-app.post('/api/reset', authenticateToken, (req: Request, res: Response) => {
+app.post('/api/reset', (req: Request, res: Response) => {
     // Forcefully reset system state
     systemState.isProcessing = false;
     systemState.activeAgentId = null;
