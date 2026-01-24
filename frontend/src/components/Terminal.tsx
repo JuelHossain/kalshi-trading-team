@@ -71,30 +71,33 @@ const SimulationCard: React.FC<{ data: SimulationState }> = ({ data }) => (
 );
 
 const LogLine: React.FC<{ log: LogEntry }> = ({ log }) => {
-  // Heuristic: Check for error keywords even if level is INFO
-  const errorKeywords = [
-    'error',
-    'failed',
-    'fail',
-    'exception',
-    'veto',
-    'rejected',
-    'invalid',
-    'could not',
-  ];
-  const isError =
-    log.level === 'ERROR' || errorKeywords.some((kw) => log.message.toLowerCase().includes(kw));
+  // Terminal best practices: Color by log level
+  const getLevelStyles = (level: string) => {
+    switch (level) {
+      case 'ERROR':
+        return 'border-red-500 bg-red-500/10 text-red-400 font-semibold';
+      case 'WARN':
+      case 'WARNING':
+        return 'border-yellow-500 bg-yellow-500/10 text-yellow-400';
+      case 'INFO':
+        return 'border-blue-500 bg-blue-500/5 text-blue-300';
+      case 'DEBUG':
+        return 'border-gray-500 bg-gray-500/5 text-gray-500';
+      default:
+        return 'border-transparent text-gray-400';
+    }
+  };
+
+  const levelStyles = getLevelStyles(log.level);
 
   return (
     <div
-      className={`flex gap-3 py-1 px-2 rounded hover:bg-white/5 transition-colors font-mono text-[10px] group border-l-2 ${isError ? 'border-red-500 bg-red-500/10' : 'border-transparent'}`}
+      className={`flex gap-3 py-1 px-2 rounded hover:bg-white/5 transition-colors font-mono text-[10px] group border-l-2 ${levelStyles}`}
     >
       <span className="text-gray-600 w-12 shrink-0 opacity-50">
         {log.timestamp.split('T')[1]?.split('.')[0]}
       </span>
-      <span
-        className={`${isError ? 'text-red-500 font-semibold' : 'text-gray-400 group-hover:text-gray-200'} break-words flex-1`}
-      >
+      <span className="break-words flex-1 group-hover:text-gray-200">
         {log.message.replace(/^Agent \d+: /, '')}
       </span>
     </div>
