@@ -6,13 +6,13 @@ import {
   TimelineEvent,
   TimelineEventType,
 } from '@shared/types';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 const BACKEND_URL = ''; // Relative path handled by Vite proxy
 const PLAYBACK_SPEED_MS = 250;
 
 // Helper to determine phase for data events
-const getPhaseForType = (type: string, data: any): number => {
+const getPhaseForType = (type: string, _data: any): number => {
   switch (type) {
     case 'MARKET':
       return 1; // Surveillance
@@ -151,7 +151,9 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     return () => clearInterval(interval);
   }, [cycleCount]); // Dependency on cycleCount for synthetic events
 
-  const runOrchestrator = async () => {
+  const runOrchestrator = useCallback(async () => {
+    if (isProcessing) return; // Prevent double trigger
+
     setIsProcessing(true);
     try {
       await fetch(`${BACKEND_URL}/api/run`, {
@@ -163,9 +165,27 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
       console.error('[Orchestrator] Failed to trigger backend:', error);
       setIsProcessing(false);
     }
-  };
+  }, [isProcessing, isPaperTrading]);
+
+  // Autopilot Logic: Automatically trigger next cycle when current one ends
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+
+    if (autoPilot && !isProcessing && cycleCount > 0) {
+      // Wait a brief moment before starting next cycle to allow UI to settle
+      timeoutId = setTimeout(() => {
+        console.log('[Autopilot] Starting next cycle...');
+        runOrchestrator();
+      }, 2000);
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [autoPilot, isProcessing, cycleCount, runOrchestrator]);
 
   const handleKillSwitch = async () => {
+    setAutoPilot(false); // Disengage autopilot on manual stop
     try {
       await fetch(`${BACKEND_URL}/api/kill-switch`, { method: 'POST' });
     } catch (e) {
@@ -190,13 +210,13 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     setAutoPilot,
     runOrchestrator,
     handleKillSwitch,
-    addLog: (msg: string, id: number, level: any) =>
+    addLog: (msg: string, _id: number, _level: any) =>
       console.log('Direct logging disabled in playback mode', msg),
     handleAgentTest,
     viewedAgentId: null,
-    setViewedAgentId: () => {},
+    setViewedAgentId: () => { },
     showHealth: false,
-    setShowHealth: () => {},
+    setShowHealth: () => { },
     vault,
     simulation,
     health,

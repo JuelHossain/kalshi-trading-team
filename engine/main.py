@@ -60,45 +60,7 @@ class GhostEngine:
         self.opp_queue: asyncio.Queue = asyncio.Queue()
         self.exec_queue: asyncio.Queue = asyncio.Queue()
 
-    async def run_soul(self):
-        """SOUL: Pre-flight and oversight."""
-        while self.running:
-            if not self.manual_kill_switch:
-                message = {"cycle_id": 1, "paper_trading": True}
-                await self.soul.on_cycle_start(message)
-            await asyncio.sleep(60)  # Check every minute
 
-    async def run_senses(self):
-        """SENSES: Continuous scanning and queueing opportunities."""
-        while self.running:
-            if not self.manual_kill_switch:
-                await self.senses.run_scout(self.opp_queue)
-            await asyncio.sleep(10)  # Scan every 10 seconds
-
-    async def run_brain(self):
-        """BRAIN: Process opportunities into executions."""
-        while self.running:
-            if not self.manual_kill_switch:
-                await self.brain.run_intelligence(self.opp_queue, self.exec_queue)
-            await asyncio.sleep(1)  # Check queue frequently
-
-    async def run_hand(self):
-        """HAND: Execute trades from queue."""
-        while self.running:
-            if not self.manual_kill_switch:
-                await self.hand.run_execution(self.exec_queue)
-            await asyncio.sleep(1)  # Check queue frequently
-
-    async def keep_alive(self):
-        """Keep the event loop alive."""
-        while self.running:
-            await asyncio.sleep(1)
-
-        # Mega-Agent references for inter-agent communication
-        self.soul: Optional[SoulAgent] = None
-        self.senses: Optional[SensesAgent] = None
-        self.brain: Optional[BrainAgent] = None
-        self.hand: Optional[HandAgent] = None
 
     async def initialize_system(self):
         print(f"{Fore.MAGENTA}=========================================={Style.RESET_ALL}")
@@ -161,9 +123,9 @@ class GhostEngine:
         Checks Kill Switch and safety conditions.
         """
         # Temporarily disabled for manual testing
-        # if self.manual_kill_switch:
-        #     print(f"{Fore.RED}[GHOST] 💀 MANUAL KILL SWITCH ACTIVE. HALTING.{Style.RESET_ALL}")
-        #     return False
+        if self.manual_kill_switch:
+            print(f"{Fore.RED}[GHOST] 💀 MANUAL KILL SWITCH ACTIVE. HALTING.{Style.RESET_ALL}")
+            return False
 
         if os.getenv("KILL_SWITCH") == "true":
             print(f"{Fore.RED}[GHOST] ENV KILL SWITCH ACTIVE. HALTING.{Style.RESET_ALL}")
@@ -195,12 +157,10 @@ class GhostEngine:
             return
 
         self.is_processing = True
-        self.cycle_count += 1
-
         try:
             # SOUL: Authorization Check
             if not self.authorize_cycle():
-                msg = f"Cycle {self.cycle_count} not authorized."
+                msg = f"Cycle {self.cycle_count + 1} not authorized."
                 print(f"{Fore.YELLOW}[GHOST] {msg}{Style.RESET_ALL}")
                 await self.bus.publish(
                     "SYSTEM_LOG",
@@ -213,6 +173,8 @@ class GhostEngine:
                     "GHOST",
                 )
                 return
+
+            self.cycle_count += 1
 
             # Cycle Start
             await self.bus.publish(

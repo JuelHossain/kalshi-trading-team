@@ -27,7 +27,7 @@ class SensesAgent(BaseAgent):
     """The 24/7 Observer - Surveillance & Signal Detection"""
 
     VALUE_GAP_THRESHOLD = 0.05  # 5% minimum edge required
-    MIN_LIQUIDITY = 2000  # $2,000 minimum liquidity
+    MIN_LIQUIDITY = 0  # $0 minimum liquidity for Demo/Testing
 
     def __init__(self, agent_id: int, bus: EventBus, kalshi_client=None):
         super().__init__("SENSES", agent_id, bus)
@@ -140,6 +140,9 @@ class SensesAgent(BaseAgent):
                         data = await resp.json()
                         self._parse_vegas_odds(data)
                         await self.log(f"Shadow odds synced: {len(self.vegas_odds_cache)} markets.")
+                    else:
+                         error_text = await resp.text()
+                         await self.log(f"RapidAPI Error {resp.status}: {error_text[:100]}", level="ERROR")
         except Exception as e:
             await self.log(f"RapidAPI sync failed: {str(e)[:50]}", level="ERROR")
 
@@ -214,40 +217,6 @@ class SensesAgent(BaseAgent):
 
 
 
-    async def run_scout(self, opp_queue: asyncio.Queue):
-        """Continuous scanning and queueing opportunities."""
-        while True:
-            try:
-                await self.log("Initiating passive market scan (zero token cost)...")
-
-                # Fetch Kalshi markets
-                markets = await self.fetch_kalshi_markets()
-                if len(markets) == 0:
-                    await self.log(
-                        "ERROR: Scanned 0 Kalshi markets - API not responding with market data",
-                        level="ERROR",
-                    )
-                else:
-                    await self.log(f"Scanned {len(markets)} Kalshi markets.")
-
-                # Sync Vegas odds
-                await self.sync_vegas_odds()
-
-                # Filter for value gaps
-                opportunities = await self.filter_value_gaps(markets)
-                await self.log(f"Found {len(opportunities)} value gaps.")
-
-                # Queue opportunities
-                for opp in opportunities:
-                    await self.queue_opportunity(opp_queue, opp)
-
-                if not opportunities:
-                    await self.log("WARNING: No significant value gaps detected", level="WARN")
-
-            except Exception as e:
-                await self.log(f"Surveillance error: {str(e)[:100]}", level="ERROR")
-
-            await asyncio.sleep(10)  # Scan every 10 seconds
 
     async def on_tick(self, payload: Dict[str, Any]):
         pass  # Surveillance is event-driven, not tick-based

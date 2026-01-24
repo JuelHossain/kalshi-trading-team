@@ -218,44 +218,6 @@ Respond in JSON format:
         """Get next target for Hand to execute"""
         return self.execution_queue.pop(0) if self.execution_queue else None
 
-    async def run_intelligence(self, opp_queue: asyncio.Queue, exec_queue: asyncio.Queue):
-        """Process opportunities into execution decisions."""
-        while True:
-            try:
-                # Get next opportunity
-                opportunity = await opp_queue.get()
-                await self.log(f"Processing opportunity: {opportunity['market_id']}")
-
-                # Run debate
-                debate_result = await self.run_committee_debate(opportunity)
-                confidence = debate_result.get("confidence", 0)
-
-                # Run simulation
-                sim_result = await self.run_monte_carlo_simulation(opportunity, debate_result)
-
-                target = {
-                    "ticker": opportunity["market_id"],
-                    "confidence": confidence,
-                    "ev": sim_result.get("ev", 0),
-                    "reasoning": debate_result.get("reasoning", ""),
-                    "suggested_size": self.calculate_kelly_stake(
-                        confidence, sim_result.get("ev", 0)
-                    ),
-                }
-
-                if confidence > 85:
-                    await self.queue_for_execution(exec_queue, target)
-                    await self.log(
-                        f"Approved for execution: {target['ticker']} | Conf: {confidence}%"
-                    )
-                else:
-                    await self.log(f"Rejected: {target['ticker']} | Conf: {confidence}% too low")
-
-            except Exception as e:
-                await self.log(f"Intelligence error: {str(e)[:100]}", level="ERROR")
-                await asyncio.sleep(1)
-
-            await asyncio.sleep(1)  # Process frequently
 
     async def on_tick(self, payload: Dict[str, Any]):
         pass  # Brain is event-driven
