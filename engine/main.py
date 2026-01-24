@@ -402,14 +402,12 @@ class GhostEngine:
                     pass
 
     async def run(self):
-        """Main event loop with continuous queue processing."""
+        """Main event loop."""
         await self.initialize_system()
         await self.start_http_server()
 
-        # Continuous agent operations with queues
-        await asyncio.gather(
-            self.run_soul(), self.run_senses(), self.run_brain(), self.run_hand(), self.keep_alive()
-        )
+        while self.running:
+            await asyncio.sleep(1)
 
     def start(self):
         loop = asyncio.new_event_loop()
