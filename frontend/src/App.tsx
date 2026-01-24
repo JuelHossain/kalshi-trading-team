@@ -133,21 +133,19 @@ const App: React.FC = () => {
             <div className="flex items-center p-1 bg-black/40 rounded-full border border-white/5">
               <button
                 onClick={() => orchestratorProps.setAutoPilot(!orchestratorProps.autoPilot)}
-                className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                  orchestratorProps.autoPilot
-                    ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
-                    : 'text-gray-500 hover:text-gray-300'
-                }`}
+                className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${orchestratorProps.autoPilot
+                  ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
+                  : 'text-gray-500 hover:text-gray-300'
+                  }`}
               >
                 AUTOPILOT
               </button>
               <button
                 onClick={() => !orchestratorProps.autoPilot && orchestratorProps.setAutoPilot(true)}
-                className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-                  !orchestratorProps.autoPilot
-                    ? 'bg-white/10 text-white'
-                    : 'text-transparent w-0 p-0 overflow-hidden'
-                }`}
+                className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${!orchestratorProps.autoPilot
+                  ? 'bg-white/10 text-white'
+                  : 'text-transparent w-0 p-0 overflow-hidden'
+                  }`}
               >
                 MANUAL
               </button>

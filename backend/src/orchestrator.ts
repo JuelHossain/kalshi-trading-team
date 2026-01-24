@@ -11,9 +11,9 @@ import {
   logTradeToHistory,
   analyzeSystemError,
   validateStaleData,
-} from '../agents/exports';
-import { isAuthenticated } from '../services/kalshiService';
-import { sendNotification } from '../services/notificationService';
+} from './agents/exports';
+import { isAuthenticated } from './services/kalshiService';
+import { sendNotification } from './services/notificationService';
 
 export const runOrchestratorCycle = async (
   isPaperTrading: boolean,
@@ -265,7 +265,7 @@ export const runOrchestratorCycle = async (
     try {
       await analyzeSystemError(error.message, `Sentient Funnel Cycle #${cycleCount}`);
       await sendNotification(`⚠️ SYSTEM CRASH: ${error.message}`, 'urgent');
-    } catch (e) {}
+    } catch (e) { }
   } finally {
     updateState({ isProcessing: false, activeAgentId: null });
   }

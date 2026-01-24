@@ -1,5 +1,5 @@
 import 'dotenv/config'; // Load env vars immediately
-import { SHARED_CONFIG } from '../shared/config';
+import { SHARED_CONFIG } from '../../shared/config';
 
 export const CONFIG = {
   ...SHARED_CONFIG,

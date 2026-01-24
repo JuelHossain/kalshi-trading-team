@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { LogEntry } from '@shared/types';
-import { CONFIG } from '../../config';
+import { CONFIG } from '../config';
 
 export interface SystemState {
   isProcessing: boolean;

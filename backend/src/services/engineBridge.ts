@@ -1,10 +1,10 @@
-import { CONFIG } from '../../config';
-import { authenticateWithKeys, isAuthenticated, kalshiFetch } from '../../services/kalshiService';
-import { startSentinel, auditCodebase } from '../../agents/agent-14-qa-chaos/index';
+import { CONFIG } from '../config';
+import { authenticateWithKeys, isAuthenticated, kalshiFetch } from './kalshiService';
+import { startSentinel, auditCodebase } from '../agents/agent-14-qa-chaos/index';
 import { SSEManager, SystemState } from '../middleware/sse';
 import { StateManager } from './stateManager';
-import { runCommitteeDebate } from '../../agents/agent-4-analyst/index';
-import { logToDb } from '../../services/dbService';
+import { runCommitteeDebate } from '../agents/agent-4-analyst/index';
+import { logToDb } from './dbService';
 
 export class EngineBridge {
   private sseManager: SSEManager;
@@ -30,33 +30,33 @@ export class EngineBridge {
         const pk =
           privateKey === 'DEMO_MODE' && !isProd
             ? `-----BEGIN PRIVATE KEY-----\n` +
-              `MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCy4+svoBnAlVym\n` +
-              `TTotzW6M8OvLMcbMbmx6nLUz/ZCEaDJa5ObjKljMv+IxYAlYcRUqB7eUiEWabDqd\n` +
-              `LgRrgNCgnedE8l2XfhJGzaRKYr5jlndX8BAwOWEARAz+LaagqlR517OP5aCzXpDf\n` +
-              `PHVJLep2d3wLKw+izImVRZSRC/3GzNBZtSZfec/OaNM1kxfoqHQyIsz0jPw4Oj/w\n` +
-              `J6xf6pQFhCsxM9UwBpjFvb/DUA56GJqlfAgvqmgqCbwxcPL/bZ9aPoSMR0ielRcl\n` +
-              `mMGNDKtHiavgfKDac9l+XffVgznBJnSEJUtIYG2ZDtFZt9ldQ/LxQ6TsyvWwloJM\n` +
-              `i20ZAYzlAgMBAAECggEAFtC/0aqrLic+kk0+MtJFG7+saxV1o+QffMHY0IEx+dkq\n` +
-              `NvKDygxAGBkO+bokZv3BM8OZM93vdqMAFMTmNmnO8fVBpkb9DdG79gDLR9txKdVq\n` +
-              `cjJBdk0TJIwJVi+vVUV0EbgjhCJGzSmt83LMCKHNCf/yN6Bt1ZcdowalTJyJaN3G\n` +
-              `eVkfC4HZIcoLJAeR7g5C8zh0Hurlh+c4eGF8fbaiUYpjMlOgeGEo/Ms/oS9bBACh\n` +
-              `lIMGujLRfFW8RjFj/+5A3OSaZBDILKh0zf6cmcpduSUiGnp+ss1NjNzt6JUDobdO\n` +
-              `czydghkhB4vVp9RywxvKTVXzoYsMFV1Iz5t4Fu/JUQKBgQDuquc12TwlcdTB1EaK\n` +
-              `dMEE74uS5DG+beRgM9vjAoHsGn9Vx4jpdAjQEKzR3ek3LXqeag366nBAEwqeiYop\n` +
-              `ZXjL9FGjTEJymnFsXuJHy9ma1b1+DnrfuaRDleLcnLe+lhnySzAjErRlPWBfoxKY\n` +
-              `I0nG66p9bUE9Db+aBJjF5yDwWQKBgQC/4bBq/AmcGa67NRTvKnvqpME8v2w16PCf\n` +
-              `kVuMYSBQErDE6c2gxfjPpVTozHTBTDrTgi0ZUMHM2IZk6bcIh/R27eHA3yOIYJWe\n` +
-              `LKygPbtfHGWtKoRvwdHTbwc0Gznyr1ikwPEXZ2gofw9zXMAogiJP4gBW4Qzs81kR\n` +
-              `oamdpFYPbQKBgGfNvTIWgapnj/mdsfCWRz02UqZYyanhcerFo2VgudFO1QMh/dJL\n` +
-              `vWmBVykQM1bkWOh9iAcR4DB+F6hMeeL3V0qdwMQdbukZcyuHOTOw3bwSKpChC6Ay\n` +
-              `xdb/YeRB5UjnT/Gp8g3PHNbLkxcFfhjdgEEcTtKuqik7yZHbXfb1R8ZBAoGBALsv\n` +
-              `cwfbGZDTqRZtwR9TxZDw6qXVY73voRU5GyMF+RzELvfZ0cRefMwsUHnOQrPzJowB\n` +
-              `OPeyRW0NaYX2TZ0f7Ac9Jvcddy9qcWrd0AV+U1SEglf82zeez4/Ahzl4uf4aupH2\n` +
-              `uvsG4KBo22zB9Z9O3CQrqAMZBp/9AU3m9G2ZzG69AoGARNU0/DnjAavtveY8/AN2\n` +
-              `C2O1xo8UxFq4bhU8+rWsC1En5RhTuA0RuxlTL1VuCRW4Z1ywDNayavCJ/NlHRahH\n` +
-              `eF1TbOZC1gP0aAxrJ6vnIP62/tQVDngmWDNOa4Yb6+ByOYJhSSGzXzCekI6khY7R\n` +
-              `yNtFuEM5HGR1PRPrjugeYYo=\n` +
-              `-----END PRIVATE KEY-----`
+            `MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCy4+svoBnAlVym\n` +
+            `TTotzW6M8OvLMcbMbmx6nLUz/ZCEaDJa5ObjKljMv+IxYAlYcRUqB7eUiEWabDqd\n` +
+            `LgRrgNCgnedE8l2XfhJGzaRKYr5jlndX8BAwOWEARAz+LaagqlR517OP5aCzXpDf\n` +
+            `PHVJLep2d3wLKw+izImVRZSRC/3GzNBZtSZfec/OaNM1kxfoqHQyIsz0jPw4Oj/w\n` +
+            `J6xf6pQFhCsxM9UwBpjFvb/DUA56GJqlfAgvqmgqCbwxcPL/bZ9aPoSMR0ielRcl\n` +
+            `mMGNDKtHiavgfKDac9l+XffVgznBJnSEJUtIYG2ZDtFZt9ldQ/LxQ6TsyvWwloJM\n` +
+            `i20ZAYzlAgMBAAECggEAFtC/0aqrLic+kk0+MtJFG7+saxV1o+QffMHY0IEx+dkq\n` +
+            `NvKDygxAGBkO+bokZv3BM8OZM93vdqMAFMTmNmnO8fVBpkb9DdG79gDLR9txKdVq\n` +
+            `cjJBdk0TJIwJVi+vVUV0EbgjhCJGzSmt83LMCKHNCf/yN6Bt1ZcdowalTJyJaN3G\n` +
+            `eVkfC4HZIcoLJAeR7g5C8zh0Hurlh+c4eGF8fbaiUYpjMlOgeGEo/Ms/oS9bBACh\n` +
+            `lIMGujLRfFW8RjFj/+5A3OSaZBDILKh0zf6cmcpduSUiGnp+ss1NjNzt6JUDobdO\n` +
+            `czydghkhB4vVp9RywxvKTVXzoYsMFV1Iz5t4Fu/JUQKBgQDuquc12TwlcdTB1EaK\n` +
+            `dMEE74uS5DG+beRgM9vjAoHsGn9Vx4jpdAjQEKzR3ek3LXqeag366nBAEwqeiYop\n` +
+            `ZXjL9FGjTEJymnFsXuJHy9ma1b1+DnrfuaRDleLcnLe+lhnySzAjErRlPWBfoxKY\n` +
+            `I0nG66p9bUE9Db+aBJjF5yDwWQKBgQC/4bBq/AmcGa67NRTvKnvqpME8v2w16PCf\n` +
+            `kVuMYSBQErDE6c2gxfjPpVTozHTBTDrTgi0ZUMHM2IZk6bcIh/R27eHA3yOIYJWe\n` +
+            `LKygPbtfHGWtKoRvwdHTbwc0Gznyr1ikwPEXZ2gofw9zXMAogiJP4gBW4Qzs81kR\n` +
+            `oamdpFYPbQKBgGfNvTIWgapnj/mdsfCWRz02UqZYyanhcerFo2VgudFO1QMh/dJL\n` +
+            `vWmBVykQM1bkWOh9iAcR4DB+F6hMeeL3V0qdwMQdbukZcyuHOTOw3bwSKpChC6Ay\n` +
+            `xdb/YeRB5UjnT/Gp8g3PHNbLkxcFfhjdgEEcTtKuqik7yZHbXfb1R8ZBAoGBALsv\n` +
+            `cwfbGZDTqRZtwR9TxZDw6qXVY73voRU5GyMF+RzELvfZ0cRefMwsUHnOQrPzJowB\n` +
+            `OPeyRW0NaYX2TZ0f7Ac9Jvcddy9qcWrd0AV+U1SEglf82zeez4/Ahzl4uf4aupH2\n` +
+            `uvsG4KBo22zB9Z9O3CQrqAMZBp/9AU3m9G2ZzG69AoGARNU0/DnjAavtveY8/AN2\n` +
+            `C2O1xo8UxFq4bhU8+rWsC1En5RhTuA0RuxlTL1VuCRW4Z1ywDNayavCJ/NlHRahH\n` +
+            `eF1TbOZC1gP0aAxrJ6vnIP62/tQVDngmWDNOa4Yb6+ByOYJhSSGzXzCekI6khY7R\n` +
+            `yNtFuEM5HGR1PRPrjugeYYo=\n` +
+            `-----END PRIVATE KEY-----`
             : privateKey;
 
         await authenticateWithKeys(keyId, pk, !isProd);

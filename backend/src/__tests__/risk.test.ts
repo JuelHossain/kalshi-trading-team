@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateRiskParams } from '../../agents/agent-8-executioner';
+import { calculateRiskParams } from '../agents/agent-8-executioner';
 
 describe('Agent 8: Risk Engine', () => {
   it('should calculate zero wager for low win probability', () => {

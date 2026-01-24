@@ -21,6 +21,9 @@ from aiohttp import web
 from colorama import init, Fore, Style
 from dotenv import load_dotenv
 
+# Load Env BEFORE imports
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
 from core.bus import EventBus
 from core.vault import RecursiveVault
 from core.network import kalshi_client
@@ -33,9 +36,8 @@ from agents.hand import HandAgent
 from agents.gateway import GatewayAgent
 from agents.base import BaseAgent
 
-# Initialize Colorama and Env
+# Initialize Colorama
 init()
-load_dotenv()
 
 
 class GhostEngine:
@@ -103,8 +105,8 @@ class GhostEngine:
         print(f"{Fore.MAGENTA}   GHOST ENGINE v3.0 (4 MEGA-AGENTS)     {Style.RESET_ALL}")
         print(f"{Fore.MAGENTA}=========================================={Style.RESET_ALL}")
 
-        # Subscribe to System Logs
-        await self.bus.subscribe("SYSTEM_LOG", self.handle_log)
+        # Subscribe to System Logs (Managed by SSE broadcast)
+        # await self.bus.subscribe("SYSTEM_LOG", self.handle_log)
 
         # Initialize 4 Mega-Agents
         print(f"{Fore.CYAN}[GHOST] Initializing 4 Mega-Agent Pillars...{Style.RESET_ALL}")
@@ -142,19 +144,16 @@ class GhostEngine:
 
         # Initialize Vault with Real Balance
         try:
-            # real_balance = await kalshi_client.get_balance()
-            real_balance = 30000 
+            real_balance = await kalshi_client.get_balance()
             print(f"{Fore.GREEN}[SOUL] Fetched Real Balance: ${real_balance/100:.2f}{Style.RESET_ALL}")
             await self.vault.initialize(real_balance)
         except Exception as e:
-            print(f"{Fore.RED}[SOUL] Failed to fetch balance: {e}. Defaulting to $300 (Testing Mode).{Style.RESET_ALL}")
-            await self.vault.initialize(30000)
+            print(f"{Fore.RED}[SOUL] Failed to fetch balance: {e}. Defaulting to $0 (Safety Mode).{Style.RESET_ALL}")
+            await self.vault.initialize(0)
 
         print(f"{Fore.GREEN}[GHOST] SYSTEM ONLINE - 4 Pillars Active.{Style.RESET_ALL}")
 
-    async def handle_log(self, message):
-        """Central logging handler."""
-        pass
+
 
     def authorize_cycle(self) -> bool:
         """
