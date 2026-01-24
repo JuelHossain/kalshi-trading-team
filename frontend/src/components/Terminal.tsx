@@ -61,9 +61,9 @@ const LogLine: React.FC<{ log: LogEntry }> = ({ log }) => {
         errorKeywords.some(kw => log.message.toLowerCase().includes(kw));
 
     return (
-        <div className={`flex gap-3 py-1 px-2 rounded hover:bg-white/5 transition-colors font-mono text-[10px] group border-l-2 ${isError ? 'border-red-500 bg-red-500/5' : 'border-transparent'}`}>
+        <div className={`flex gap-3 py-1 px-2 rounded hover:bg-white/5 transition-colors font-mono text-[10px] group border-l-2 ${isError ? 'border-red-500 bg-red-500/10' : 'border-transparent'}`}>
             <span className="text-gray-600 w-12 shrink-0 opacity-50">{log.timestamp.split('T')[1]?.split('.')[0]}</span>
-            <span className={`${isError ? 'text-red-400' : 'text-gray-400 group-hover:text-gray-200'} break-words flex-1`}>
+            <span className={`${isError ? 'text-red-500 font-semibold' : 'text-gray-400 group-hover:text-gray-200'} break-words flex-1`}>
                 {log.message.replace(/^Agent \d+: /, '')}
             </span>
         </div>
