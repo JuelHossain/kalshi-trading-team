@@ -2,8 +2,7 @@ import { Router, Request, Response } from 'express';
 import { SSEManager } from '../middleware/sse';
 import { StateManager } from '../services/stateManager';
 import { EngineBridge } from '../services/engineBridge';
-// import { runCommitteeDebate } from '../agents/agent-4-analyst';
-// import { getPnLHistory, getDailyPnL } from '../services/dbService';
+import { getPnLHistory, getDailyPnL } from '../../services/dbService';
 import { CONFIG } from '../../config';
 
 const router = Router();
@@ -106,23 +105,26 @@ export const setupAPIRoutes = (
     res.json({ message: 'Kill switch executed' });
   });
 
-  // router.get('/pnl', async (req: Request, res: Response) => {
-  //   try {
-  //     const history = await getPnLHistory(24);
-  //     res.json(history);
-  //   } catch (e: any) {
-  //     res.status(500).json({ error: e.message });
-  //   }
-  // });
+  // PnL endpoints - real data from Supabase
+  router.get('/pnl', async (req: Request, res: Response) => {
+    try {
+      const history = await getPnLHistory(24);
+      res.json(history);
+    } catch (e: any) {
+      console.error('[API] PnL fetch error:', e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
 
-  // router.get('/pnl/heatmap', async (req: Request, res: Response) => {
-  //   try {
-  //     const data = await getDailyPnL(365);
-  //     res.json(data);
-  //   } catch (e: any) {
-  //     res.status(500).json({ error: e.message });
-  //   }
-  // });
+  router.get('/pnl/heatmap', async (req: Request, res: Response) => {
+    try {
+      const data = await getDailyPnL(365);
+      res.json(data);
+    } catch (e: any) {
+      console.error('[API] Heatmap fetch error:', e.message);
+      res.status(500).json({ error: e.message });
+    }
+  });
 
   return router;
 };

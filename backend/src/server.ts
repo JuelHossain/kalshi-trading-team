@@ -1,13 +1,13 @@
+import dotenv from 'dotenv';
+dotenv.config(); // Must be first, before other imports that use env vars
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { SSEManager } from './middleware/sse';
 import { StateManager } from './services/stateManager';
 import { EngineBridge } from './services/engineBridge';
 import { authRouter } from './routes/auth';
 import { setupAPIRoutes } from './routes/api';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;

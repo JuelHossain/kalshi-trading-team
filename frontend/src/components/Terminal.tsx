@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import React, { useMemo } from 'react';
 import {
   LogEntry,
   TimelineEvent,

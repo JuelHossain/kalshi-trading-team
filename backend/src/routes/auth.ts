@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { CONFIG } from '../../config';
-import { authenticateWithKeys, isAuthenticated } from '../services/kalshiService';
+import { authenticateWithKeys, isAuthenticated } from '../../services/kalshiService';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
