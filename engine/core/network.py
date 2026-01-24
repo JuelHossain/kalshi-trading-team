@@ -24,14 +24,10 @@ class KalshiClient:
         # Determine Mode
         is_paper = os.getenv("IS_PAPER_TRADING") == "true"
 
-        if is_paper:
-            self.key_id = os.getenv("KALSHI_DEMO_KEY_ID")
-            self.base_url = "https://demo-api.kalshi.co/trade-api/v2"
-            pk_pem = os.getenv("KALSHI_DEMO_PRIVATE_KEY")
-        else:
-            self.key_id = os.getenv("KALSHI_PROD_KEY_ID")
-            self.base_url = "https://api.kalshi.co/trade-api/v2"
-            pk_pem = os.getenv("KALSHI_PROD_PRIVATE_KEY")
+        # For testing, use prod URL even in paper mode to get markets
+        self.key_id = os.getenv("KALSHI_PROD_KEY_ID") or os.getenv("KALSHI_DEMO_KEY_ID")
+        self.base_url = "https://api.kalshi.co/trade-api/v2"
+        pk_pem = os.getenv("KALSHI_PROD_PRIVATE_KEY") or os.getenv("KALSHI_DEMO_PRIVATE_KEY")
         if pk_pem:
             try:
                 if "\\n" in pk_pem:
@@ -58,6 +54,7 @@ class KalshiClient:
 
         timestamp = str(int(time.time() * 1000))
         msg = f"{timestamp}{method}{path}{body}"
+        print(f"[NETWORK] Signing message: {msg}")
 
         signature_bytes = self.private_key.sign(
             msg.encode(),
@@ -65,6 +62,7 @@ class KalshiClient:
             hashes.SHA256(),
         )
         signature = base64.b64encode(signature_bytes).decode()
+        print(f"[NETWORK] Generated signature: {signature}")
 
         return {
             "KALSHI-ACCESS-KEY": self.key_id,
@@ -94,10 +92,15 @@ class KalshiClient:
                 async with session.request(
                     method, url, headers=headers, params=params, json=json_data
                 ) as resp:
+                    print(f"[NETWORK] API Response: {resp.status} for {method} {path}")
                     if resp.status == 200:
-                        return await resp.json()
+                        data = await resp.json()
+                        print(f"[NETWORK] Response data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
+                        return data
 
                     if resp.status == 429 or 500 <= resp.status <= 504:
+                        error_text = await resp.text()
+                        print(f"[NETWORK] Error response: {error_text}")
                         wait = (2**attempt) + (time.time() % 1)  # Exponential backoff + jitter
                         print(
                             f"{Fore.YELLOW}[NETWORK] Attempt {attempt+1} failed ({resp.status}). Retrying in {wait:.2f}s...{Style.RESET_ALL}"

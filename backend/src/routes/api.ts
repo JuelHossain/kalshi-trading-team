@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express';
 import { SSEManager } from '../middleware/sse';
 import { StateManager } from '../services/stateManager';
 import { EngineBridge } from '../services/engineBridge';
-import { runCommitteeDebate } from '../agents/agent-4-analyst';
-import { getPnLHistory, getDailyPnL } from '../services/dbService';
+// import { runCommitteeDebate } from '../agents/agent-4-analyst';
+// import { getPnLHistory, getDailyPnL } from '../services/dbService';
 import { CONFIG } from '../../config';
 
 const router = Router();
@@ -17,15 +17,15 @@ export const setupAPIRoutes = (
     sseManager.setupSSE(res, stateManager.getState());
   });
 
-  router.post('/analyze', async (req: Request, res: Response) => {
-    const { query } = req.body;
-    try {
-      const debate = await runCommitteeDebate(query, CONFIG.DEFAULT_DEBATE_PRICE);
-      res.json(debate);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
+  // router.post('/analyze', async (req: Request, res: Response) => {
+  //   const { query } = req.body;
+  //   try {
+  //     const debate = await runCommitteeDebate(query, CONFIG.DEFAULT_DEBATE_PRICE);
+  //     res.json(debate);
+  //   } catch (err: any) {
+  //     res.status(500).json({ error: err.message });
+  //   }
+  // });
 
   router.post('/run', async (req: Request, res: Response) => {
     const state = stateManager.getState();
@@ -106,23 +106,23 @@ export const setupAPIRoutes = (
     res.json({ message: 'Kill switch executed' });
   });
 
-  router.get('/pnl', async (req: Request, res: Response) => {
-    try {
-      const history = await getPnLHistory(24);
-      res.json(history);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
+  // router.get('/pnl', async (req: Request, res: Response) => {
+  //   try {
+  //     const history = await getPnLHistory(24);
+  //     res.json(history);
+  //   } catch (e: any) {
+  //     res.status(500).json({ error: e.message });
+  //   }
+  // });
 
-  router.get('/pnl/heatmap', async (req: Request, res: Response) => {
-    try {
-      const data = await getDailyPnL(365);
-      res.json(data);
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
+  // router.get('/pnl/heatmap', async (req: Request, res: Response) => {
+  //   try {
+  //     const data = await getDailyPnL(365);
+  //     res.json(data);
+  //   } catch (e: any) {
+  //     res.status(500).json({ error: e.message });
+  //   }
+  // });
 
   return router;
 };

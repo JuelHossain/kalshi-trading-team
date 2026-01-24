@@ -1,2 +1,11 @@
 export { runCommitteeDebate } from './agent-4-analyst/index';
-export { startSentinel, auditCodebase } from './agent-14-qa-chaos/index';
+export { fetchScoutedMarkets } from './agent-2-scout/index';
+export { fetchVegasOdds } from './agent-3-interceptor/index';
+export { runMonteCarloSim } from './agent-5-scientist/index';
+export { auditDecision } from './agent-6-auditor/index';
+export { fetchOrderBook, analyzeOrderBook } from './agent-7-sniper/index';
+export { createOrder } from './agent-8-executioner/index';
+export { fetchPortfolioBalance } from './agent-9-accountant/index';
+export { logTradeToHistory } from './agent-10-historian/index';
+export { analyzeSystemError } from './agent-13-fixer/index';
+export { startSentinel, auditCodebase, validateStaleData } from './agent-14-qa-chaos/index';
