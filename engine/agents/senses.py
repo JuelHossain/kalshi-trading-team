@@ -91,35 +91,35 @@ class SensesAgent(BaseAgent):
             await self.log(f"Surveillance error: {str(e)[:100]}", level="ERROR")
 
     async def fetch_kalshi_markets(self) -> List[Dict]:
-        """Fetch active markets from Kalshi (zero token cost)"""
+        """Fetch active markets from Kalshi"""
         if not self.kalshi_client:
-            await self.log("Kalshi client unavailable. Using mock data.")
-            return self._mock_markets()
+            await self.log("ERROR: Kalshi client not initialized.", level="ERROR")
+            return []
 
         try:
             # Use shared Kalshi client
             markets = await self.kalshi_client.get_active_markets()
-            await self.log(f"DEBUG: Raw Kalshi API response received: {len(markets) if markets else 0} markets", level="INFO")
-            if markets and len(markets) > 0:
-                sample_market = markets[0]
-                await self.log(f"DEBUG: Sample market - ID: {sample_market.get('id', 'N/A')}, Title: {sample_market.get('title', 'N/A')[:50]}...", level="INFO")
+            
             if markets is None:
                 await self.log(
                     "ERROR: Kalshi API request failed - check network and credentials",
                     level="ERROR",
                 )
                 return []
-            filtered = [m for m in markets if m.get("volume", 0) >= self.MIN_LIQUIDITY]
-            if len(filtered) == 0 and len(markets) > 0:
-                await self.log(
-                    "WARNING: All Kalshi markets filtered out due to low liquidity", level="WARN"
-                )
-            elif len(markets) == 0:
-                await self.log(
-                    "WARNING: No active markets returned from Kalshi API - markets may be closed or API issue",
-                    level="WARN",
-                )
-            return filtered
+                
+            await self.log(f"DEBUG: Active markets fetched: {len(markets)}", level="INFO")
+            
+            if len(markets) > 0:
+                sample = markets[0]
+                await self.log(f"DEBUG: Sample market: {sample.get('ticker')} | Vol: {sample.get('volume')}", level="INFO")
+
+            filtered_liquid = [m for m in markets if m.get("volume", 0) >= self.MIN_LIQUIDITY]
+            dropped_liquidity = len(markets) - len(filtered_liquid)
+            
+            if dropped_liquidity > 0:
+                 await self.log(f"DEBUG: Filtered {dropped_liquidity} markets due to low liquidity (<${self.MIN_LIQUIDITY})", level="INFO")
+
+            return filtered_liquid
         except Exception as e:
             await self.log(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
             return []
@@ -187,6 +187,9 @@ class SensesAgent(BaseAgent):
                     }
                 )
 
+        # Log filtering results
+        await self.log(f"Filter Report: Checked {len(markets)} markets against {len(self.vegas_odds_cache)} odds. Found {len(opportunities)} > {self.VALUE_GAP_THRESHOLD*100}% gap.", level="INFO")
+
         # Sort by value gap (highest first)
         opportunities.sort(key=lambda x: x["value_gap"], reverse=True)
         return opportunities[:5]  # Top 5 only
@@ -211,13 +214,7 @@ class SensesAgent(BaseAgent):
         """Get next opportunity for Brain"""
         return self.opportunity_queue.pop(0) if self.opportunity_queue else None
 
-    def _mock_markets(self) -> List[Dict]:
-        """Mock market data for testing"""
-        return [
-            {"ticker": "NBA-LAKERS-WIN", "yes_price": 45, "volume": 5000},
-            {"ticker": "NFL-CHIEFS-WIN", "yes_price": 52, "volume": 8000},
-            {"ticker": "WEATHER-RAIN-NYC", "yes_price": 30, "volume": 3000},
-        ]
+
 
     async def run_scout(self, opp_queue: asyncio.Queue):
         """Continuous scanning and queueing opportunities."""

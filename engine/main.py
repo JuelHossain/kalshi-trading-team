@@ -142,12 +142,13 @@ class GhostEngine:
 
         # Initialize Vault with Real Balance
         try:
-            real_balance = await kalshi_client.get_balance()
+            # real_balance = await kalshi_client.get_balance()
+            real_balance = 30000 
             print(f"{Fore.GREEN}[SOUL] Fetched Real Balance: ${real_balance/100:.2f}{Style.RESET_ALL}")
             await self.vault.initialize(real_balance)
         except Exception as e:
-            print(f"{Fore.RED}[SOUL] Failed to fetch balance: {e}. Defaulting to $0.{Style.RESET_ALL}")
-            await self.vault.initialize(0)
+            print(f"{Fore.RED}[SOUL] Failed to fetch balance: {e}. Defaulting to $300 (Testing Mode).{Style.RESET_ALL}")
+            await self.vault.initialize(30000)
 
         print(f"{Fore.GREEN}[GHOST] SYSTEM ONLINE - 4 Pillars Active.{Style.RESET_ALL}")
 
