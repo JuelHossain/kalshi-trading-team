@@ -21,13 +21,19 @@ class KalshiClient:
         self._session: Optional[aiohttp.ClientSession] = None
         self.private_key = None
 
-        # Determine Mode
-        is_paper = os.getenv("IS_PAPER_TRADING") == "true"
-
-        # For testing, use prod URL even in paper mode to get markets
-        self.key_id = os.getenv("KALSHI_PROD_KEY_ID") or os.getenv("KALSHI_DEMO_KEY_ID")
-        self.base_url = "https://api.kalshi.co/trade-api/v2"
-        pk_pem = os.getenv("KALSHI_PROD_PRIVATE_KEY") or os.getenv("KALSHI_DEMO_PRIVATE_KEY")
+        # Use Demo API by default (paper trading)
+        is_prod = os.getenv("IS_PRODUCTION") == "true"
+        
+        if is_prod:
+            self.key_id = os.getenv("KALSHI_PROD_KEY_ID")
+            self.base_url = "https://api.kalshi.co/trade-api/v2"
+            pk_pem = os.getenv("KALSHI_PROD_PRIVATE_KEY")
+        else:
+            # Demo/Sandbox mode (default)
+            self.key_id = os.getenv("KALSHI_DEMO_KEY_ID")
+            self.base_url = "https://demo-api.kalshi.co/trade-api/v2"
+            pk_pem = os.getenv("KALSHI_DEMO_PRIVATE_KEY")
+        
         if pk_pem:
             try:
                 if "\\n" in pk_pem:
