@@ -1,4 +1,4 @@
-import { isAuthenticated } from '../../services/kalshiService';
+import { kalshiService } from '../../services/kalshiService';
 import { CONFIG } from '../../config';
 
 export const authorizeExecution = async (cycleId: number): Promise<boolean> => {
@@ -6,7 +6,7 @@ export const authorizeExecution = async (cycleId: number): Promise<boolean> => {
   console.log(`[Agent 1] Authorizing Cycle #${cycleId}...`);
 
   // 1. Verify Auth Token
-  if (!isAuthenticated()) {
+  if (!kalshiService.isAuthenticated()) {
     console.error('[Agent 1] AUTH FAILURE: Access Token Invalid.');
     return false;
   }

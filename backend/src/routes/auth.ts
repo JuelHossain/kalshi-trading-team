@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { CONFIG } from '../config';
-import { authenticateWithKeys, isAuthenticated } from '../services/kalshiService';
+import { kalshiService } from '../services/kalshiService';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
@@ -31,7 +31,7 @@ router.post('/auth', async (req: Request, res: Response) => {
   const { keyId, privateKey, isPaperTrading, useSystemAuth } = req.body;
   try {
     if (useSystemAuth) {
-      if (isAuthenticated()) {
+      if (kalshiService.isAuthenticated()) {
         return res.json({ success: true, message: 'Authenticated via System Session' });
       }
 
@@ -42,14 +42,14 @@ router.post('/auth', async (req: Request, res: Response) => {
         : CONFIG.KALSHI.DEMO_PRIVATE_KEY;
 
       if (sysKeyId && sysPrivateKey) {
-        await authenticateWithKeys(sysKeyId, sysPrivateKey, isPaperTrading);
+        await kalshiService.authenticateWithKeys(sysKeyId, sysPrivateKey, isPaperTrading);
         return res.json({ success: true, message: 'Authenticated via System Environment' });
       } else {
         throw new Error('System authentication failed: Credentials missing from environment.');
       }
     }
 
-    await authenticateWithKeys(keyId, privateKey, isPaperTrading);
+    await kalshiService.authenticateWithKeys(keyId, privateKey, isPaperTrading);
     res.json({ success: true });
   } catch (err: any) {
     res.status(401).json({ error: err.message });

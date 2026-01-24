@@ -1,4 +1,4 @@
-import { kalshiFetch } from '../../services/kalshiService';
+import { kalshiService } from '../../services/kalshiService';
 import { fastClassify } from '../../services/aiService';
 
 interface HarvesterMarket {
@@ -15,7 +15,7 @@ export const fetchScoutedMarkets = async (isPaperTrading: boolean) => {
   try {
     // 1. Fetch from Kalshi
     // Using strict hard-coded filters here for efficiency
-    const data = await kalshiFetch(
+    const data = await kalshiService.fetch(
       '/markets?limit=100&status=active',
       'GET',
       undefined,

@@ -1,249 +1,230 @@
 import { CONFIG } from '../config';
 import crypto from 'crypto';
+import { CHAOS_STATE } from '../agents/agent-14-qa-chaos/state';
 
 // Agent 8: The Executioner (V2 Auth & Order Management)
 // Implements RSA-SHA256 Signing for Kalshi V2 API
 
-let session: { keyId: string; privateKey: string; isDemo?: boolean } | null = null;
+interface Session {
+  keyId: string;
+  privateKey: string;
+  isDemo?: boolean;
+}
 
-export const isAuthenticated = () => !!session;
+export class KalshiService {
+  private static instance: KalshiService;
+  private session: Session | null = null;
 
-export const authenticateWithKeys = async (keyId: string, privateKey: string, isPaper: boolean) => {
-  // Real authentication flow
-  const baseUrl = isPaper ? CONFIG.KALSHI.SANDBOX_API : CONFIG.KALSHI.PROD_API;
-  console.log(`[Agent 8] Initializing V2 Crypto-Engine for ${baseUrl}...`);
+  private constructor() {}
 
-  if (!keyId || !privateKey) {
-    throw new Error('Invalid Credentials: Key ID or Private Key missing.');
+  public static getInstance(): KalshiService {
+    if (!KalshiService.instance) {
+      KalshiService.instance = new KalshiService();
+    }
+    return KalshiService.instance;
   }
 
-  // Basic Validation of PEM format
-  if (!privateKey.includes('BEGIN')) {
-    throw new Error('Invalid Key Format: Must be PEM format.');
+  public isAuthenticated(): boolean {
+    return !!this.session;
   }
 
-  session = {
-    keyId: keyId,
-    privateKey: privateKey,
-    isDemo: isPaper,
-  };
+  public async authenticateWithKeys(
+    keyId: string,
+    privateKey: string,
+    isPaper: boolean
+  ): Promise<boolean> {
+    const baseUrl = isPaper ? CONFIG.KALSHI.SANDBOX_API : CONFIG.KALSHI.PROD_API;
+    console.log(`[Agent 8] Initializing V2 Crypto-Engine for ${baseUrl}...`);
 
-  console.log(`[Agent 8] Keys Loaded. Crypto-Engine Online.`);
-
-  // Pro-check: Verify connection immediately
-  try {
-    await checkConnection(isPaper);
-    console.log(`[Agent 8] Identity Verified on ${isPaper ? 'SANDBOX' : 'PROD'}.`);
-  } catch (e) {
-    console.warn(`[Agent 8] Pre-flight Check Failed, but keys are cached. Error:`, e);
-  }
-
-  return true;
-};
-
-// V2 Signature Generator using crypto (RSA-PSS)
-// Reference: https://docs.kalshi.com/getting_started/api_keys#javascript
-const getHeaders = (method: string, path: string, body: string = '') => {
-  if (!session) throw new Error('Agent 8 Locked: No Session Active.');
-
-  const timestamp = Date.now().toString();
-
-  // Official example signs the FULL path relative to host, including /trade-api/v2
-  // We receive 'path' as '/portfolio/balance', so we must prepend the prefix.
-  const fullPath = '/trade-api/v2' + path;
-  const payload = timestamp + method + fullPath + body;
-
-  const signer = crypto.createSign('RSA-SHA256');
-  signer.update(payload);
-  signer.end();
-
-  const signature = signer.sign(
-    {
-      key: session.privateKey,
-      padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
-      saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
-    },
-    'base64'
-  );
-
-  return {
-    'Content-Type': 'application/json',
-    'KALSHI-ACCESS-KEY': session.keyId,
-    'KALSHI-ACCESS-SIGNATURE': signature,
-    'KALSHI-ACCESS-TIMESTAMP': timestamp,
-  };
-};
-
-export const checkConnection = async (isPaperTrading: boolean) => {
-  try {
-    const balance = await kalshiFetch('/portfolio/balance', 'GET', undefined, isPaperTrading);
-    console.log(`[Agent 8] Connection Verified. Balance: ${JSON.stringify(balance)}`);
-    return true;
-  } catch (e) {
-    console.error('[Agent 8] Connection Check Failed:', e);
-    return false;
-  }
-};
-
-// Generic V2 Request Handler
-import { CHAOS_STATE } from '../agents/agent-14-qa-chaos/state';
-
-export const kalshiFetch = async (
-  endpoint: string,
-  method: 'GET' | 'POST' | 'DELETE',
-  body?: any,
-  isPaper: boolean = true
-) => {
-  // Agent 14: Chaos Injection
-  if (CHAOS_STATE.SIMULATE_500) {
-    console.warn('[Agent 14] CHAOS: Simulating 500 Error...');
-    throw new Error('CHAOS_INJECTED_500: Internal Server Error (Simulated)');
-  }
-  if (CHAOS_STATE.SIMULATE_TIMEOUT) {
-    console.warn('[Agent 14] CHAOS: Simulating 20s Timeout...');
-    await new Promise((resolve) => setTimeout(resolve, 20000));
-    throw new Error('CHAOS_INJECTED_TIMEOUT: Request Timed Out (Simulated)');
-  }
-
-  const baseUrl = isPaper ? CONFIG.KALSHI.SANDBOX_API : CONFIG.KALSHI.PROD_API;
-  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = `${baseUrl}${path}`;
-  const bodyStr = body ? JSON.stringify(body) : '';
-
-  const headers = getHeaders(method, path, bodyStr);
-
-  try {
-    const response = await fetch(url, {
-      method: method,
-      headers: headers as any,
-      body: method === 'POST' ? bodyStr : undefined,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Kalshi API ${response.status}: ${errorText}`);
+    if (!keyId || !privateKey) {
+      throw new Error('Invalid Credentials: Key ID or Private Key missing.');
     }
 
-    return await response.json();
-  } catch (error) {
-    console.error(`[Agent 8] API Call Failed (${endpoint}):`, error);
-    throw error;
-  }
-};
+    if (!privateKey.includes('BEGIN')) {
+      throw new Error('Invalid Key Format: Must be PEM format.');
+    }
 
-export const fetchScoutedMarkets = async (isPaperTrading: boolean) => {
-  // Agent 2: The Scout - Now using Real V2 API
-  if (!session) {
-    throw new Error('[Agent 2] No Auth Session Active.');
+    this.session = {
+      keyId: keyId,
+      privateKey: privateKey,
+      isDemo: isPaper,
+    };
+
+    console.log(`[Agent 8] Keys Loaded. Crypto-Engine Online.`);
+
+    try {
+      await this.checkConnection(isPaper);
+      console.log(`[Agent 8] Identity Verified on ${isPaper ? 'SANDBOX' : 'PROD'}.`);
+    } catch (e) {
+      console.warn(`[Agent 8] Pre-flight Check Failed, but keys are cached. Error:`, e);
+    }
+
+    return true;
   }
 
-  console.log(`[Agent 2] Scanning Real Markets via V2...`);
-  try {
-    // Fetch active markets, limit to 100 for speed
-    const data = await kalshiFetch(
-      '/markets?limit=100&status=active',
-      'GET',
-      undefined,
-      isPaperTrading
+  private getHeaders(method: string, path: string, body: string = '') {
+    if (!this.session) throw new Error('Agent 8 Locked: No Session Active.');
+
+    const timestamp = Date.now().toString();
+    const fullPath = '/trade-api/v2' + path;
+    const payload = timestamp + method + fullPath + body;
+
+    const signer = crypto.createSign('RSA-SHA256');
+    signer.update(payload);
+    signer.end();
+
+    const signature = signer.sign(
+      {
+        key: this.session.privateKey,
+        padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+        saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST,
+      },
+      'base64'
     );
-
-    // Normalize Real Data to our App's Schema
-    return data.markets.map((m: any) => ({
-      ticker: m.ticker,
-      title: m.title,
-      kalshi_prob: (m.last_price || 50) / 100, // Convert cents to prob
-      vegas_prob: 0.5, // Placeholder for Agent 3 to fill
-      delta: 0, // Placeholder
-      volume: m.volume,
-      type: m.category,
-    }));
-  } catch (e) {
-    console.error('[Agent 2] Scan Failed:', e);
-    throw e;
-  }
-};
-
-export const fetchOrderBook = async (ticker: string, isPaperTrading: boolean) => {
-  if (!session) {
-    throw new Error('[Agent 7] No Auth Session Active.');
-  }
-
-  try {
-    const data = await kalshiFetch(
-      `/markets/${ticker}/orderbook`,
-      'GET',
-      undefined,
-      isPaperTrading
-    );
-    // Assuming orderbook structure (top of book)
-    const yesBids = data.orderbook?.yes?.bids || [];
-    const yesAsks = data.orderbook?.yes?.asks || [];
 
     return {
-      yes_bid: yesBids.length > 0 ? yesBids[0][0] : 0,
-      yes_ask: yesAsks.length > 0 ? yesAsks[0][0] : 99,
+      'Content-Type': 'application/json',
+      'KALSHI-ACCESS-KEY': this.session.keyId,
+      'KALSHI-ACCESS-SIGNATURE': signature,
+      'KALSHI-ACCESS-TIMESTAMP': timestamp,
     };
-  } catch (e) {
-    console.error(`[Agent 7] Orderbook Fetch Failed for ${ticker}`, e);
-    return { yes_bid: 0, yes_ask: 99 };
-  }
-};
-
-export const createOrder = async (
-  ticker: string,
-  action: 'buy' | 'sell',
-  count: number,
-  side: 'yes' | 'no',
-  isPaperTrading: boolean
-) => {
-  // Agent 8: The Executioner
-  if (!session) {
-    throw new Error('[Agent 8] No Auth Session Active.');
   }
 
-  console.log(
-    `[Agent 8] EXECUTION: ${action.toUpperCase()} ${count}x ${ticker} ${side.toUpperCase()}`
-  );
+  public async checkConnection(isPaperTrading: boolean): Promise<boolean> {
+    try {
+      const balance = await this.fetch('/portfolio/balance', 'GET', undefined, isPaperTrading);
+      console.log(`[Agent 8] Connection Verified. Balance: ${JSON.stringify(balance)}`);
+      return true;
+    } catch (e) {
+      console.error('[Agent 8] Connection Check Failed:', e);
+      return false;
+    }
+  }
 
-  const orderBody = {
-    action: action,
-    count: count,
-    side: side,
-    ticker: ticker,
-    type: 'limit', // PROTOCOL: The Silent Sniper (No Market Orders)
-    yes_price: side === 'yes' ? 50 : 50, // This should be calculated by Agent 8
-    client_order_id: `sentient_${Date.now()}`,
-  };
+  public async fetch(
+    endpoint: string,
+    method: 'GET' | 'POST' | 'DELETE',
+    body?: any,
+    isPaper: boolean = true
+  ) {
+    if (CHAOS_STATE.SIMULATE_500) {
+      console.warn('[Agent 14] CHAOS: Simulating 500 Error...');
+      throw new Error('CHAOS_INJECTED_500: Internal Server Error (Simulated)');
+    }
+    if (CHAOS_STATE.SIMULATE_TIMEOUT) {
+      console.warn('[Agent 14] CHAOS: Simulating 20s Timeout...');
+      await new Promise((resolve) => setTimeout(resolve, 20000));
+      throw new Error('CHAOS_INJECTED_TIMEOUT: Request Timed Out (Simulated)');
+    }
 
-  const response = await kalshiFetch('/portfolio/orders', 'POST', orderBody, isPaperTrading);
-  return response.order;
-};
+    const baseUrl = isPaper ? CONFIG.KALSHI.SANDBOX_API : CONFIG.KALSHI.PROD_API;
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${baseUrl}${path}`;
+    const bodyStr = body ? JSON.stringify(body) : '';
 
-export const fetchOpenOrders = async (isPaperTrading: boolean) => {
-  try {
-    const data = await kalshiFetch(
-      '/portfolio/orders?status=resting',
-      'GET',
-      undefined,
-      isPaperTrading
+    const headers = this.getHeaders(method, path, bodyStr);
+
+    try {
+      const response = await fetch(url, {
+        method: method,
+        headers: headers as any,
+        body: method === 'POST' ? bodyStr : undefined,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Kalshi API ${response.status}: ${errorText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`[Agent 8] API Call Failed (${endpoint}):`, error);
+      throw error;
+    }
+  }
+
+  public async fetchScoutedMarkets(isPaperTrading: boolean) {
+    if (!this.session) {
+      throw new Error('[Agent 2] No Auth Session Active.');
+    }
+
+    console.log(`[Agent 2] Scanning Real Markets via V2...`);
+    try {
+      const data = await this.fetch(
+        '/markets?limit=100&status=active',
+        'GET',
+        undefined,
+        isPaperTrading
+      );
+
+      return data.markets.map((m: any) => ({
+        ticker: m.ticker,
+        title: m.title,
+        kalshi_prob: (m.last_price || 50) / 100,
+        vegas_prob: 0.5,
+        delta: 0,
+        volume: m.volume,
+        type: m.category,
+      }));
+    } catch (e) {
+      console.error('[Agent 2] Scan Failed:', e);
+      throw e;
+    }
+  }
+
+  public async fetchOrderBook(ticker: string, isPaperTrading: boolean) {
+    if (!this.session) {
+      throw new Error('[Agent 7] No Auth Session Active.');
+    }
+
+    try {
+      const data = await this.fetch(
+        `/markets/${ticker}/orderbook`,
+        'GET',
+        undefined,
+        isPaperTrading
+      );
+      const yesBids = data.orderbook?.yes?.bids || [];
+      const yesAsks = data.orderbook?.yes?.asks || [];
+
+      return {
+        yes_bid: yesBids.length > 0 ? yesBids[0][0] : 0,
+        yes_ask: yesAsks.length > 0 ? yesAsks[0][0] : 99,
+      };
+    } catch (e) {
+      console.error(`[Agent 7] Orderbook Fetch Failed for ${ticker}`, e);
+      return { yes_bid: 0, yes_ask: 99 };
+    }
+  }
+
+  public async createOrder(
+    ticker: string,
+    action: 'buy' | 'sell',
+    count: number,
+    side: 'yes' | 'no',
+    isPaperTrading: boolean
+  ) {
+    if (!this.session) {
+      throw new Error('[Agent 8] No Auth Session Active.');
+    }
+
+    console.log(
+      `[Agent 8] EXECUTION: ${action.toUpperCase()} ${count}x ${ticker} ${side.toUpperCase()}`
     );
-    return data.orders || [];
-  } catch (e) {
-    console.error('[Agent 12] Failed to fetch open orders', e);
-    return [];
-  }
-};
 
-export const cancelOrder = async (orderId: string, isPaperTrading: boolean) => {
-  try {
-    await kalshiFetch(`/portfolio/orders/${orderId}`, 'DELETE', undefined, isPaperTrading);
-    return true;
-  } catch (e) {
-    console.error(`[Agent 12] Failed to cancel order ${orderId}`, e);
-    return false;
-  }
-};
+    const orderBody = {
+      action: action,
+      count: count,
+      side: side,
+      ticker: ticker,
+      type: 'limit',
+      yes_price: side === 'yes' ? 50 : 50,
+      client_order_id: `sentient_${Date.now()}`,
+    };
 
-export const fetchActiveMarkets = async (isPaperTrading: boolean) => {
-  return fetchScoutedMarkets(isPaperTrading);
-};
+    const response = await this.fetch('/portfolio/orders', 'POST', orderBody, isPaperTrading);
+    return response.order;
+  }
+}
+
+export const kalshiService = KalshiService.getInstance();

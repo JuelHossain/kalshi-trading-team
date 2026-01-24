@@ -1,4 +1,4 @@
-import { kalshiFetch } from '../../services/kalshiService';
+import { kalshiService } from '../../services/kalshiService';
 import { supabase } from '../../services/dbService';
 import { getDailySpend } from '../../services/costTracker';
 
@@ -9,7 +9,7 @@ const BUDGET_CEILING = 1.15; // $1.15 in dollars
 export const fetchPortfolioBalance = async (isPaperTrading: boolean) => {
   // Agent 9: The Accountant
   try {
-    const data = await kalshiFetch('/portfolio/balance', 'GET', undefined, isPaperTrading);
+    const data = await kalshiService.fetch('/portfolio/balance', 'GET', undefined, isPaperTrading);
     const balanceCents = data.balance || 0;
 
     // Check Daily Profit (Reflexive Memory via Supabase)

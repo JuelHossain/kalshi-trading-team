@@ -1,4 +1,4 @@
-import { fetchOpenOrders, cancelOrder } from '../../services/kalshiService';
+import { kalshiService } from '../../services/kalshiService';
 
 export const executeEmergencyProtocol = async (isPaperTrading: boolean) => {
   // Agent 12: Ragnarok (The Nuclear Option)
@@ -6,18 +6,30 @@ export const executeEmergencyProtocol = async (isPaperTrading: boolean) => {
 
   try {
     // 1. Fetch All Resting Orders
-    const openOrders = await fetchOpenOrders(isPaperTrading);
+    const ordersResponse = await kalshiService.fetch(
+      '/portfolio/orders',
+      'GET',
+      undefined,
+      isPaperTrading
+    );
+    const openOrders = ordersResponse?.orders || [];
     console.log(`[Agent 12] Detected ${openOrders.length} open orders. Terminating...`);
 
     // 2. Iterate + Cancel (Atomic Deletion)
     const cancellationPromises = openOrders.map((order: any) => {
       console.log(`[Agent 12] Nuking Order: ${order.order_id} (${order.ticker})`);
-      return cancelOrder(order.order_id, isPaperTrading);
+      return kalshiService.fetch(
+        `/portfolio/orders/${order.order_id}`,
+        'DELETE',
+        undefined,
+        isPaperTrading
+      );
     });
 
     const results = await Promise.allSettled(cancellationPromises);
     const failedCount = results.filter(
-      (r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value)
+      (r: PromiseSettledResult<any>) =>
+        r.status === 'rejected' || (r.status === 'fulfilled' && !r.value)
     ).length;
 
     if (failedCount > 0) {

@@ -12,7 +12,7 @@ import {
   analyzeSystemError,
   validateStaleData,
 } from './agents/exports';
-import { isAuthenticated } from './services/kalshiService';
+import { kalshiService } from './services/kalshiService';
 import { sendNotification } from './services/notificationService';
 
 export const runOrchestratorCycle = async (
@@ -77,7 +77,7 @@ export const runOrchestratorCycle = async (
       'INFO'
     );
 
-    if (!isAuthenticated()) {
+    if (!kalshiService.isAuthenticated()) {
       addLog('Auth Check Failed. Backend session not authenticated.', 0, 0, 'ERROR');
       updateState({ isProcessing: false, activeAgentId: null });
       return;
@@ -265,7 +265,7 @@ export const runOrchestratorCycle = async (
     try {
       await analyzeSystemError(error.message, `Sentient Funnel Cycle #${cycleCount}`);
       await sendNotification(`⚠️ SYSTEM CRASH: ${error.message}`, 'urgent');
-    } catch (e) { }
+    } catch (e) {}
   } finally {
     updateState({ isProcessing: false, activeAgentId: null });
   }

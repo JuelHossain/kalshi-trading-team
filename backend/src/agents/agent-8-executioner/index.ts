@@ -1,4 +1,4 @@
-import { kalshiFetch } from '../../services/kalshiService';
+import { kalshiService } from '../../services/kalshiService';
 
 export const calculateRiskParams = (
   balance: number,
@@ -63,7 +63,12 @@ export const createOrder = async (
   };
 
   try {
-    const response = await kalshiFetch('/portfolio/orders', 'POST', orderBody, isPaperTrading);
+    const response = await kalshiService.fetch(
+      '/portfolio/orders',
+      'POST',
+      orderBody,
+      isPaperTrading
+    );
     return response.order;
   } catch (e) {
     console.error(`[Agent 8] Snipe Failed for ${ticker}`, e);

@@ -1,8 +1,8 @@
-import { kalshiFetch } from '../../services/kalshiService';
+import { kalshiService } from '../../services/kalshiService';
 
 export const fetchOrderBook = async (ticker: string, isPaperTrading: boolean) => {
   try {
-    const data = await kalshiFetch(
+    const data = await kalshiService.fetch(
       `/markets/${ticker}/orderbook`,
       'GET',
       undefined,

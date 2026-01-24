@@ -1,5 +1,5 @@
 import { CONFIG } from '../../config';
-import { kalshiFetch } from '../../services/kalshiService';
+import { kalshiService } from '../../services/kalshiService';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CHAOS_STATE } from './state';
@@ -23,7 +23,12 @@ export const startSentinel = async (isPaperTrading: boolean) => {
 
   try {
     console.log('[Agent 14] Sentinel: Initializing baseline capital...');
-    const response = await kalshiFetch('/portfolio/balance', 'GET', undefined, isPaperTrading);
+    const response = await kalshiService.fetch(
+      '/portfolio/balance',
+      'GET',
+      undefined,
+      isPaperTrading
+    );
     baselineCapital = response.balance;
 
     console.log(`[Agent 14] Sentinel: Locked Baseline at $${(baselineCapital / 100).toFixed(2)}`);
@@ -45,7 +50,12 @@ export const startSentinel = async (isPaperTrading: boolean) => {
 
 const checkPnL = async (isPaperTrading: boolean) => {
   try {
-    const response = await kalshiFetch('/portfolio/balance', 'GET', undefined, isPaperTrading);
+    const response = await kalshiService.fetch(
+      '/portfolio/balance',
+      'GET',
+      undefined,
+      isPaperTrading
+    );
     const currentBalance = response.balance;
     const loss = baselineCapital - currentBalance;
 
