@@ -346,7 +346,7 @@ app.post('/api/reset', authenticateToken, (req: Request, res: Response) => {
     res.json({ message: 'System reset successfully' });
 });
 
-app.post('/api/kill-switch', authenticateToken, async (req: Request, res: Response) => {
+app.post('/api/kill-switch', async (req: Request, res: Response) => {
     console.log("[BRIDGE] 🚨 KILL SWITCH ACTIVATED 🚨");
 
     // 1. Reset Backend State
