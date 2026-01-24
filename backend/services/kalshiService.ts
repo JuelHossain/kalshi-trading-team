@@ -41,18 +41,19 @@ export const authenticateWithKeys = async (keyId: string, privateKey: string, is
   return true;
 };
 
-// V2 Signature Generator
+// V2 Signature Generator using RSA-PSS (required by Kalshi)
 const getHeaders = (method: string, path: string, body: string = '') => {
   if (!session) throw new Error('Agent 8 Locked: No Session Active.');
 
   const timestamp = Date.now().toString();
   const payload = timestamp + method + path + body;
 
-   const sig = new KJUR.crypto.Signature({ alg: 'SHA256withRSA' });
-   sig.init(session.privateKey);
-   sig.updateString(payload);
-   const signatureHex = sig.sign();
-   const signature = btoa(String.fromCharCode(...signatureHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16))));
+  // Use RSA-PSS (SHA256withRSAandMGF1) as required by Kalshi API
+  const sig = new KJUR.crypto.Signature({ alg: 'SHA256withRSAandMGF1' });
+  sig.init(session.privateKey);
+  sig.updateString(payload);
+  const signatureHex = sig.sign();
+  const signature = btoa(String.fromCharCode(...signatureHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16))));
 
   return {
     'Content-Type': 'application/json',

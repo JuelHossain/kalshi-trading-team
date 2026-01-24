@@ -15,9 +15,10 @@ export const CONFIG = {
   KALSHI: {
     ...SHARED_CONFIG.KALSHI,
     DEMO_KEY_ID: process.env.KALSHI_DEMO_KEY_ID || '',
-    DEMO_PRIVATE_KEY: process.env.KALSHI_DEMO_PRIVATE_KEY || '',
+    // Convert escaped \n to actual newlines for PEM format
+    DEMO_PRIVATE_KEY: (process.env.KALSHI_DEMO_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
     PROD_KEY_ID: process.env.KALSHI_PROD_KEY_ID || '',
-    PROD_PRIVATE_KEY: process.env.KALSHI_PROD_PRIVATE_KEY || '',
+    PROD_PRIVATE_KEY: (process.env.KALSHI_PROD_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
     EMAIL: process.env.KALSHI_EMAIL || '',
     PASSWORD: process.env.KALSHI_PASSWORD || '',
   },
