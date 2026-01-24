@@ -13,11 +13,19 @@ import { useOrchestrator } from './hooks/useOrchestrator';
 import { useAuth } from './hooks/useAuth';
 import SimulationResults from './components/SimulationResults';
 import VaultGauge from './components/VaultGauge';
+import LogisticsCenter from './components/LogisticsCenter';
 
 const App: React.FC = () => {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [isPaperTrading, setIsPaperTrading] = useState(true);
     const [showKillConfirm, setShowKillConfirm] = useState(false);
+
+    // Queue states for Logistics Center
+    const [opportunityQueue, setOpportunityQueue] = useState<any[]>([]);
+    const [executionQueue, setExecutionQueue] = useState<any[]>([]);
+    const [scoutStatus, setScoutStatus] = useState('active');
+    const [brainStatus, setBrainStatus] = useState('idle');
+    const [sniperStatus, setSniperStatus] = useState('ready');
 
     // Single source of truth for logs and orchestrator state
     const [tempLogs, setTempLogs] = useState<any[]>([]);
@@ -202,8 +210,16 @@ const App: React.FC = () => {
                                         </div>
                                         <div className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors">
                                             <PnLHeatmap />
-                                        </div>
-                                    </div>
+                                     </div>
+
+                                     <LogisticsCenter
+                                         opportunityQueue={opportunityQueue}
+                                         executionQueue={executionQueue}
+                                         scoutStatus={scoutStatus}
+                                         brainStatus={brainStatus}
+                                         sniperStatus={sniperStatus}
+                                     />
+                                 </div>
                                 </div>
 
                                 {/* Right Content: Terminal */}
