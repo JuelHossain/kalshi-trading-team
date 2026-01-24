@@ -1,3 +1,4 @@
+import 'dotenv/config'; // Load env vars immediately
 import { SHARED_CONFIG } from '../shared/config';
 
 export const CONFIG = {
@@ -15,8 +16,8 @@ export const CONFIG = {
   KALSHI: {
     ...SHARED_CONFIG.KALSHI,
     DEMO_KEY_ID: process.env.KALSHI_DEMO_KEY_ID || '',
-    // Convert escaped \n to actual newlines for PEM format
-    DEMO_PRIVATE_KEY: (process.env.KALSHI_DEMO_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    // Convert escaped \n to actual newlines for PEM format and strip quotes
+    DEMO_PRIVATE_KEY: (process.env.KALSHI_DEMO_PRIVATE_KEY || '').replace(/^"|"$/g, '').replace(/\\n/g, '\n'),
     PROD_KEY_ID: process.env.KALSHI_PROD_KEY_ID || '',
     PROD_PRIVATE_KEY: (process.env.KALSHI_PROD_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
     EMAIL: process.env.KALSHI_EMAIL || '',

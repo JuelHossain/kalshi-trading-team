@@ -1,5 +1,5 @@
 import { CONFIG } from '../config';
-import { KJUR } from 'jsrsasign';
+import crypto from 'crypto';
 
 // Agent 8: The Executioner (V2 Auth & Order Management)
 // Implements RSA-SHA256 Signing for Kalshi V2 API
@@ -41,19 +41,27 @@ export const authenticateWithKeys = async (keyId: string, privateKey: string, is
   return true;
 };
 
-// V2 Signature Generator using RSA-PSS (required by Kalshi)
+// V2 Signature Generator using crypto (RSA-PSS)
+// Reference: https://docs.kalshi.com/getting_started/api_keys#javascript
 const getHeaders = (method: string, path: string, body: string = '') => {
   if (!session) throw new Error('Agent 8 Locked: No Session Active.');
 
   const timestamp = Date.now().toString();
-  const payload = timestamp + method + path + body;
 
-  // Use RSA-PSS (SHA256withRSAandMGF1) as required by Kalshi API
-  const sig = new KJUR.crypto.Signature({ alg: 'SHA256withRSAandMGF1' });
-  sig.init(session.privateKey);
-  sig.updateString(payload);
-  const signatureHex = sig.sign();
-  const signature = btoa(String.fromCharCode(...signatureHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16))));
+  // Official example signs the FULL path relative to host, including /trade-api/v2
+  // We receive 'path' as '/portfolio/balance', so we must prepend the prefix.
+  const fullPath = '/trade-api/v2' + path;
+  const payload = timestamp + method + fullPath + body;
+
+  const signer = crypto.createSign('RSA-SHA256');
+  signer.update(payload);
+  signer.end();
+
+  const signature = signer.sign({
+    key: session.privateKey,
+    padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
+    saltLength: crypto.constants.RSA_PSS_SALTLEN_DIGEST
+  }, 'base64');
 
   return {
     'Content-Type': 'application/json',
@@ -99,7 +107,7 @@ export const kalshiFetch = async (
   const url = `${baseUrl}${path}`;
   const bodyStr = body ? JSON.stringify(body) : '';
 
-  const headers = getHeaders(method, '/trade-api/v2' + path, bodyStr);
+  const headers = getHeaders(method, path, bodyStr);
 
   try {
     const response = await fetch(url, {
