@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Agent, AgentStatus } from '@shared/types';
+import { AgentStatus } from '@shared/types';
 import { AGENTS } from '@shared/constants';
 
 interface AgentsPageProps {

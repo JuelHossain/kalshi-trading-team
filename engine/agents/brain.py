@@ -11,20 +11,22 @@ Workflow:
 
 import asyncio
 import os
+import uuid
+from typing import Any
+
 import numpy as np
-from datetime import datetime
-from typing import Dict, Any, Optional, List
 from agents.base import BaseAgent
 from core.bus import EventBus
 from core.db import log_to_db
-import uuid
 
 try:
-    import google.generativeai as genai
-
+    from google import genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
+
+
+from core.synapse import Synapse
 
 
 class BrainAgent(BaseAgent):
@@ -34,22 +36,21 @@ class BrainAgent(BaseAgent):
     SIMULATION_ITERATIONS = 10000
     MAX_VARIANCE = 0.25  # Maximum acceptable variance
 
-    def __init__(self, agent_id: int, bus: EventBus, senses_agent=None):
-        super().__init__("BRAIN", agent_id, bus)
+    def __init__(self, agent_id: int, bus: EventBus, senses_agent=None, synapse: Synapse = None):
+        super().__init__("BRAIN", agent_id, bus, synapse)
         self.senses = senses_agent
-        self.execution_queue: List[Dict] = []
+        self.execution_queue: list[dict] = []
         self.trading_instructions = ""
 
         # Initialize Gemini
         if GEMINI_AVAILABLE:
             api_key = os.environ.get("GEMINI_API_KEY")
             if api_key:
-                genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel("gemini-pro")
+                self.client = genai.Client(api_key=api_key)
             else:
-                self.model = None
+                self.client = None
         else:
-            self.model = None
+            self.client = None
 
     async def setup(self):
         await self.log("Brain online. Intelligence & Decision engine ready.")
@@ -62,8 +63,32 @@ class BrainAgent(BaseAgent):
         await self.log("Trading instructions updated from Soul.")
 
     async def process_opportunities(self, message):
-        """Process queued opportunities through AI debate and simulation (Event-driven)"""
-        # Get top opportunity from Senses internal queue
+        """Process queued opportunities > Synapse (Primary) or Senses (Legacy)"""
+        
+        # 1. Synapse Flow (Persistent Queue)
+        if self.synapse:
+            try:
+                opp_model = await self.synapse.opportunities.pop()
+                if opp_model:
+                    await self.log(f"🧠 Synapse Input: {opp_model.ticker}")
+                    
+                    # Map Pydantic Model -> Legacy Dict for compatibility
+                    opp_dict = opp_model.model_dump()
+                    
+                    # Fix Price: Model has int (50), Brain logic expects float (0.50)
+                    kalshi_cents = opp_model.market_data.yes_price
+                    opp_dict["kalshi_price"] = kalshi_cents / 100.0
+                    
+                    # Ensure flattened structure matches expectations
+                    opp_dict["market_data"] = opp_model.market_data.model_dump()
+                    
+                    await self.process_single_opportunity(opp_dict)
+                    return # Process one at a time per event
+                    
+            except Exception as e:
+                await self.log(f"Synapse Pop Error: {e}", level="ERROR")
+
+        # 2. Legacy Flow (Direct Senses Link)
         if not self.senses:
             return
 
@@ -77,7 +102,7 @@ class BrainAgent(BaseAgent):
             opportunity = await opp_queue.get()
             await self.process_single_opportunity(opportunity)
 
-    async def process_single_opportunity(self, opportunity: Dict):
+    async def process_single_opportunity(self, opportunity: dict):
         """Core analysis logic"""
         ticker = opportunity.get("ticker", "UNKNOWN")
         await self.log(f"Analyzing: {ticker}")
@@ -125,9 +150,9 @@ class BrainAgent(BaseAgent):
             reason = "Low confidence" if confidence < self.CONFIDENCE_THRESHOLD else ("High variance" if variance > self.MAX_VARIANCE else "Negative EV")
             await self.log(f"❌ VETOED: {ticker} | Reason: {reason}")
 
-    async def run_debate(self, opportunity: Dict) -> Dict:
+    async def run_debate(self, opportunity: dict) -> dict:
         """Multi-persona AI debate using Gemini"""
-        if not self.model:
+        if not self.client:
             await self.log("Gemini unavailable. Using heuristic confidence.")
             return {
                 "confidence": 0.5,
@@ -144,7 +169,10 @@ class BrainAgent(BaseAgent):
         
         # Check if we have external odds (legacy support)
         has_odds = opportunity.get("vegas_prob") is not None
-        external_context = f"Vegas Probability: {opportunity['vegas_prob']*100:.1f}%" if has_odds else "NO EXTERNAL ODDS AVAILABLE."
+        odds_context = f"Vegas Probability: {opportunity['vegas_prob']*100:.1f}%" if has_odds else "NO EXTERNAL ODDS AVAILABLE."
+        
+        fetched_news = opportunity.get("external_context", "")
+        full_context = f"ODDS: {odds_context}\nNEWS/CONTEXT:\n{fetched_news}" if fetched_news else f"ODDS: {odds_context}\n(No news found)"
 
         prompt = f"""You are a trading committee with two personas debating a market opportunity.
 
@@ -152,13 +180,14 @@ MARKET: {ticker}
 TITLE: {title}
 SUBTITLE: {subtitle}
 Current Kalshi Price: {kalshi_price*100:.1f}%
-Context: {external_context}
+Context: {full_context}
 
 {f"Today's Trading Instructions: {self.trading_instructions[:500]}" if self.trading_instructions else ""}
 
 TASK:
-1. Estimate the TRUE probability of this event occurring (0.00 to 1.00) based on your knowledge of the world.
+1. Estimate the TRUE probability of this event occurring (0.00 to 1.00) based on your knowledge of the world and the provided Context.
 2. Debate the trade at the current price.
+3. Explicitly reference the 'NEWS/CONTEXT' in your reasoning if available.
 
 PERSONAS:
 OPTIMIST: Argue why this is a great opportunity.
@@ -176,7 +205,7 @@ Respond in JSON format:
 
         try:
             response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content(prompt)
+                None, lambda: self.client.models.generate_content(model="gemini-1.5-pro", contents=prompt)
             )
 
             # Parse response
@@ -198,7 +227,7 @@ Respond in JSON format:
 
         return {"confidence": 0.5, "reasoning": "Debate failed", "estimated_probability": 0.5}
 
-    def run_simulation(self, opportunity: Dict, override_prob: float = None) -> Dict:
+    def run_simulation(self, opportunity: dict, override_prob: float = None) -> dict:
         """Monte Carlo simulation for variance and EV calculation"""
         # Use overridden probability (AI estimate) if available, else default
         vegas_prob = override_prob if override_prob is not None else opportunity.get("vegas_prob", 0.5)
@@ -220,7 +249,7 @@ Respond in JSON format:
 
         return {"win_rate": win_rate, "ev": ev, "variance": variance}
 
-    async def queue_for_execution(self, exec_queue: asyncio.Queue, target: Dict):
+    async def queue_for_execution(self, exec_queue: asyncio.Queue, target: dict):
         """Push approved target to execution queue and Supabase"""
         execution_package = {
             "signal_id": str(uuid.uuid4()),
@@ -243,10 +272,10 @@ Respond in JSON format:
             self.name,
         )
 
-    def pop_execution_target(self) -> Optional[Dict]:
+    def pop_execution_target(self) -> dict | None:
         """Get next target for Hand to execute"""
         return self.execution_queue.pop(0) if self.execution_queue else None
 
 
-    async def on_tick(self, payload: Dict[str, Any]):
+    async def on_tick(self, payload: dict[str, Any]):
         pass  # Brain is event-driven

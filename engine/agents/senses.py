@@ -10,10 +10,10 @@ Workflow:
 """
 
 import asyncio
-import aiohttp
 import os
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Any
+
 from agents.base import BaseAgent
 from core.bus import EventBus
 from core.db import log_to_db
@@ -23,16 +23,42 @@ RAPIDAPI_KEY = os.environ.get("RAPID_API_KEY", "")
 RAPIDAPI_HOST = "odds.p.rapidapi.com"
 
 
+from core.synapse import MarketData, Opportunity, Synapse
+
+try:
+    from duckduckgo_search import DDGS
+    DDGS_AVAILABLE = True
+except ImportError:
+    DDGS_AVAILABLE = False
+
 class SensesAgent(BaseAgent):
     """The 24/7 Observer - Surveillance & Signal Detection"""
 
     MIN_LIQUIDITY = 0  # $0 minimum liquidity for Demo/Testing
 
-    def __init__(self, agent_id: int, bus: EventBus, kalshi_client=None):
-        super().__init__("SENSES", agent_id, bus)
+    def __init__(self, agent_id: int, bus: EventBus, kalshi_client=None, synapse: Synapse = None):
+        super().__init__("SENSES", agent_id, bus, synapse)
         self.kalshi_client = kalshi_client
-        self.opportunity_queue: List[Dict] = []
+        self.opportunity_queue: list[dict] = []
         self.is_scanning = False
+
+    async def fetch_market_context(self, ticker: str, title: str) -> list[str]:
+        """Fetch external context (news) for a market"""
+        if not DDGS_AVAILABLE:
+            return ["Search unavailable"]
+        
+        try:
+            # Run simple search
+            query = f"{title} news"
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(
+                None, 
+                lambda: list(DDGS().text(query, max_results=3))
+            )
+            return [r.get("body", "") for r in results]
+        except Exception as e:
+            await self.log(f"Search error for {ticker}: {str(e)[:50]}", level="WARN")
+            return []
 
     async def setup(self):
         await self.log("Senses online. 24/7 passive surveillance activated.")
@@ -88,7 +114,7 @@ class SensesAgent(BaseAgent):
         except Exception as e:
             await self.log(f"Surveillance error: {str(e)[:100]}", level="ERROR")
 
-    async def fetch_kalshi_markets(self) -> List[Dict]:
+    async def fetch_kalshi_markets(self) -> list[dict]:
         """Fetch active markets from Kalshi"""
         if not self.kalshi_client:
             await self.log("ERROR: Kalshi client not initialized.", level="ERROR")
@@ -114,7 +140,7 @@ class SensesAgent(BaseAgent):
             await self.log(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
             return []
 
-    async def select_top_opportunities(self, markets: List[Dict]) -> List[Dict]:
+    async def select_top_opportunities(self, markets: list[dict]) -> list[dict]:
         """Select Top 10 Markets by Volume"""
         opportunities = []
 
@@ -129,6 +155,12 @@ class SensesAgent(BaseAgent):
             kalshi_price = market.get("yes_price", 50) / 100  # Convert cents to probability
             volume = market.get("volume", 0)
 
+            title = market.get("title", ticker)
+            
+            # Fetch context
+            context_snippets = await self.fetch_market_context(ticker, title)
+            context_str = "\\n".join(context_snippets)
+
             # Define opportunity without external odds
             opportunities.append(
                 {
@@ -138,7 +170,8 @@ class SensesAgent(BaseAgent):
                     "value_gap": 0, # Placeholder
                     "volume": volume,
                     "market_data": market,
-                    "source": "Volume-Algo"
+                    "source": "Volume-Algo",
+                    "external_context": context_str
                 }
             )
 
@@ -146,8 +179,41 @@ class SensesAgent(BaseAgent):
         await self.log(f"Selection Report: Picked top {len(opportunities)} markets by volume. Max Vol: {opportunities[0]['volume'] if opportunities else 0}", level="INFO")
         return opportunities
 
-    async def queue_opportunity(self, opportunity: Dict):
+    async def queue_opportunity(self, opportunity: dict):
         """Add opportunity to queue and Supabase"""
+        # Synapse Integration
+        if self.synapse:
+            try:
+                # Basic Mapping
+                m_data = opportunity.get("market_data", {})
+                def g(k, d=None): return m_data.get(k, d)
+                
+                market_payload = MarketData(
+                    ticker=opportunity["ticker"],
+                    title=g("title", "Unknown"),
+                    subtitle=g("subtitle", ""),
+                    yes_price=int(opportunity.get("kalshi_price", 0) * 100),
+                    no_price=g("no_price", 0),
+                    volume=int(g("volume", 0)),
+                    expiration=g("expiration_time", str(datetime.now())),
+                    raw_response=m_data
+                )
+                
+                opp_model = Opportunity(
+                    ticker=opportunity["ticker"],
+                    market_data=market_payload,
+                    source="SENSES",
+                    # timestamp default
+                )
+                
+                await self.synapse.opportunities.push(opp_model)
+                await self.log(f"Synapse Push: {opportunity['ticker']}")
+
+            except Exception as e:
+                await self.log(f"Synapse Push Failed: {e}", level="ERROR")
+
+
+        # Legacy Flow (Keep for Brain compatibility until Phase 3)
         signal_package = {
             "market_id": opportunity["ticker"],
             "source": opportunity.get("source", "Kalshi"),
@@ -157,13 +223,13 @@ class SensesAgent(BaseAgent):
             "status": "QUEUED",
             "market_data": opportunity.get("market_data", {})
         }
-        self.opportunity_queue.append(opportunity) # Local queue for Brain to pop via pop_opportunity()
+        self.opportunity_queue.append(opportunity) 
         await log_to_db("opportunity_queue", signal_package)
         await self.log(
             f"Queued: {signal_package['market_id']} | Vol: {opportunity['volume']}"
         )
 
-    def pop_opportunity(self) -> Optional[Dict]:
+    def pop_opportunity(self) -> dict | None:
         """Get next opportunity for Brain"""
         return self.opportunity_queue.pop(0) if self.opportunity_queue else None
 
@@ -194,5 +260,5 @@ class SensesAgent(BaseAgent):
 
             await asyncio.sleep(10)  # Scan every 10 seconds
 
-    async def on_tick(self, payload: Dict[str, Any]):
+    async def on_tick(self, payload: dict[str, Any]):
         pass

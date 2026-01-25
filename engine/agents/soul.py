@@ -12,18 +12,20 @@ Workflow:
 
 import asyncio
 import os
-from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any
+
 from agents.base import BaseAgent
 from core.bus import EventBus
 from core.vault import RecursiveVault
 
 try:
-    import google.generativeai as genai
-
+    from google import genai
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
+
+
+from core.synapse import Synapse
 
 
 class SoulAgent(BaseAgent):
@@ -31,8 +33,8 @@ class SoulAgent(BaseAgent):
 
     HARD_FLOOR_CENTS = 25500  # $255 (15% of $300 principal = $255 floor)
 
-    def __init__(self, agent_id: int, bus: EventBus, vault: RecursiveVault):
-        super().__init__("SOUL", agent_id, bus)
+    def __init__(self, agent_id: int, bus: EventBus, vault: RecursiveVault, synapse: Synapse = None):
+        super().__init__("SOUL", agent_id, bus, synapse)
         self.vault = vault
         self.trading_instructions = ""
         self.mistakes_log = []
@@ -43,12 +45,11 @@ class SoulAgent(BaseAgent):
         if GEMINI_AVAILABLE:
             api_key = os.environ.get("GEMINI_API_KEY")
             if api_key:
-                genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel("gemini-pro")
+                self.client = genai.Client(api_key=api_key)
             else:
-                self.model = None
+                self.client = None
         else:
-            self.model = None
+            self.client = None
 
     async def setup(self):
         await self.log("Soul awakening. Executive Director online.")
@@ -102,7 +103,7 @@ class SoulAgent(BaseAgent):
 
     async def evolve_instructions(self):
         """Use Gemini to rewrite trading instructions based on history (Self-Optimization)"""
-        if not self.model:
+        if not self.client:
             await self.log("Gemini unavailable. Using default instructions.")
             return
 
@@ -115,14 +116,14 @@ Write a concise set of 5 trading rules to maximize wins and avoid losses. Be spe
 
         try:
             response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.model.generate_content(prompt)
+                None, lambda: self.client.models.generate_content(model="gemini-1.5-pro", contents=prompt)
             )
             self.trading_instructions = response.text
             await self.log("Trading instructions evolved via Gemini.")
         except Exception as e:
             await self.log(f"Evolution failed: {str(e)[:50]}", level="ERROR")
 
-    async def on_tick(self, payload: Dict[str, Any]):
+    async def on_tick(self, payload: dict[str, Any]):
         """Periodic self-check"""
         # Emit vault state for UI
         await self.bus.publish(

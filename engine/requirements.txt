@@ -5,6 +5,10 @@ python-dotenv
 colorama
 cryptography
 groq
-google-generativeai
+google-genai
 supabase
 psutil
+duckduckgo-search
+numpy
+ruff
+black
