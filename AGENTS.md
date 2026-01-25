@@ -1,56 +1,70 @@
-# AGENTS.md - Kalshi Trading Team Project Guidelines
+# AGENTS.md - Sentient Alpha Trading Project
 
-This file outlines the coding standards, tools, and rules for all agents and developers working on the Kalshi Trading Team project (Sentient Alpha).
+This file provides structured context for AI agents working on the Sentient Alpha Trading Bot. Adherence to these standards is mandatory for autonomous safety and system integrity.
 
-## Project Overview
-- **Type**: Monorepo with React/Vite (Frontend) and Python 3.12+ (Engine).
-- **Architecture**: 2-Tier AI-driven system. Direct communication between UI and Python Engine.
-- **Core Agents**: 4 Mega-Agents (Soul, Senses, Brain, Hand).
-- **Tools**: ESM, TypeScript, Zustand, Shadcn UI, Python Asyncio, Google GenAI SDK.
+## 🚀 Project Overview
+Sentient Alpha is an autonomous 2-tier trading system on Kalshi.
+- **Backend (Engine)**: Python 3.12 (Logic, AI, Market SDK).
+- **Frontend (Cockpit)**: React + Vite (Real-time HUD).
+- **Architecture**: Direct SSE/REST link (No Node.js bridge).
 
-## Coding Standards
+## 🛠️ Build & Task Commands
 
-### General Rules
-- **Language Consistency**: TypeScript for Frontend, Python for Engine.
-- **Naming**: PascalCase for React components, camelCase for JS functions/variables, snake_case for Python.
-- **Error Handling**: No silent failures. High-priority logs must include `agent_id` or `phase_id`.
+### General
+- **Initialization**: `npm install`
+- **Development Mode**: `npm run dev` (Starts Frontend [3000] and Engine [3002])
+- **Production Distribution**: `npm run build`
 
-### Frontend (@/frontend)
-- **State**: Use **Zustand** (`src/store/useStore.ts`) for global state.
-- **Components**: Shadcn UI + Tailwind. Keep components presentational where possible.
-- **API Standard**: All frontend calls must use the relative `/api` proxy.
-- **SSE**: Subscribes to `/api/stream` for live agent logs.
+### Python Engine
+- **Setup**: `pip install -r engine/requirements.txt`
+- **Standard Run**: `python3 engine/main.py`
+- **Isolated Tests**: `python3 engine/diagnostics/brain_tap.py`
 
-- **Persistence**: Inter-agent signals (Opportunities, Executions) must go through `Synapse` persistent queues (SQLite).
-- **Communication**: Use `EventBus` for events, but rely on `Synapse` for data handoff to ensure crash-recovery.
-- **AI**: Use `google-genai` SDK with Gemini 1.5 Pro.
-- **Risk**: Implementation of the "Ragnarok" protocol for emergency liquidation.
-- **Context**: Senses agent must fetch news context before Brain debate.
+### React Frontend
+- **Setup**: `cd frontend && npm install`
+- **Build Verification**: `npm run build`
 
-## File Structure
-- `frontend/`: React app (Vite, Zustand, Shadcn).
-- `engine/`: Python core logic.
-  - `agents/`: Mega-Agent implementations.
-  - `core/`: Bus, Vault, Network, and Safety utilities.
-- `shared/`: Shared TS types (mirrored in Python dicts).
-- `walkthroughs/`: Proof-of-work documentation (Read before starting new tasks).
-- `legacy/`: Archived components (old backend, early dashboard).
+## 🧪 Testing Instructions
+- **Unit Tests**: Run `pytest tests/unit/` before every engine commit.
+- **Persona Verification**: Run `python3 tests/verify_personas.py` after Brain logic changes.
+- **Safety**: Ensure `IS_PAPER_TRADING: true` is set in `.env` for all non-monitored tests.
 
-## Agent-Specific Rules
-- **UI Agents**: Focus on "Cinematic" visualization of agent logs. Load `ui-design` skill.
-- **Engine Agents**: Ensure AI debates are "Critically Objective". Logic must pass Monte Carlo simulation.
-- **Exec Agents**: Must respect the **Autopilot Pulse** managed by `SoulAgent`.
-- **All Agents**: Always build, deploy, and verify changes. Follow the `CONSTITUTION.md`.
+## ✒️ Coding & Architectural Standards
 
-## Quality Gates
-- `pytest tests/unit/` must pass for all engine changes.
-- `npm run build` must pass for frontend changes.
-- Walkthroughs must be recorded for UI changes.
+### Architecture (2-Tier Guardrails)
+- **Direct Communication**: Frontend connects directly to port 3002.
+- **Persistence**: Inter-agent signals (Opps -> Signals -> Execs) MUST go through **Synapse (SQLite)**.
+- **State**: Use **Zustand** for global Frontend state. Avoid prop-drilling.
 
-## Commands Reference
-- `npm run dev`: Starts the Dev environment (PM2 handles Frontend + Engine).
-- `npm run build`: Builds the production bundle.
-- `python3 engine/main.py`: Starts the engine independently.
+### Style Prefs
+- **JavaScript/TS**: ESM, Async/Await, PascalCase for components.
+- **Python**: PEP 8, Asyncio for I/O, snake_case for functions.
+- **Logging**: Include `agent_id` or `phase_id` in all high-priority log events.
+
+## 🛡️ Security & Safety
+- **Veto Supremacy**: Any security veto terminates the cycle immediately.
+- **Ragnarok Protocol**: Hand agent must execute liquidation on fatal errors.
+- **Credentials**: NEVER commit `.env` or RSA keys. 
+
+## 🔄 Maintenance & Evolution
+- **Sync**: After any logic refactor, use the `/sync` workflow to update `.opencode/` and `ai-env/` folders.
+- **Handoff**: Document every major change in `walkthroughs/`.
+
+## 📂 Project Structure
+- `engine/`: Core Python logic and 4 Mega-Agents.
+- `frontend/`: React application.
+- `shared/`: TypeScript type definitions.
+- `walkthroughs/`: Mission history and task handoffs.
+- `ai-env/`: The Universal source of truth for all AI assistants.
+  - `skills/`: Centralized tools (Linked via `.opencode/skills`).
+  - `workflows/`: Operational runbooks (Linked via `.agent/workflows`).
+  - `core-docs/`: Constitution and Design Guides.
+  - `personas/`: AI mental model definitions.
+
+## 🤝 Multi-Agent Git Protocol
+- **Pull First**: ALWAYS run `git pull --rebase origin opencode` before starting work.
+- **Atomic Handoff**: Use `./scripts/handoff.sh "Your message"` to sync documentation and commit atomically.
+- **Linear History**: Keep a clean commit history for the next agent's context.
 
 ---
-_Generated by Sentient Alpha Core_
+_Generated for OpenCode Autonomous Performance_

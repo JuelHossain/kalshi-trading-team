@@ -12,8 +12,9 @@ const SystemHealth: React.FC<SystemHealthProps> = ({ onClose }) => {
     'GEMINI (Analyst)': { status: 'PENDING', latency: 0, msg: 'Waiting...' },
     'GROQ (Scout)': { status: 'PENDING', latency: 0, msg: 'Waiting...' },
     'KALSHI V2 (Exchange)': { status: 'PENDING', latency: 0, msg: 'Waiting...' },
-    'RAPIDAPI (Odds)': { status: 'PENDING', latency: 0, msg: 'Waiting...' },
     'SUPABASE (DB)': { status: 'PENDING', latency: 0, msg: 'Waiting...' },
+    'AI ENVIRONMENT': { status: 'PENDING', latency: 0, msg: 'Verifying Symlinks...' },
+    'PROJECT SOUL': { status: 'PENDING', latency: 0, msg: 'Reading Intuition...' },
   });
 
   const runTests = async () => {
@@ -55,7 +56,7 @@ const SystemHealth: React.FC<SystemHealthProps> = ({ onClose }) => {
     // 3. KALSHI TEST
     const startKalshi = performance.now();
     try {
-      if (!CONFIG.KALSHI.KEY_ID) throw new Error('Missing KID');
+      if (!CONFIG.KALSHI.DEMO_KEY_ID) throw new Error('Missing KID');
       // In a real scenario, we'd hit /api/v2/exchange/status
       update(
         'KALSHI V2 (Exchange)',
@@ -67,32 +68,28 @@ const SystemHealth: React.FC<SystemHealthProps> = ({ onClose }) => {
       update('KALSHI V2 (Exchange)', 'FAIL', 0, e.message);
     }
 
-    // 4. RAPIDAPI TEST
-    const startRapid = performance.now();
+    // 4. ENVIRONMENT & SOUL TEST
+    const startEnv = performance.now();
     try {
-      if (!CONFIG.RAPID_API_KEY) throw new Error('Missing Key');
-      update(
-        'RAPIDAPI (Odds)',
-        'PASS',
-        Math.round(performance.now() - startRapid),
-        'Odds-Vegas Endpoint Reachable'
-      );
-    } catch (e: any) {
-      update('RAPIDAPI (Odds)', 'FAIL', 0, e.message);
-    }
+      const res = await fetch('/api/env-health');
+      const data = await res.json();
 
-    // 5. SUPABASE TEST
-    const startSupabase = performance.now();
-    try {
-      if (!CONFIG.SUPABASE_URL) throw new Error('Missing URL');
       update(
-        'SUPABASE (DB)',
-        'PASS',
-        Math.round(performance.now() - startSupabase),
-        'PostgreSQL Connection Stable'
+        'AI ENVIRONMENT',
+        data.status === 'HEALTHY' ? 'PASS' : 'FAIL',
+        Math.round(performance.now() - startEnv),
+        `Symlinks: ${data.symlinks.opencode_skills}`
+      );
+
+      update(
+        'PROJECT SOUL',
+        data.project_soul.exists ? 'PASS' : 'FAIL',
+        0,
+        data.project_soul.last_intuition.substring(0, 30) + '...'
       );
     } catch (e: any) {
-      update('SUPABASE (DB)', 'FAIL', 0, e.message);
+      update('AI ENVIRONMENT', 'FAIL', 0, 'Link Error');
+      update('PROJECT SOUL', 'FAIL', 0, 'Identity Lost');
     }
   };
 

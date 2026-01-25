@@ -169,13 +169,13 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     handleCancelCycle,
     handleKillSwitch,
     handleActivateKillSwitch: handleKillSwitch, // Map to same for now or implement specific if needed
-    handleDeactivateKillSwitch: async () => { }, // Implement if engine supports it
-    addLog: () => { },
-    handleAgentTest: async () => { },
+    handleDeactivateKillSwitch: async () => {}, // Implement if engine supports it
+    addLog: () => {},
+    handleAgentTest: async () => {},
     viewedAgentId: null,
-    setViewedAgentId: () => { },
+    setViewedAgentId: () => {},
     showHealth: false,
-    setShowHealth: () => { },
+    setShowHealth: () => {},
     vault: store.vault,
     simulation: store.simulation,
     health: store.health,

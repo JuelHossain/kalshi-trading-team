@@ -29,11 +29,5 @@ Strict standards for all Human and AI collaborators to ensure project stability,
 - **Process Management**: Follow the `ecosystem.config.cjs` architecture. Services must be managed via PM2.
 - **Environment**: Use `.env` for secrets; never commit keys to the repository.
 
-## 🤖 PILLAR 5: Cross-Agent Technical Handoff
-
-- **Technical Toolbox**: All agents must consult the specialized skills and diagnostic scripts in `.opencode/skills/` before refactoring core architecture.
-- **Protocol**: Refer to [CROSS_AGENT_PROTOCOL.md](./CROSS_AGENT_PROTOCOL.md) for multi-environment synchronization rules.
-- **Universal IDs**: Standardize Agent IDs and Phase IDs across all platforms using `shared/constants.ts`.
-
 ---
 _Constitution Ratified - Sentient Alpha Core_

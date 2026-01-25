@@ -73,6 +73,13 @@ The engine was successfully started with the new components active.
 [GHOST] SYSTEM ONLINE - 4 Pillars Active.
 ```
 
-## Next Steps
-- Monitor live performance to ensure `duckduckgo-search` remains reliable (rate limits).
-- Observe Brain's debate logs to confirm it is effectively using the new context.
+## 5. Dynamic Persona Loading (Smart Move)
+We implemented a decouple-logic-from-code pattern. The **Brain** agent no longer has hardcoded personas. Instead, it dynamically loads its "Optimist" and "Critic" definitions from the `.opencode` directory at startup.
+
+### Benefits
+- **Zero-Code Tuning**: Strategy can be updated by editing markdown files in `.opencode/skills/agent-logic/resources/personas/`.
+- **Consistency**: Every AI assistant working on the project uses the same approved personas defined in the OpenCode skills.
+- **Traceability**: Changes to the bot's "personality" and "bias" are recorded in the git history of the `.opencode` folder.
+
+## System Status
+All 4 Mega-Agents are active and synchronized with the latest OpenCode instructions.

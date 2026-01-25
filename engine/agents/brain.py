@@ -49,6 +49,31 @@ class BrainAgent(BaseAgent):
                 self.client = genai.Client(api_key=api_key)
             else:
                 self.client = None
+        
+        # OpenCode Personas
+        self.personas = {
+            "optimist": "OPTIMIST: Argue why this is a great opportunity.",
+            "critic": "CRITIC: Argue against this trade."
+        }
+        self.load_personas()
+
+    def load_personas(self):
+        """Load character definitions from the centralized ai-env library"""
+        base_path = "ai-env/personas"
+        try:
+            opt_path = os.path.join(base_path, "optimist.md")
+            cri_path = os.path.join(base_path, "critic.md")
+            
+            if os.path.exists(opt_path):
+                with open(opt_path, "r") as f:
+                    self.personas["optimist"] = f"OPTIMIST: {f.read().strip()}"
+            
+            if os.path.exists(cri_path):
+                with open(cri_path, "r") as f:
+                    self.personas["critic"] = f"CRITIC: {f.read().strip()}"
+                    
+        except Exception as e:
+            print(f"[BRAIN] Persona Load Warning: {e}")
         else:
             self.client = None
 
@@ -190,9 +215,11 @@ TASK:
 3. Explicitly reference the 'NEWS/CONTEXT' in your reasoning if available.
 
 PERSONAS:
-OPTIMIST: Argue why this is a great opportunity.
-CRITIC: Argue against this trade.
-JUDGE: Final verdict.
+{self.personas['optimist']}
+
+{self.personas['critic']}
+
+JUDGE: Final verdict based on the debate above.
 
 Respond in JSON format:
 {{

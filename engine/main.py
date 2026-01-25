@@ -437,11 +437,43 @@ class GhostEngine:
                 })
             return web.json_response({"heatmap": heatmap})
 
-        async def trigger_ragnarok(request):
-            """Manual trigger for Ragnarok Protocol."""
-            result = await execute_ragnarok()
-            return web.json_response(result)
+        async def get_env_health(request):
+            """Verify 'Stay Alive' environment integrity."""
+            import os
+            
+            # 1. Symlink Integrity
+            opencode_skills_ok = os.path.islink(".opencode/skills")
+            agent_workflows_ok = os.path.islink(".agent/workflows")
+            
+            # 2. Project Soul Status
+            soul_path = "ai-env/soul/identity.md"
+            soul_exists = os.path.exists(soul_path)
+            last_snapshot = "No snapshot found."
+            
+            if soul_exists:
+                try:
+                    with open(soul_path, "r") as f:
+                        lines = f.readlines()
+                        # Find the last snapshot (lines starting with **Snapshot**)
+                        snapshots = [l for l in lines if l.startswith("**Snapshot**")]
+                        if snapshots:
+                            last_snapshot = snapshots[-1].replace("**Snapshot**: ", "").strip()
+                except Exception as e:
+                    last_snapshot = f"Error reading soul: {e}"
 
+            return web.json_response({
+                "symlinks": {
+                    "opencode_skills": "OK" if opencode_skills_ok else "BROKEN",
+                    "agent_workflows": "OK" if agent_workflows_ok else "BROKEN"
+                },
+                "project_soul": {
+                    "exists": soul_exists,
+                    "last_intuition": last_snapshot
+                },
+                "status": "HEALTHY" if (opencode_skills_ok and agent_workflows_ok and soul_exists) else "DEGRADED"
+            })
+
+        app.router.add_get("/env-health", get_env_health)
         app.router.add_post("/trigger", trigger_cycle)
         app.router.add_post("/kill-switch", activate_kill_switch)
         app.router.add_post("/deactivate-kill-switch", deactivate_kill_switch)
