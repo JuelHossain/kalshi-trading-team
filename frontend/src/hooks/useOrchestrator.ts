@@ -184,6 +184,14 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     };
   }, [autoPilot, isProcessing, cycleCount, runOrchestrator]);
 
+  const handleCancelCycle = async () => {
+    try {
+      await fetch(`${BACKEND_URL}/api/cancel-cycle`, { method: 'POST' });
+    } catch (e) {
+      console.error('Cancel cycle failed', e);
+    }
+  };
+
   const handleKillSwitch = async () => {
     setAutoPilot(false); // Disengage autopilot on manual stop
     try {
@@ -209,14 +217,15 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     autoPilot,
     setAutoPilot,
     runOrchestrator,
+    handleCancelCycle,
     handleKillSwitch,
     addLog: (msg: string, _id: number, _level: any) =>
       console.log('Direct logging disabled in playback mode', msg),
     handleAgentTest,
     viewedAgentId: null,
-    setViewedAgentId: () => {},
+    setViewedAgentId: () => { },
     showHealth: false,
-    setShowHealth: () => {},
+    setShowHealth: () => { },
     vault,
     simulation,
     health,

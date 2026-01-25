@@ -85,6 +85,37 @@ export const setupAPIRoutes = (
     res.json({ message: 'System reset successfully' });
   });
 
+  // Cancel current cycle gracefully (no emergency procedures)
+  router.post('/cancel-cycle', async (req: Request, res: Response) => {
+    console.log('[BRIDGE] Cancel Cycle Requested');
+
+    const state = stateManager.getState();
+    if (!state.isProcessing) {
+      return res.json({ message: 'No cycle in progress to cancel' });
+    }
+
+    // Update state to stop processing
+    stateManager.updateState({ isProcessing: false });
+    sseManager.broadcast({
+      type: 'LOG',
+      log: {
+        id: 'cancel-' + Date.now(),
+        timestamp: new Date().toISOString(),
+        agentId: 0,
+        cycleId: state.cycleCount,
+        phaseId: 0,
+        level: 'WARN',
+        message: 'Cycle cancelled by user request.',
+      },
+    });
+    sseManager.broadcast({ type: 'STATE', state: { isProcessing: false } });
+
+    // Tell Python engine to cancel gracefully
+    await engineBridge.cancelCycle();
+
+    res.json({ message: 'Cycle cancelled gracefully' });
+  });
+
   router.post('/kill-switch', async (req: Request, res: Response) => {
     console.log('[BRIDGE] 🚨 KILL SWITCH ACTIVATED 🚨');
 

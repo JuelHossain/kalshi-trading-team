@@ -286,6 +286,24 @@ class GhostEngine:
             self.is_processing = False
             return web.json_response({"status": "reset"})
 
+        async def cancel_cycle(request):
+            """Gracefully cancel the current cycle without emergency procedures."""
+            if not self.is_processing:
+                return web.json_response({"status": "no_cycle", "message": "No cycle in progress."})
+            
+            self.is_processing = False
+            await self.bus.publish(
+                "SYSTEM_LOG",
+                {
+                    "level": "WARN",
+                    "message": "[GHOST] Cycle cancelled by user request.",
+                    "agent_id": 1,
+                    "timestamp": datetime.now().isoformat(),
+                },
+                "GHOST",
+            )
+            return web.json_response({"status": "cancelled", "message": "Cycle cancelled gracefully."})
+
         async def health_check(request):
             return web.json_response(
                 {
@@ -327,6 +345,7 @@ class GhostEngine:
         app.router.add_post("/trigger", trigger_cycle)
         app.router.add_post("/kill-switch", activate_kill_switch)
         app.router.add_post("/reset", reset_system)
+        app.router.add_post("/cancel", cancel_cycle)
         app.router.add_get("/health", health_check)
         app.router.add_get("/stream", stream_logs)
 
