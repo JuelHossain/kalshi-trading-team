@@ -47,14 +47,34 @@ class HandAgent(BaseAgent):
         await self.bus.subscribe("EXECUTION_READY", self.on_execution_ready)
 
     async def on_execution_ready(self, message):
-        """Execute approved trade from Brain"""
+        """Execute approved trade from Brain > Synapse (Primary) or Brain Ref (Legacy)"""
         await self.log("Execution signal received. Initiating strike sequence...")
 
-        if not self.brain:
-            await self.log("Brain agent not connected. Cannot execute.", level="ERROR")
-            return
+        target = None
+        
+        # 1. Synapse Flow (Decoupled)
+        if self.synapse:
+            try:
+                signal_model = await self.synapse.executions.pop()
+                if signal_model:
+                    await self.log(f"✋ Synapse Signal: {signal_model.target_opportunity.ticker}")
+                    
+                    # Map to Legacy Target Format for downstream methods
+                    target = {
+                        "ticker": signal_model.target_opportunity.ticker,
+                        "confidence": signal_model.confidence,
+                        "ev": signal_model.monte_carlo_ev,
+                        "reasoning": signal_model.reasoning,
+                        "suggested_size": signal_model.suggested_count,
+                        "market_data": signal_model.target_opportunity.market_data.raw_response
+                    }
+            except Exception as e:
+                await self.log(f"Synapse Pop (Execution) Error: {e}", level="ERROR")
 
-        target = self.brain.pop_execution_target()
+        # 2. Legacy Fallback (Direct Reference)
+        if not target and self.brain:
+            target = self.brain.pop_execution_target()
+
         if not target:
             await self.log("No execution target available.")
             return

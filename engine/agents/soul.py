@@ -40,6 +40,8 @@ class SoulAgent(BaseAgent):
         self.mistakes_log = []
         self.strengths_list = []
         self.is_locked_down = False
+        self.autopilot_enabled = False
+        self.autopilot_delay = 30  # Seconds between cycles in Autopilot mode
 
         # Initialize Gemini for self-evolution
         if GEMINI_AVAILABLE:
@@ -55,6 +57,8 @@ class SoulAgent(BaseAgent):
         await self.log("Soul awakening. Executive Director online.")
         await self.bus.subscribe("CYCLE_START", self.on_cycle_start)
         await self.bus.subscribe("TRADE_RESULT", self.on_trade_result)
+        await self.bus.subscribe("CYCLE_COMPLETE", self.on_cycle_complete)
+        await self.bus.subscribe("SYSTEM_CONTROL", self.on_system_control)
 
     async def on_cycle_start(self, message):
         """Pre-flight sequence"""
@@ -122,6 +126,27 @@ Write a concise set of 5 trading rules to maximize wins and avoid losses. Be spe
             await self.log("Trading instructions evolved via Gemini.")
         except Exception as e:
             await self.log(f"Evolution failed: {str(e)[:50]}", level="ERROR")
+
+    async def on_system_control(self, message):
+        """Handle system-wide control commands (Autopilot, Kill Switch)"""
+        action = message.payload.get("action")
+        if action == "START_AUTOPILOT":
+            self.autopilot_enabled = True
+            await self.log("🚀 AUTOPILOT ENABLED. Starting autonomous loop...")
+            await self.bus.publish("REQUEST_CYCLE", {"isPaperTrading": True}, self.name)
+        elif action == "STOP_AUTOPILOT":
+            self.autopilot_enabled = False
+            await self.log("🛑 AUTOPILOT DISABLED. (System will pause after current cycle)")
+
+    async def on_cycle_complete(self, message):
+        """Trigger next cycle if in Autopilot mode"""
+        if self.autopilot_enabled and not self.is_locked_down:
+            await self.log(f"Cycle complete. Waiting {self.autopilot_delay}s for next pulse...")
+            await asyncio.sleep(self.autopilot_delay)
+            
+            # Re-check in case it was disabled during sleep
+            if self.autopilot_enabled:
+                await self.bus.publish("REQUEST_CYCLE", {"isPaperTrading": True}, self.name)
 
     async def on_tick(self, payload: dict[str, Any]):
         """Periodic self-check"""

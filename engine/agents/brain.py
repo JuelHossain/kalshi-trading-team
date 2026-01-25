@@ -26,7 +26,7 @@ except ImportError:
     GEMINI_AVAILABLE = False
 
 
-from core.synapse import Synapse
+from core.synapse import Synapse, ExecutionSignal, Opportunity, MarketData
 
 
 class BrainAgent(BaseAgent):
@@ -249,22 +249,62 @@ Respond in JSON format:
 
         return {"win_rate": win_rate, "ev": ev, "variance": variance}
 
-    async def queue_for_execution(self, exec_queue: asyncio.Queue, target: dict):
-        """Push approved target to execution queue and Supabase"""
+    async def queue_for_execution(self, target: dict):
+        """Push approved target to execution queue and Synapse"""
         execution_package = {
             "signal_id": str(uuid.uuid4()),
             "ticker": target.get("ticker", ""),
             "confidence": target.get("confidence", 0),
             "monte_carlo_ev": target.get("ev", 0),
-            "reasoning": target.get("reasoning", ""),
+            "reasoning": target.get("debate_reasoning", ""),
             "suggested_size": target.get("suggested_size", 0),
             "status": "READY_TO_STRIKE",
         }
-        await exec_queue.put(execution_package)
+        
+        # 1. Synapse Integration
+        if self.synapse:
+            try:
+                # Reconstruct Opportunity for the Signal
+                m_data_raw = target.get("market_data", {})
+                m_data = MarketData(
+                    ticker=target.get("ticker", ""),
+                    title=m_data_raw.get("title", ""),
+                    subtitle=m_data_raw.get("subtitle", ""),
+                    yes_price=int(target.get("kalshi_price", 0.5) * 100),
+                    no_price=m_data_raw.get("no_price", 0),
+                    volume=int(m_data_raw.get("volume", 0)),
+                    expiration=m_data_raw.get("expiration_time", ""),
+                    raw_response=m_data_raw
+                )
+                
+                opp = Opportunity(
+                    id=target.get("id", str(uuid.uuid4())),
+                    ticker=target.get("ticker", ""),
+                    market_data=m_data
+                )
+                
+                signal_model = ExecutionSignal(
+                    id=execution_package["signal_id"],
+                    target_opportunity=opp,
+                    confidence=execution_package["confidence"],
+                    monte_carlo_ev=execution_package["monte_carlo_ev"],
+                    reasoning=execution_package["reasoning"],
+                    suggested_count=execution_package["suggested_size"] or 10,
+                    status="PENDING"
+                )
+                
+                await self.synapse.executions.push(signal_model)
+                await self.log(f"Synapse Push (EXECUTION): {target['ticker']}")
+            except Exception as e:
+                await self.log(f"Synapse Execution Push Failed: {e}", level="ERROR")
+
+        # 2. Legacy Flow (Keep for Hand compatibility until Hand is refactored)
+        self.execution_queue.append(target)
         await log_to_db("execution_queue", execution_package)
         await self.bus.publish(
             "EXECUTION_READY",
             {
+                "ticker": target.get("ticker", ""),
                 "signal_id": execution_package["signal_id"],
                 "confidence": execution_package["confidence"],
                 "ev": execution_package["monte_carlo_ev"],

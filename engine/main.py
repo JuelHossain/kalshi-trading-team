@@ -71,6 +71,9 @@ class GhostEngine:
         # Subscribe to System Logs (Managed by SSE broadcast)
         # await self.bus.subscribe("SYSTEM_LOG", self.handle_log)
 
+        # Autopilot / Request Cycle Support
+        await self.bus.subscribe("REQUEST_CYCLE", self._handle_cycle_request)
+
         # Initialize 4 Mega-Agents
         print(f"{Fore.CYAN}[GHOST] Initializing 4 Mega-Agent Pillars...{Style.RESET_ALL}")
 
@@ -231,6 +234,16 @@ class GhostEngine:
                 {"isProcessing": False, "activeAgentId": None},
                 "GHOST",
             )
+            # Notify Soul that cycle is finished
+            await self.bus.publish("CYCLE_COMPLETE", {"cycle": self.cycle_count}, "GHOST")
+
+    async def _handle_cycle_request(self, message):
+        """Handle incoming request to start a new cycle"""
+        if not self.is_processing and self.running:
+             # Default to live trading unless specified
+             is_paper = message.payload.get("isPaperTrading", True)
+             # Use ensure_future or call directly (it's already guarded by is_processing)
+             asyncio.create_task(self.execute_single_cycle(is_paper_trading=is_paper))
 
     async def shutdown(self):
         print(f"\n{Fore.RED}[GHOST] SHUTDOWN PROTOCOL INITIATED.{Style.RESET_ALL}")
@@ -334,6 +347,18 @@ class GhostEngine:
                 }
             )
 
+        async def start_autopilot(request):
+            """Enable autonomous cycle looping."""
+            data = await request.json()
+            is_paper = data.get("isPaperTrading", True)
+            await self.bus.publish("SYSTEM_CONTROL", {"action": "START_AUTOPILOT", "isPaperTrading": is_paper}, "HTTP")
+            return web.json_response({"status": "autopilot_started", "mode": "AUTOPILOT"})
+
+        async def stop_autopilot(request):
+            """Disable autonomous cycle looping (Graceful Pause)."""
+            await self.bus.publish("SYSTEM_CONTROL", {"action": "STOP_AUTOPILOT"}, "HTTP")
+            return web.json_response({"status": "autopilot_stopped", "mode": "MANUAL"})
+
         async def stream_logs(request):
             response = web.StreamResponse(
                 status=200,
@@ -427,6 +452,8 @@ class GhostEngine:
         app.router.add_get("/pnl/heatmap", get_pnl_heatmap)
         app.router.add_post("/ragnarok", trigger_ragnarok) # Optional specific endpoint
         app.router.add_get("/health", health_check)
+        app.router.add_post("/autopilot/start", start_autopilot)
+        app.router.add_post("/autopilot/stop", stop_autopilot)
         app.router.add_get("/stream", stream_logs)
 
         runner = web.AppRunner(app)
