@@ -41,7 +41,9 @@ class SoulAgent(BaseAgent):
         self.strengths_list = []
         self.is_locked_down = False
         self.autopilot_enabled = False
-        self.autopilot_delay = 30  # Seconds between cycles in Autopilot mode
+        self.autopilot_delay = 30  # Seconds between cycles
+        self.is_paper_trading = True  # Default to safety 
+
 
         # Initialize Gemini for self-evolution
         if GEMINI_AVAILABLE:
@@ -132,8 +134,9 @@ Write a concise set of 5 trading rules to maximize wins and avoid losses. Be spe
         action = message.payload.get("action")
         if action == "START_AUTOPILOT":
             self.autopilot_enabled = True
-            await self.log("🚀 AUTOPILOT ENABLED. Starting autonomous loop...")
-            await self.bus.publish("REQUEST_CYCLE", {"isPaperTrading": True}, self.name)
+            self.is_paper_trading = message.payload.get("isPaperTrading", True)
+            await self.log(f"🚀 AUTOPILOT ENABLED (Paper: {self.is_paper_trading}). Starting autonomous loop...")
+            await self.bus.publish("REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name)
         elif action == "STOP_AUTOPILOT":
             self.autopilot_enabled = False
             await self.log("🛑 AUTOPILOT DISABLED. (System will pause after current cycle)")
@@ -146,7 +149,7 @@ Write a concise set of 5 trading rules to maximize wins and avoid losses. Be spe
             
             # Re-check in case it was disabled during sleep
             if self.autopilot_enabled:
-                await self.bus.publish("REQUEST_CYCLE", {"isPaperTrading": True}, self.name)
+                await self.bus.publish("REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name)
 
     async def on_tick(self, payload: dict[str, Any]):
         """Periodic self-check"""
