@@ -53,14 +53,16 @@ const PnLHeatmap: React.FC = () => {
       const res = await fetch(url);
       if (!res.ok) throw new Error('API Failure');
       const raw = await res.json();
+      const heatmap = raw.heatmap || [];
 
-      // Process RAW data (assuming array of {created_at, balance_cents})
-      // We need to group by day and calculate diff
-      const daysMap = new Map<string, number>(); // DateString -> CloseBalance
+      // Process RAW data (assuming array of {date, pnl})
+      // We need to group by day
+      const daysMap = new Map<string, number>(); // DateString -> PnL
 
-      raw.forEach((r: any) => {
-        const dt = new Date(r.created_at).toISOString().split('T')[0];
-        daysMap.set(dt, r.balance_cents / 100);
+      heatmap.forEach((r: any) => {
+        // Handle both possible date formats
+        const dt = r.date || new Date(r.created_at).toISOString().split('T')[0];
+        daysMap.set(dt, r.pnl || (r.balance_cents / 100));
       });
 
       // Now generate contiguous day list
@@ -81,15 +83,14 @@ const PnLHeatmap: React.FC = () => {
         date.setDate(date.getDate() - i);
         const dateKey = date.toISOString().split('T')[0];
 
-        const closeBalance = daysMap.get(dateKey);
+        const dayVal = daysMap.get(dateKey);
 
         let type: TransactionType = 'IDLE';
         let amount = 0;
         let reasoning = 'No trading activity detected.';
 
-        if (closeBalance !== undefined) {
-          amount = closeBalance - prevBalance;
-          prevBalance = closeBalance; // Update for next day
+        if (dayVal !== undefined) {
+          amount = dayVal;
 
           if (amount > 0) {
             type = 'PROFIT';
@@ -192,11 +193,10 @@ const PnLHeatmap: React.FC = () => {
               onClick={() => setActiveRange(range)}
               className={`
                             px-2 py-0.5 text-[9px] font-mono rounded-md transition-all duration-300
-                            ${
-                              activeRange === range
-                                ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)] font-bold'
-                                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
-                            }
+                            ${activeRange === range
+                  ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)] font-bold'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                }
                         `}
             >
               {range}
@@ -228,11 +228,10 @@ const PnLHeatmap: React.FC = () => {
                       onMouseEnter={() => setSelectedDay(day)}
                       className={`
                                             flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer group
-                                            ${
-                                              selectedDay?.id === day.id
-                                                ? 'bg-white/10 border-emerald-500/50 shadow-lg translate-x-1'
-                                                : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
-                                            }
+                                            ${selectedDay?.id === day.id
+                          ? 'bg-white/10 border-emerald-500/50 shadow-lg translate-x-1'
+                          : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
+                        }
                                         `}
                     >
                       <div className="flex items-center gap-4">
@@ -321,15 +320,14 @@ const PnLHeatmap: React.FC = () => {
                 <div className="mt-3">
                   <span
                     className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider
-                                    ${
-                                      selectedDay.type === 'PROFIT'
-                                        ? 'bg-emerald-500/20 text-emerald-400'
-                                        : selectedDay.type === 'LOSS'
-                                          ? 'bg-red-500/20 text-red-400'
-                                          : selectedDay.type === 'ASSET_ADDED'
-                                            ? 'bg-amber-500/20 text-amber-400'
-                                            : 'bg-gray-700 text-gray-400'
-                                    }
+                                    ${selectedDay.type === 'PROFIT'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : selectedDay.type === 'LOSS'
+                          ? 'bg-red-500/20 text-red-400'
+                          : selectedDay.type === 'ASSET_ADDED'
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-gray-700 text-gray-400'
+                      }
                                 `}
                   >
                     {selectedDay.type.replace('_', ' ')}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../store/useStore';
 import { LogEntry, TimelineEventType, TimelineEvent } from '@shared/types';
 
-const ENGINE_URL = 'http://localhost:3002';
+const ENGINE_URL = '/api';
 const PLAYBACK_SPEED_MS = 250;
 
 // Helper to determine phase for data events
@@ -169,13 +169,13 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     handleCancelCycle,
     handleKillSwitch,
     handleActivateKillSwitch: handleKillSwitch, // Map to same for now or implement specific if needed
-    handleDeactivateKillSwitch: async () => {}, // Implement if engine supports it
-    addLog: () => {},
-    handleAgentTest: async () => {},
+    handleDeactivateKillSwitch: async () => { }, // Implement if engine supports it
+    addLog: () => { },
+    handleAgentTest: async () => { },
     viewedAgentId: null,
-    setViewedAgentId: () => {},
+    setViewedAgentId: () => { },
     showHealth: false,
-    setShowHealth: () => {},
+    setShowHealth: () => { },
     vault: store.vault,
     simulation: store.simulation,
     health: store.health,

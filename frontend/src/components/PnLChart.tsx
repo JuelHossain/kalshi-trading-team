@@ -85,16 +85,17 @@ const PnLChart: React.FC = () => {
         const res = await fetch(url);
         if (!res.ok) throw new Error('Failed to fetch');
         const raw = await res.json();
+        const history = raw.history || [];
 
-        if (raw.length === 0) {
+        if (history.length === 0) {
           setData([]);
           setLoading(false);
           return;
         }
 
         // Transform
-        const transformed: ChartData[] = raw.map((d: any, i: number) => {
-          const prev = i > 0 ? raw[i - 1].balance : d.balance;
+        const transformed: ChartData[] = history.map((d: any, i: number) => {
+          const prev = i > 0 ? history[i - 1].balance : d.balance;
           const velocity = d.balance - prev;
           const time = new Date(d.timestamp).toLocaleTimeString([], {
             hour: '2-digit',
@@ -180,7 +181,7 @@ const PnLChart: React.FC = () => {
         className="flex-1 w-full min-h-[200px] relative z-10 -ml-2"
         style={{ minHeight: '200px' }}
       >
-        <ResponsiveContainer width="100%" height="100%" minHeight={200}>
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={200}>
           <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="cyberGradient" x1="0" y1="0" x2="0" y2="1">

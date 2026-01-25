@@ -50,7 +50,7 @@ export const useStore = create<AppState>((set) => ({
   login: async () => {
     // Placeholder - will be replaced by actual API call in components or a thunk
     try {
-      const res = await fetch('http://localhost:3002/auth', { method: 'POST' });
+      const res = await fetch('/api/auth', { method: 'POST' });
       const data = await res.json();
       if (data.isAuthenticated) {
         set({ user: data.user, isAuthenticated: true });
