@@ -30,3 +30,6 @@ A good snapshot saves **time and tokens**. Before you hand off, answer:
 
 ### [2026-01-25] by docs(evolution)
 **Snapshot**: Documentation is now 100% centralized in ai-env/. Symlink sovereignty is established, token-efficient soul compaction is active, and the Sentient HUD is synchronized with Project Soul intuition. The ecosystem is fully self-sustaining.
+
+### [2026-01-25] by chore(git)
+**Snapshot**: Established Git Maintenance best practices. 'main' is now the Gold Master branch (Production-Ready). 'opencode' remains the primary Agent Workspace for active forge work. Implemented automated GC, pruning, and branch hierarchy enforcement.

@@ -7,6 +7,11 @@ This project is a multi-environment AI collaboration. Whether you are **Antigrav
 - **Technical "Toolbox"**: [ai-env/skills/](./ai-env/skills/) contains the official technical standards. (Linked via `.opencode/skills/`).
 - **Operational Logic**: [ai-env/workflows/](./ai-env/workflows/) defines the runbooks. (Linked via `.agent/workflows/`).
 
+### 1.1 Branch Hierarchy (Stay Linear)
+- **`main`**: The "Gold Master". Only contains stable, walkthrough-verified evolutionary states.
+- **`opencode`**: The designated AI workspace. All agents MUST perform their primary execution here.
+- **`promotion`**: The act of merging `opencode` to `main` signifies the end of a Mission Phase.
+
 ## 2. Handoff Protocol (The Walkthrough)
 Because the USER switches between environments, the **walkthrough** is the primary way we communicate state.
 - **Rule**: Every time you finish a task, create or update a file in `walkthroughs/`.
