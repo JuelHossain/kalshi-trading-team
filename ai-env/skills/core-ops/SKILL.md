@@ -7,7 +7,7 @@ description: Essential operational tools for environment verification and connec
 This skill provides automated tools to verify the Sentient Alpha environment. Use the provided scripts to diagnose port conflicts or check the status of the 2-tier architecture.
 
 ## Commands
-- **Verify Ports**: `python3 .opencode/skills/core-ops/scripts/health_check.py`
+- **Verify Ports**: `python3 ai-env/skills/core-ops/scripts/health_check.py`
   - Checks if Frontend (3000) and Engine (3002) are responsive.
   - Detects if port 3002 is held by a non-engine process.
 

@@ -10,6 +10,7 @@ Sentient Alpha is an autonomous 2-tier trading system on Kalshi.
 - **Backend (Engine)**: Python 3.12 (Logic, AI, Market SDK).
 - **Frontend (Cockpit)**: React + Vite (Real-time HUD).
 - **Architecture**: Direct SSE/REST link (No Node.js bridge).
+- **Diagnostics**: **Sentient HUD** (Built-in health & soul monitor in the Cockpit).
 
 ## 🛠️ Build & Task Commands
 

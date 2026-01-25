@@ -4,7 +4,7 @@ This document guides OpenCode on maintaining the project infrastructure.
 
 ## Workflow: Skill Augmentation
 **Trigger**: Identifying a missing technical automation.
-1. Create a new skill folder in `.opencode/skills/`.
+1. Create a new skill folder in `ai-env/skills/`.
 2. Define a `SKILL.md` with frontmatter and instructions.
 3. Add helper scripts to `scripts/`.
 

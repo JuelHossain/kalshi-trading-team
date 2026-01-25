@@ -14,7 +14,7 @@
 
 ## Workflow: Error Recovery
 **Trigger**: Service crash or SSE disconnect.
-1. Run Health Check: `python3 .opencode/skills/core-ops/scripts/health_check.py`.
+1. Run Health Check: `python3 ai-env/skills/core-ops/scripts/health_check.py`.
 2. Check PM2 logs: `npx pm2 logs`.
 3. Restart engine if Synapse is stalling.
 

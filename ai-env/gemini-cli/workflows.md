@@ -8,7 +8,7 @@
 
 ## Workflow: Signal Audit
 **Trigger**: Unexplained trade behavior.
-1. Inspect Synapse signals: `python3 .opencode/skills/market-intel/scripts/inspect_signals.py`.
+1. Inspect Synapse signals: `python3 ai-env/skills/market-intel/scripts/inspect_signals.py`.
 2. Cross-check against news context in `ai-env/schemas/kalshi_v2.md`.
 
 ## Workflow: Ragnarok Initiation

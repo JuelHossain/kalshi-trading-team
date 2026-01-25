@@ -15,4 +15,4 @@ Every skill MUST follow the structure defined in [SKILL_TEMPLATE.md](./scripts/S
 
 ## 🛡️ Safety Guardrails
 - NEVER modify existing core skills (`git-workflow`, `sys-maintenance`) without explicit user review.
-- Always sync new skills to the root `.opencode/skills/` via symlink protocol.
+- Always sync new skills to the root `ai-env/skills/` via symlink protocol.

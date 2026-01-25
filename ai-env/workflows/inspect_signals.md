@@ -7,5 +7,5 @@ This workflow allows you to see the "Thinking" output of the Brain agent stored 
 // turbo
 1. Run signal inspector:
 ```bash
-python3 .opencode/skills/market-intel/scripts/inspect_signals.py
+python3 ai-env/skills/market-intel/scripts/inspect_signals.py
 ```

@@ -4,6 +4,10 @@ Always read the **## Core Essence** and the **last 3 entries** of [identity.md](
 ## 📌 Context (The WHY & WHAT)
 Sentient Alpha is an autonomous 2-tier trading system on Kalshi. It uses a committee of 4 Mega-Agents (Soul, Senses, Brain, Hand) to analyze and trade prediction markets.
 
+## 📖 Persistence & Diagnostics
+- **Signals**: Inter-agent persistence is handled by **Synapse** (SQLite).
+- **Diagnostics**: Use the **Sentient HUD** (port 3000) for real-time state and project intuition.
+
 ## 🏃 Common Commands (The HOW)
 
 | Action | Command | Directory |

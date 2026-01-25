@@ -8,6 +8,9 @@ Refer to the following for agent specifics:
 - **BRAIN**: Cognitive Analyst. Multi-persona debate and Monte Carlo simulation.
 - **HAND**: Tactical Executioner. Ragnarok protocol and capital protection.
 
+## 🖥️ Live Monitoring
+- **Sentient HUD**: Access via [localhost:3000](http://localhost:3000) to view real-time state, symlink integrity, and Project Soul snapshots.
+
 ## 🔗 Modular Intelligence (Domain Context)
 The following files are part of this context. Refer to them for implementation details:
 - **Project Structure**: [AGENTS.md](./AGENTS.md)

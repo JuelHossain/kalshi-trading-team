@@ -11,5 +11,5 @@ This skill centralizes the domain knowledge required for effective market sensin
 - **Synapse Schema**: `ai-env/schemas/synapse_schema.md`
 
 ## Tools
-- **Inspect Signals**: `python3 .opencode/skills/market-intel/scripts/inspect_signals.py`
+- **Inspect Signals**: `python3 ai-env/skills/market-intel/scripts/inspect_signals.py`
   - Reads directly from `ghost_memory.db` to show recent AI signals.

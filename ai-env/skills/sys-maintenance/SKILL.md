@@ -11,7 +11,7 @@ When running a sync, ensure:
 1. `AGENTS.md` matches the current `engine/` pillars.
 2. `CLAUDE.md` common commands are up to date.
 3. `ai-env/personas/` align with the `BrainAgent` logic.
-4. `.opencode/skills/` reflect new technical standards.
+4. `ai-env/skills/` reflect new technical standards.
 
 ## Usage
 Run the `/sync` workflow after any major merge or refactor.
