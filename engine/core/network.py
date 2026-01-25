@@ -1,14 +1,13 @@
 import asyncio
-import aiohttp
-import time
 import base64
-import os
 import json
-from typing import Dict, Any, Optional, List
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import serialization
+import os
+import time
+
+import aiohttp
 from colorama import Fore, Style
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 
 class KalshiClient:
@@ -18,7 +17,7 @@ class KalshiClient:
     """
 
     def __init__(self):
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
         self.private_key = None
 
         # Use Demo API by default (paper trading)
@@ -54,7 +53,7 @@ class KalshiClient:
             )
         return self._session
 
-    def _get_headers(self, method: str, path: str, body: str = "") -> Dict[str, str]:
+    def _get_headers(self, method: str, path: str, body: str = "") -> dict[str, str]:
         if not self.private_key:
             return {"Content-Type": "application/json"}
 
@@ -84,10 +83,10 @@ class KalshiClient:
         self,
         method: str,
         path: str,
-        params: Optional[Dict] = None,
-        json_data: Optional[Dict] = None,
+        params: dict | None = None,
+        json_data: dict | None = None,
         retries: int = 3,
-    ) -> Optional[Dict]:
+    ) -> dict | None:
         """
         Execute an HTTP request with exponential backoff for 429/50x errors.
         """
@@ -129,7 +128,7 @@ class KalshiClient:
 
         return None
 
-    async def get_active_markets(self, limit: int = 100, status: str = "open") -> List[Dict]:
+    async def get_active_markets(self, limit: int = 100, status: str = "open") -> list[dict]:
         path = "/markets"
         params = {"limit": limit, "status": status}
         res = await self.request("GET", path, params=params)
@@ -143,7 +142,7 @@ class KalshiClient:
             return int(res["balance"])
         return 0
 
-    async def get_orderbook(self, ticker: str) -> Optional[Dict]:
+    async def get_orderbook(self, ticker: str) -> dict | None:
         path = f"/markets/{ticker}/orderbook"
         return await self.request("GET", path)
 

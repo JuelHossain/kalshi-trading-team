@@ -1,9 +1,9 @@
 import asyncio
-from typing import Dict, List, Callable, Any, Optional
-from pydantic import BaseModel, Field
+from collections.abc import Callable
 from datetime import datetime
-import json
-import re
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 # Sensitive patterns to mask in logs
 SENSITIVE_KEYS = {"api_key", "secret", "private_key", "password", "token", "signature"}
@@ -11,7 +11,7 @@ SENSITIVE_KEYS = {"api_key", "secret", "private_key", "password", "token", "sign
 
 class Message(BaseModel):
     topic: str
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     sender: str
     timestamp: datetime = Field(default_factory=datetime.now)
 
@@ -26,7 +26,7 @@ def mask_sensitives(data: Any) -> Any:
             k: ("********" if any(s in k.lower() for s in SENSITIVE_KEYS) else mask_sensitives(v))
             for k, v in data.items()
         }
-    elif isinstance(data, list):
+    if isinstance(data, list):
         return [mask_sensitives(i) for i in data]
     return data
 
@@ -38,8 +38,8 @@ class EventBus:
     """
 
     def __init__(self):
-        self.subscribers: Dict[str, List[Callable[[Message], Any]]] = {}
-        self.history: List[Message] = []  # Short-term memory
+        self.subscribers: dict[str, list[Callable[[Message], Any]]] = {}
+        self.history: list[Message] = []  # Short-term memory
         self._lock = asyncio.Lock()
 
     async def subscribe(self, topic: str, callback: Callable[[Message], Any]):
@@ -50,7 +50,7 @@ class EventBus:
         # We don't print to stdout here to keep logs clean, or we mask it
         # print(f"[BUS] Subscriber added to {topic}")
 
-    async def publish(self, topic: str, payload: Dict[str, Any], sender: str):
+    async def publish(self, topic: str, payload: dict[str, Any], sender: str):
         # Mask sensitive data before creating the message if it's a log
         if topic == "SYSTEM_LOG":
             payload = mask_sensitives(payload)
@@ -86,5 +86,5 @@ class EventBus:
         except Exception as e:
             print(f"[BUS][ERROR] Callback failed for topic {msg.topic}: {e}")
 
-    def get_history(self) -> List[Message]:
+    def get_history(self) -> list[Message]:
         return self.history

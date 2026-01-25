@@ -20,13 +20,6 @@ You must install dependencies for the root, backend, frontend, and python engine
 npm install
 ```
 
-### Backend Dependencies
-```bash
-cd backend
-npm install
-cd ..
-```
-
 ### Frontend Dependencies
 ```bash
 cd frontend
@@ -42,7 +35,6 @@ python3 -m pip install -r engine/requirements.txt
 ## 2. Environment Configuration
 
 Ensure you have your `.env` files set up.
-- `backend/.env`: Required for the backend (Kalshi API keys, Supabase credentials, etc.)
 - `.env.local` (Root): May be used by specific scripts.
 
 ## 3. Running the Application
@@ -77,7 +69,6 @@ This script builds the frontend and backend, then starts everything with PM2.
 ## 4. Viewing the Application
 
 - **Frontend HUD**: http://localhost:3000 (or the port shown in terminal)
-- **Backend API**: http://localhost:3001
 - **PM2 Dashboard**:
   To view a visual dashboard of the running processes (in production mode):
   ```bash

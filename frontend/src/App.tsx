@@ -13,6 +13,8 @@ import { useAuth } from './hooks/useAuth';
 import SimulationResults from './components/SimulationResults';
 import VaultGauge from './components/VaultGauge';
 import LogisticsCenter from './components/LogisticsCenter';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 
 interface QueueItem {
   id: string;
@@ -91,7 +93,7 @@ const App: React.FC = () => {
 
       <main className="flex-1 flex flex-col min-w-0 bg-grid-pattern overflow-hidden relative">
         {/* Header Info */}
-        <div className="h-16 border-b border-white/5 flex items-center justify-between px-8 glass-panel z-10 shadow-xl">
+        <Card className="h-16 border-b border-white/5 flex items-center justify-between px-8 glass-panel z-10 shadow-xl rounded-none">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-3">
               <div className="relative">
@@ -130,24 +132,35 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className={`flex items-center p-1 bg-black/40 rounded-full border border-white/5 ${orchestratorProps.killSwitchActive ? 'opacity-50' : ''}`}>
+            <div
+              className={`flex items-center p-1 bg-black/40 rounded-full border border-white/5 ${orchestratorProps.killSwitchActive ? 'opacity-50' : ''}`}
+            >
               <button
-                onClick={() => !orchestratorProps.killSwitchActive && orchestratorProps.setAutoPilot(!orchestratorProps.autoPilot)}
+                onClick={() =>
+                  !orchestratorProps.killSwitchActive &&
+                  orchestratorProps.setAutoPilot(!orchestratorProps.autoPilot)
+                }
                 disabled={orchestratorProps.killSwitchActive}
-                className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${orchestratorProps.autoPilot
-                  ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
-                  : 'text-gray-500 hover:text-gray-300'
-                  } ${orchestratorProps.killSwitchActive ? 'cursor-not-allowed' : ''}`}
+                className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                  orchestratorProps.autoPilot
+                    ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
+                    : 'text-gray-500 hover:text-gray-300'
+                } ${orchestratorProps.killSwitchActive ? 'cursor-not-allowed' : ''}`}
               >
                 AUTOPILOT
               </button>
               <button
-                onClick={() => !orchestratorProps.killSwitchActive && !orchestratorProps.autoPilot && orchestratorProps.setAutoPilot(true)}
+                onClick={() =>
+                  !orchestratorProps.killSwitchActive &&
+                  !orchestratorProps.autoPilot &&
+                  orchestratorProps.setAutoPilot(true)
+                }
                 disabled={orchestratorProps.killSwitchActive}
-                className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${!orchestratorProps.autoPilot
-                  ? 'bg-white/10 text-white'
-                  : 'text-transparent w-0 p-0 overflow-hidden'
-                  } ${orchestratorProps.killSwitchActive ? 'cursor-not-allowed' : ''}`}
+                className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                  !orchestratorProps.autoPilot
+                    ? 'bg-white/10 text-white'
+                    : 'text-transparent w-0 p-0 overflow-hidden'
+                } ${orchestratorProps.killSwitchActive ? 'cursor-not-allowed' : ''}`}
               >
                 MANUAL
               </button>
@@ -155,28 +168,29 @@ const App: React.FC = () => {
 
             <div className="h-6 w-px bg-white/10"></div>
 
-            <button
+            <Button
               onClick={() =>
                 orchestratorProps.isProcessing
                   ? orchestratorProps.handleCancelCycle()
                   : orchestratorProps.runOrchestrator()
               }
               disabled={orchestratorProps.killSwitchActive}
-              className={`btn-primary !py-1.5 !px-5 !text-[10px] tracking-widest ${orchestratorProps.killSwitchActive
-                ? 'opacity-50 cursor-not-allowed'
-                : orchestratorProps.isProcessing
-                  ? 'bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border-orange-500/30'
-                  : 'hover:scale-105 active:scale-95'
-                }`}
+              className={`!py-1.5 !px-5 !text-[10px] tracking-widest btn-primary ${
+                orchestratorProps.killSwitchActive
+                  ? 'opacity-50 cursor-not-allowed'
+                  : orchestratorProps.isProcessing
+                    ? 'bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border-orange-500/30'
+                    : 'hover:scale-105 active:scale-95'
+              }`}
             >
               {orchestratorProps.killSwitchActive
                 ? '🔒 LOCKED'
                 : orchestratorProps.isProcessing
                   ? 'CANCEL CYCLE'
                   : 'INITIATE CYCLE'}
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
 
         {/* Kill Switch Modal */}
 
@@ -200,12 +214,12 @@ const App: React.FC = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    <div className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors">
+                    <Card className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors">
                       <PnLChart />
-                    </div>
-                    <div className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors">
+                    </Card>
+                    <Card className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors">
                       <PnLHeatmap />
-                    </div>
+                    </Card>
                   </div>
                 </div>
 
@@ -281,21 +295,29 @@ const App: React.FC = () => {
                   </div>
 
                   {/* Kill Switch Section */}
-                  <div className={`p-5 rounded-xl border ${orchestratorProps.killSwitchActive ? 'bg-red-900/20 border-red-500/40' : 'bg-white/5 border-white/10'}`}>
+                  <div
+                    className={`p-5 rounded-xl border ${orchestratorProps.killSwitchActive ? 'bg-red-900/20 border-red-500/40' : 'bg-white/5 border-white/10'}`}
+                  >
                     <div className="flex justify-between items-start mb-4">
                       <div>
                         <div className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
                           ⚠️ Emergency Kill Switch
                         </div>
                         <div className="text-[10px] text-gray-500 font-mono mt-1">
-                          Immediately stops all engines and blocks all actions until manually deactivated.
+                          Immediately stops all engines and blocks all actions until manually
+                          deactivated.
                         </div>
                       </div>
-                      <div className={`px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 ${orchestratorProps.killSwitchActive
-                        ? 'bg-red-500 text-white animate-pulse'
-                        : 'bg-gray-700 text-gray-400'
-                        }`}>
-                        <span className={`w-2 h-2 rounded-full ${orchestratorProps.killSwitchActive ? 'bg-white' : 'bg-gray-500'}`}></span>
+                      <div
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 ${
+                          orchestratorProps.killSwitchActive
+                            ? 'bg-red-500 text-white animate-pulse'
+                            : 'bg-gray-700 text-gray-400'
+                        }`}
+                      >
+                        <span
+                          className={`w-2 h-2 rounded-full ${orchestratorProps.killSwitchActive ? 'bg-white' : 'bg-gray-500'}`}
+                        ></span>
                         {orchestratorProps.killSwitchActive ? 'ACTIVE' : 'INACTIVE'}
                       </div>
                     </div>
@@ -311,7 +333,11 @@ const App: React.FC = () => {
                       ) : (
                         <button
                           onClick={() => {
-                            if (window.confirm('⚠️ ACTIVATE KILL SWITCH?\n\nThis will:\n• Stop all engines immediately\n• Cancel any running cycles\n• Block all manual and automated actions\n\nSystem will remain locked until you deactivate.')) {
+                            if (
+                              window.confirm(
+                                '⚠️ ACTIVATE KILL SWITCH?\n\nThis will:\n• Stop all engines immediately\n• Cancel any running cycles\n• Block all manual and automated actions\n\nSystem will remain locked until you deactivate.'
+                              )
+                            ) {
                               orchestratorProps.handleActivateKillSwitch();
                             }
                           }}

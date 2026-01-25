@@ -10,32 +10,31 @@ The 4 Pillars of Profit:
 """
 
 import asyncio
+import json
 import os
 import signal
-import sys
-import json
 from datetime import datetime
-from typing import List, Optional
 
 from aiohttp import web
-from colorama import init, Fore, Style
+from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
 # Load Env BEFORE imports
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
-from core.bus import EventBus
-from core.vault import RecursiveVault
-from core.network import kalshi_client
-from core.safety import execute_ragnarok
+from agents.base import BaseAgent
+from agents.brain import BrainAgent
+from agents.gateway import GatewayAgent
+from agents.hand import HandAgent
+from agents.senses import SensesAgent
 
 # Import 4 Mega-Agents
 from agents.soul import SoulAgent
-from agents.senses import SensesAgent
-from agents.brain import BrainAgent
-from agents.hand import HandAgent
-from agents.gateway import GatewayAgent
-from agents.base import BaseAgent
+from core.bus import EventBus
+from core.network import kalshi_client
+from core.safety import execute_ragnarok
+from core.synapse import Synapse
+from core.vault import RecursiveVault
 
 # Initialize Colorama
 init()
@@ -49,13 +48,14 @@ class GhostEngine:
 
     def __init__(self):
         self.bus: EventBus = EventBus()
+        self.synapse: Synapse = Synapse()
         self.vault: RecursiveVault = RecursiveVault()
         self.running: bool = True
-        self.agents: List[BaseAgent] = []
+        self.agents: list[BaseAgent] = []
         self.cycle_count: int = 0
         self.is_processing: bool = False
         self.manual_kill_switch: bool = False
-        self.sse_clients: List[asyncio.Queue] = []
+        self.sse_clients: list[asyncio.Queue] = []
 
         # Double-Entry Queues
         self.opp_queue: asyncio.Queue = asyncio.Queue()
@@ -76,23 +76,26 @@ class GhostEngine:
 
         try:
             # 1. SOUL - Executive Director
-            self.soul = SoulAgent(1, self.bus, vault=self.vault)
+            self.soul = SoulAgent(1, self.bus, vault=self.vault, synapse=self.synapse)
             await self.soul.start()
             self.agents.append(self.soul)
 
             # 2. SENSES - Surveillance
-            self.senses = SensesAgent(2, self.bus, kalshi_client=kalshi_client)
+            # 2. SENSES - Surveillance
+            self.senses = SensesAgent(2, self.bus, kalshi_client=kalshi_client, synapse=self.synapse)
             await self.senses.start()
             self.agents.append(self.senses)
 
             # 3. BRAIN - Intelligence (needs reference to Senses for opportunity queue)
-            self.brain = BrainAgent(3, self.bus, senses_agent=self.senses)
+            # 3. BRAIN - Intelligence (needs reference to Senses for opportunity queue)
+            self.brain = BrainAgent(3, self.bus, senses_agent=self.senses, synapse=self.synapse)
             await self.brain.start()
             self.agents.append(self.brain)
 
             # 4. HAND - Execution (needs reference to Brain and Vault)
+            # 4. HAND - Execution (needs reference to Brain and Vault)
             self.hand = HandAgent(
-                4, self.bus, vault=self.vault, brain_agent=self.brain, kalshi_client=kalshi_client
+                4, self.bus, vault=self.vault, brain_agent=self.brain, kalshi_client=kalshi_client, synapse=self.synapse
             )
             await self.hand.start()
             self.agents.append(self.hand)
@@ -282,6 +285,22 @@ class GhostEngine:
                 {"status": "killed", "message": "Manual Kill Switch Activated."}
             )
 
+        async def deactivate_kill_switch(request):
+            self.manual_kill_switch = False
+            await self.bus.publish(
+                "SYSTEM_LOG",
+                {
+                    "level": "INFO",
+                    "message": "[GHOST] 🟢 MANUAL KILL SWITCH DEACTIVATED",
+                    "agent_id": 1,
+                    "timestamp": datetime.now().isoformat(),
+                },
+                "GHOST",
+            )
+            return web.json_response(
+                {"status": "active", "message": "Manual Kill Switch Deactivated."}
+            )
+
         async def reset_system(request):
             self.manual_kill_switch = False
             self.is_processing = False
@@ -400,6 +419,7 @@ class GhostEngine:
 
         app.router.add_post("/trigger", trigger_cycle)
         app.router.add_post("/kill-switch", activate_kill_switch)
+        app.router.add_post("/deactivate-kill-switch", deactivate_kill_switch)
         app.router.add_post("/reset", reset_system)
         app.router.add_post("/cancel", cancel_cycle)
         app.router.add_post("/auth", auth_handler)

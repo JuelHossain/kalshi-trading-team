@@ -1,9 +1,9 @@
 
 import os
-from dotenv import load_dotenv
+
+from colorama import Fore, Style, init
 from cryptography.hazmat.primitives import serialization
-from colorama import init, Fore, Style
-import sys
+from dotenv import load_dotenv
 
 # Initialize Colorama
 init()
@@ -13,12 +13,12 @@ def debug_auth():
 
     # 1. Load .env
     # Try loading from engine/.env first, then root .env
-    env_path = os.path.join(os.path.dirname(__file__), '.env')
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
     print(f"[DEBUG] Loading .env from: {env_path}")
     loaded = load_dotenv(env_path)
     if not loaded:
         print(f"{Fore.YELLOW}[WARNING] Failed to load from {env_path}. Trying root .env...{Style.RESET_ALL}")
-        root_env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+        root_env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
         load_dotenv(root_env_path)
     
     # 2. Check Key ID

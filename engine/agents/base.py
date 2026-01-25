@@ -1,16 +1,19 @@
-from abc import ABC, abstractmethod
-from typing import Any
 import json
 import os
+from abc import ABC
 from datetime import datetime
-from core.bus import EventBus, Message
+from typing import Any
+
+from core.bus import EventBus
+from core.synapse import Synapse
 
 
 class BaseAgent(ABC):
-    def __init__(self, name: str, agent_id: int, bus: EventBus):
+    def __init__(self, name: str, agent_id: int, bus: EventBus, synapse: Synapse = None):
         self.name = name
         self.agent_id = agent_id
         self.bus = bus
+        self.synapse = synapse
 
     async def start(self):
         """Standard entry point. Override if custom logic needed before TICK."""
@@ -19,11 +22,9 @@ class BaseAgent(ABC):
 
     async def setup(self):
         """Standard setup logic."""
-        pass
 
     async def teardown(self):
         """Standard cleanup logic."""
-        pass
 
     async def _handle_tick_internal(self, message):
         from core.db import send_heartbeat
@@ -33,7 +34,6 @@ class BaseAgent(ABC):
 
     async def on_tick(self, payload: Any):
         """Handler for periodic ticks."""
-        pass
 
     async def log(self, message: str, level: str = "INFO"):
         payload = {

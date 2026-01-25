@@ -1,7 +1,7 @@
-import asyncio
 import json
 import os
-from typing import Dict, Any
+from typing import Any
+
 from agents.base import BaseAgent
 from core.bus import EventBus
 from core.vault import RecursiveVault
@@ -69,7 +69,7 @@ class GatewayAgent(BaseAgent):
         if sender not in ["GHOST", "GATEWAY", "HISTORIAN", "MECHANIC"]:
             await self.emit("STATE", {"activeAgentId": agent_id})
 
-    async def on_tick(self, payload: Dict[str, Any]):
+    async def on_tick(self, payload: dict[str, Any]):
         # Every cycle, we push a VAULT update and a STATE heartbeat
         vault_state = {
             "principal": self.vault.PRINCIPAL_CAPITAL_CENTS / 100,

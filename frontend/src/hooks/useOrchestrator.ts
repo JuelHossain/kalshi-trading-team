@@ -8,12 +8,18 @@ const PLAYBACK_SPEED_MS = 250;
 // Helper to determine phase for data events
 const getPhaseForType = (type: string, _data: any): number => {
   switch (type) {
-    case 'MARKET': return 1; // Surveillance
-    case 'SIMULATION': return 2; // Intelligence
-    case 'INTERCEPT': return 2; // Intelligence
-    case 'VAULT': return 4; // Accounting
-    case 'TRADE': return 3; // Execution
-    default: return 0;
+    case 'MARKET':
+      return 1; // Surveillance
+    case 'SIMULATION':
+      return 2; // Intelligence
+    case 'INTERCEPT':
+      return 2; // Intelligence
+    case 'VAULT':
+      return 4; // Accounting
+    case 'TRADE':
+      return 3; // Execution
+    default:
+      return 0;
   }
 };
 
@@ -81,11 +87,15 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
           if (eventType === 'VAULT') store.setVault(rawData.state);
           if (eventType === 'SIMULATION') store.setSimulation(rawData.state);
         } else if (eventType === 'STATE') {
-          if (rawData.state.isProcessing !== undefined) store.setIsProcessing(rawData.state.isProcessing);
-          if (rawData.state.activeAgentId !== undefined) store.setActiveAgentId(rawData.state.activeAgentId);
-          if (rawData.state.completedAgents !== undefined) store.setCompletedAgents(rawData.state.completedAgents);
+          if (rawData.state.isProcessing !== undefined)
+            store.setIsProcessing(rawData.state.isProcessing);
+          if (rawData.state.activeAgentId !== undefined)
+            store.setActiveAgentId(rawData.state.activeAgentId);
+          if (rawData.state.completedAgents !== undefined)
+            store.setCompletedAgents(rawData.state.completedAgents);
           if (rawData.state.cycleCount !== undefined) store.setCycleCount(rawData.state.cycleCount);
-          if (rawData.state.killSwitchActive !== undefined) store.setKillSwitchActive(rawData.state.killSwitchActive);
+          if (rawData.state.killSwitchActive !== undefined)
+            store.setKillSwitchActive(rawData.state.killSwitchActive);
         } else if (eventType === 'HEALTH') {
           store.setHealth(rawData.state);
         }
@@ -159,13 +169,13 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     handleCancelCycle,
     handleKillSwitch,
     handleActivateKillSwitch: handleKillSwitch, // Map to same for now or implement specific if needed
-    handleDeactivateKillSwitch: async () => { }, // Implement if engine supports it
-    addLog: () => { },
-    handleAgentTest: async () => { },
+    handleDeactivateKillSwitch: async () => {}, // Implement if engine supports it
+    addLog: () => {},
+    handleAgentTest: async () => {},
     viewedAgentId: null,
-    setViewedAgentId: () => { },
+    setViewedAgentId: () => {},
     showHealth: false,
-    setShowHealth: () => { },
+    setShowHealth: () => {},
     vault: store.vault,
     simulation: store.simulation,
     health: store.health,

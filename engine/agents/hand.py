@@ -10,15 +10,14 @@ Workflow:
 5. Notification: Send high-priority alert via ntfy.sh
 """
 
-import asyncio
-import aiohttp
 import os
-from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any
+
+import aiohttp
 from agents.base import BaseAgent
 from core.bus import EventBus
+from core.synapse import Synapse
 from core.vault import RecursiveVault
-from core.db import log_to_db
 
 
 class HandAgent(BaseAgent):
@@ -35,8 +34,9 @@ class HandAgent(BaseAgent):
         vault: RecursiveVault,
         brain_agent=None,
         kalshi_client=None,
+        synapse: Synapse = None,
     ):
-        super().__init__("HAND", agent_id, bus)
+        super().__init__("HAND", agent_id, bus, synapse)
         self.vault = vault
         self.brain = brain_agent
         self.kalshi_client = kalshi_client
@@ -107,7 +107,7 @@ class HandAgent(BaseAgent):
         else:
             await self.log(f"❌ ORDER FAILED: {order_result.get('error')}", level="ERROR")
 
-    async def snipe_check(self, ticker: str) -> Dict:
+    async def snipe_check(self, ticker: str) -> dict:
         """Analyze order book for best entry with zero slippage"""
         if not self.kalshi_client:
             await self.log("Kalshi client unavailable. Simulating snipe check.")
@@ -150,7 +150,7 @@ class HandAgent(BaseAgent):
         # Cap at max stake
         return min(stake, self.MAX_STAKE_CENTS)
 
-    async def execute_order(self, ticker: str, price: int, stake: int) -> Dict:
+    async def execute_order(self, ticker: str, price: int, stake: int) -> dict:
         """Place limit order on Kalshi v2"""
         if not self.kalshi_client:
             await self.log("Kalshi client unavailable. Simulating order.")
@@ -173,7 +173,7 @@ class HandAgent(BaseAgent):
         except Exception as e:
             return {"success": False, "error": str(e)[:100]}
 
-    async def send_notification(self, ticker: str, stake: int, result: Dict):
+    async def send_notification(self, ticker: str, stake: int, result: dict):
         """Send push notification via ntfy.sh"""
         if not self.NTFY_TOPIC:
             return
@@ -195,7 +195,7 @@ class HandAgent(BaseAgent):
             await self.log(f"Notification failed: {str(e)[:30]}", level="ERROR")
 
 
-    async def on_tick(self, payload: Dict[str, Any]):
+    async def on_tick(self, payload: dict[str, Any]):
         """Periodic vault state broadcast"""
         # Emit vault update for UI
         await self.bus.publish(

@@ -14,25 +14,20 @@
     "prettier": "^3.2.5"
   },
   "scripts": {
-    "build:backend": "cd backend && npm install && npm run build",
     "build:frontend": "cd frontend && npm install && npm run build",
-    "build": "npm run build:backend && npm run build:frontend",
+    "build": "npm run build:frontend",
     "start": "npx pm2 start ecosystem.config.cjs",
     "stop": "npx pm2 stop all",
     "logs": "npx pm2 logs",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"python3 engine/main.py\"",
-    "dev:backend": "cd backend && npm run dev",
+    "dev": "concurrently \"npm run dev:frontend\" \"python3 engine/main.py\"",
     "dev:frontend": "cd frontend && npm run dev",
     "lint": "eslint . --ext .ts,.tsx --fix && cd engine && python3 -m ruff check . --fix && python3 -m black .",
     "lint:frontend": "cd frontend && eslint src --ext .ts,.tsx --fix",
-    "lint:backend": "cd backend && eslint src --ext .ts,.tsx --fix",
     "lint:engine": "cd engine && python3 -m ruff check . --fix",
     "format": "prettier --write . && cd engine && python3 -m black .",
     "format:frontend": "cd frontend && prettier --write src/**/*.{ts,tsx}",
-    "format:backend": "cd backend && prettier --write src/**/*.{ts,tsx}",
     "format:engine": "cd engine && python -m black .",
-    "test": "npm run test:backend && npm run test:frontend",
-    "test:backend": "cd backend && npm run test",
+    "test": "npm run test:frontend",
     "test:frontend": "cd frontend && npm run test",
     "prepare": "husky install"
   }

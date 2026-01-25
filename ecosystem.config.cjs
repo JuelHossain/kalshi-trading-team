@@ -1,15 +1,6 @@
 module.exports = {
   apps: [
     {
-      name: 'kalshi-alpha-backend',
-      cwd: './backend',
-      script: 'npm',
-      args: 'start',
-      env: {
-        NODE_ENV: 'production',
-      },
-    },
-    {
       name: 'kalshi-alpha-frontend',
       cwd: './frontend',
       script: 'npm',

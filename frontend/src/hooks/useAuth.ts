@@ -30,10 +30,10 @@ export const useAuth = (
       const authBody = isPaperTrading
         ? { useSystemAuth: true, isPaperTrading: true }
         : {
-          keyId: apiKeyId || FALLBACK_DEMO_KEY,
-          privateKey: apiSecret || FALLBACK_DEMO_SECRET,
-          isPaperTrading,
-        };
+            keyId: apiKeyId || FALLBACK_DEMO_KEY,
+            privateKey: apiSecret || FALLBACK_DEMO_SECRET,
+            isPaperTrading,
+          };
 
       const response = await fetch(`${ENGINE_URL}/auth`, {
         method: 'POST',

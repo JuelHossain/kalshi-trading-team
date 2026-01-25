@@ -2,11 +2,13 @@
 Safety & Risk Management Core
 """
 import asyncio
-from typing import Dict, List, Any
+from typing import Any
+
 from colorama import Fore, Style
 from core.network import kalshi_client
 
-async def execute_ragnarok() -> Dict[str, Any]:
+
+async def execute_ragnarok() -> dict[str, Any]:
     """
     RAGNAROK PROTOCOL: Emergency liquidation of all open orders.
     1. Fetch all open orders.
@@ -44,9 +46,8 @@ async def execute_ragnarok() -> Dict[str, Any]:
         if c_res:
             print(f"{Fore.GREEN}[SAFETY] Cancelled order {order_id}{Style.RESET_ALL}")
             return True
-        else:
-            print(f"{Fore.RED}[SAFETY] Failed to cancel order {order_id}{Style.RESET_ALL}")
-            return False
+        print(f"{Fore.RED}[SAFETY] Failed to cancel order {order_id}{Style.RESET_ALL}")
+        return False
 
     for order in orders:
         order_id = order.get("order_id")

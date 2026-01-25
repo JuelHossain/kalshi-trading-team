@@ -1,10 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  LogEntry,
-  TimelineEvent,
-  SimulationState,
-  VaultState,
-} from '@shared/types';
+import { LogEntry, TimelineEvent, SimulationState, VaultState } from '@shared/types';
 import { PHASES, PHASE_ORDER, INTERVENTION_PHASE, PhaseConfig } from '@shared/constants';
 
 interface TerminalProps {

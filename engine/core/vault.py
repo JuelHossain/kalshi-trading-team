@@ -1,6 +1,6 @@
 import asyncio
 import os
-from typing import Dict
+
 from colorama import Fore, Style
 
 
