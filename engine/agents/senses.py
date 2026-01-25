@@ -26,14 +26,12 @@ RAPIDAPI_HOST = "odds.p.rapidapi.com"
 class SensesAgent(BaseAgent):
     """The 24/7 Observer - Surveillance & Signal Detection"""
 
-    VALUE_GAP_THRESHOLD = 0.05  # 5% minimum edge required
     MIN_LIQUIDITY = 0  # $0 minimum liquidity for Demo/Testing
 
     def __init__(self, agent_id: int, bus: EventBus, kalshi_client=None):
         super().__init__("SENSES", agent_id, bus)
         self.kalshi_client = kalshi_client
         self.opportunity_queue: List[Dict] = []
-        self.vegas_odds_cache: Dict[str, float] = {}
         self.is_scanning = False
 
     async def setup(self):
@@ -59,22 +57,24 @@ class SensesAgent(BaseAgent):
         try:
             # 1. Fetch Kalshi markets
             markets = await self.fetch_kalshi_markets()
+            
+            if not markets:
+                await self.log("No markets found to scan.", level="WARN")
+                return
+
             await self.log(f"Scanned {len(markets)} Kalshi markets.")
 
-            # 2. Fetch shadow odds from RapidAPI
-            await self.sync_vegas_odds()
-
-            # 3. Filter for value gaps
-            opportunities = await self.filter_value_gaps(markets)
+            # 2. Select Top 10 by Volume (Liquidity Priority)
+            opportunities = await self.select_top_opportunities(markets)
 
             if opportunities:
-                await self.log(f"Found {len(opportunities)} value gap opportunities!")
+                await self.log(f"Selected {len(opportunities)} high-volume opportunities for analysis.")
                 for opp in opportunities:
                     await self.queue_opportunity(opp)
             else:
-                await self.log("WARNING: No significant value gaps detected", level="WARN")
+                await self.log("WARNING: No significant opportunities detected", level="WARN")
 
-            # 4. Signal Brain if opportunities exist
+            # 3. Signal Brain if opportunities exist
             if self.opportunity_queue:
                 await self.bus.publish(
                     "OPPORTUNITIES_READY",
@@ -107,116 +107,92 @@ class SensesAgent(BaseAgent):
                 
             await self.log(f"DEBUG: Active markets fetched: {len(markets)}", level="INFO")
             
-            if len(markets) > 0:
-                sample = markets[0]
-                await self.log(f"DEBUG: Sample market: {sample.get('ticker')} | Vol: {sample.get('volume')}", level="INFO")
-
-            filtered_liquid = [m for m in markets if m.get("volume", 0) >= self.MIN_LIQUIDITY]
-            dropped_liquidity = len(markets) - len(filtered_liquid)
+            # Simple filter for demo: Active status is handled by API
+            return markets
             
-            if dropped_liquidity > 0:
-                 await self.log(f"DEBUG: Filtered {dropped_liquidity} markets due to low liquidity (<${self.MIN_LIQUIDITY})", level="INFO")
-
-            return filtered_liquid
         except Exception as e:
             await self.log(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
             return []
 
-    async def sync_vegas_odds(self):
-        """Fetch shadow/Vegas odds from RapidAPI"""
-        if not RAPIDAPI_KEY:
-            await self.log("RapidAPI key not configured. Skipping odds sync.")
-            return
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                headers = {"X-RapidAPI-Key": RAPIDAPI_KEY, "X-RapidAPI-Host": RAPIDAPI_HOST}
-                async with session.get(
-                    f"https://{RAPIDAPI_HOST}/v4/sports/upcoming/odds",
-                    headers=headers,
-                    params={"regions": "us", "markets": "h2h"},
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        self._parse_vegas_odds(data)
-                        await self.log(f"Shadow odds synced: {len(self.vegas_odds_cache)} markets.")
-                    else:
-                         error_text = await resp.text()
-                         await self.log(f"RapidAPI Error {resp.status}: {error_text[:100]}", level="ERROR")
-        except Exception as e:
-            await self.log(f"RapidAPI sync failed: {str(e)[:50]}", level="ERROR")
-
-    def _parse_vegas_odds(self, data: List[Dict]):
-        """Parse RapidAPI response into odds cache"""
-        for event in data:
-            event_id = event.get("id", "")
-            for bookmaker in event.get("bookmakers", []):
-                if bookmaker.get("key") in ["pinnacle", "draftkings", "fanduel"]:
-                    for market in bookmaker.get("markets", []):
-                        for outcome in market.get("outcomes", []):
-                            key = f"{event_id}_{outcome.get('name', '')}"
-                            # Convert American odds to probability
-                            price = outcome.get("price", 0)
-                            if price > 0:
-                                prob = 100 / (price + 100)
-                            else:
-                                prob = abs(price) / (abs(price) + 100)
-                            self.vegas_odds_cache[key] = prob
-
-    async def filter_value_gaps(self, markets: List[Dict]) -> List[Dict]:
-        """Find markets with Vegas probability > Kalshi price by threshold"""
+    async def select_top_opportunities(self, markets: List[Dict]) -> List[Dict]:
+        """Select Top 10 Markets by Volume"""
         opportunities = []
 
-        for market in markets:
+        # 1. Sort by Volume (Descending)
+        sorted_markets = sorted(markets, key=lambda x: x.get("volume", 0), reverse=True)
+        
+        # 2. Pick Top 10
+        top_markets = sorted_markets[:10]
+
+        for market in top_markets:
             ticker = market.get("ticker", "")
             kalshi_price = market.get("yes_price", 50) / 100  # Convert cents to probability
+            volume = market.get("volume", 0)
 
-            # Try to find matching Vegas odds
-            vegas_prob = self.vegas_odds_cache.get(ticker, kalshi_price)
-
-            value_gap = vegas_prob - kalshi_price
-
-            if value_gap >= self.VALUE_GAP_THRESHOLD:
-                opportunities.append(
-                    {
-                        "ticker": ticker,
-                        "kalshi_price": kalshi_price,
-                        "vegas_prob": vegas_prob,
-                        "value_gap": value_gap,
-                        "volume": market.get("volume", 0),
-                        "market_data": market,
-                    }
-                )
+            # Define opportunity without external odds
+            opportunities.append(
+                {
+                    "ticker": ticker,
+                    "kalshi_price": kalshi_price,
+                    "vegas_prob": None, # Signal to Brain to use AI estimation
+                    "value_gap": 0, # Placeholder
+                    "volume": volume,
+                    "market_data": market,
+                    "source": "Volume-Algo"
+                }
+            )
 
         # Log filtering results
-        await self.log(f"Filter Report: Checked {len(markets)} markets against {len(self.vegas_odds_cache)} odds. Found {len(opportunities)} > {self.VALUE_GAP_THRESHOLD*100}% gap.", level="INFO")
+        await self.log(f"Selection Report: Picked top {len(opportunities)} markets by volume. Max Vol: {opportunities[0]['volume'] if opportunities else 0}", level="INFO")
+        return opportunities
 
-        # Sort by value gap (highest first)
-        opportunities.sort(key=lambda x: x["value_gap"], reverse=True)
-        return opportunities[:5]  # Top 5 only
-
-    async def queue_opportunity(self, opp_queue: asyncio.Queue, opportunity: Dict):
+    async def queue_opportunity(self, opportunity: Dict):
         """Add opportunity to queue and Supabase"""
         signal_package = {
             "market_id": opportunity["ticker"],
             "source": opportunity.get("source", "Kalshi"),
-            "gap_delta": opportunity["value_gap"] * 100,  # As percentage
-            "pinnacle_odds": opportunity["vegas_prob"],
+            "gap_delta": 0,  
+            "pinnacle_odds": 0,
             "kalshi_price": opportunity["kalshi_price"],
             "status": "QUEUED",
+            "market_data": opportunity.get("market_data", {})
         }
-        await opp_queue.put(signal_package)
+        self.opportunity_queue.append(opportunity) # Local queue for Brain to pop via pop_opportunity()
         await log_to_db("opportunity_queue", signal_package)
         await self.log(
-            f"Queued: {signal_package['market_id']} | Gap: {signal_package['gap_delta']:.1f}%"
+            f"Queued: {signal_package['market_id']} | Vol: {opportunity['volume']}"
         )
 
     def pop_opportunity(self) -> Optional[Dict]:
         """Get next opportunity for Brain"""
         return self.opportunity_queue.pop(0) if self.opportunity_queue else None
 
+    async def run_scout(self, opp_queue: asyncio.Queue):
+        """Continuous scanning and queueing opportunities (called by Engine)."""
+        while True:
+            try:
+                if self.is_scanning:
+                     # Reuse surveillance loop logic
+                    markets = await self.fetch_kalshi_markets()
+                    if markets:
+                        opportunities = await self.select_top_opportunities(markets)
+                        for opp in opportunities:
+                            # We push to internal queue for Brain (who calls pop_opportunity)
+                             await self.queue_opportunity(opp)
+                             
+                             # We also put to the Engine's async queue if it's used elsewhere?
+                             # Engine passes opp_queue but Brain doesn't use it in `run_brain`.
+                             # Brain calls `self.senses.pop_opportunity()`.
+                             # So opp_queue is largely redundant in this architecture, but I'll write to it just in case.
+                             await opp_queue.put(opp)
+                    
+                    if not markets:
+                         await self.log("No markets found.", level="WARN")
 
+            except Exception as e:
+                await self.log(f"Surveillance error: {str(e)[:100]}", level="ERROR")
 
+            await asyncio.sleep(10)  # Scan every 10 seconds
 
     async def on_tick(self, payload: Dict[str, Any]):
-        pass  # Surveillance is event-driven, not tick-based
+        pass

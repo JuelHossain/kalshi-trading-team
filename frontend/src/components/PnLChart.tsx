@@ -39,7 +39,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
           ${payload[0].value.toFixed(2)}
         </div>
         <div className="text-[9px] text-emerald-600 uppercase tracking-wider font-mono mt-1">
-          Velocity: {payload[0].payload.velocity.toFixed(2)} bps
+          Velocity: {(payload[0].payload.velocity ?? 0).toFixed(2)} bps
         </div>
       </div>
     );

@@ -148,10 +148,11 @@ const PnLHeatmap: React.FC = () => {
       case '6M':
         daysBack = 180;
         break;
-      case 'YTD':
+      case 'YTD': {
         const startOfYear = new Date(now.getFullYear(), 0, 1);
         daysBack = Math.floor((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
         break;
+      }
     }
 
     return data.slice(-daysBack);
@@ -191,11 +192,10 @@ const PnLHeatmap: React.FC = () => {
               onClick={() => setActiveRange(range)}
               className={`
                             px-2 py-0.5 text-[9px] font-mono rounded-md transition-all duration-300
-                            ${
-                              activeRange === range
-                                ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)] font-bold'
-                                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
-                            }
+                            ${activeRange === range
+                  ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)] font-bold'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                }
                         `}
             >
               {range}
@@ -227,11 +227,10 @@ const PnLHeatmap: React.FC = () => {
                       onMouseEnter={() => setSelectedDay(day)}
                       className={`
                                             flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer group
-                                            ${
-                                              selectedDay?.id === day.id
-                                                ? 'bg-white/10 border-emerald-500/50 shadow-lg translate-x-1'
-                                                : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
-                                            }
+                                            ${selectedDay?.id === day.id
+                          ? 'bg-white/10 border-emerald-500/50 shadow-lg translate-x-1'
+                          : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10'
+                        }
                                         `}
                     >
                       <div className="flex items-center gap-4">
@@ -320,15 +319,14 @@ const PnLHeatmap: React.FC = () => {
                 <div className="mt-3">
                   <span
                     className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider
-                                    ${
-                                      selectedDay.type === 'PROFIT'
-                                        ? 'bg-emerald-500/20 text-emerald-400'
-                                        : selectedDay.type === 'LOSS'
-                                          ? 'bg-red-500/20 text-red-400'
-                                          : selectedDay.type === 'ASSET_ADDED'
-                                            ? 'bg-amber-500/20 text-amber-400'
-                                            : 'bg-gray-700 text-gray-400'
-                                    }
+                                    ${selectedDay.type === 'PROFIT'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : selectedDay.type === 'LOSS'
+                          ? 'bg-red-500/20 text-red-400'
+                          : selectedDay.type === 'ASSET_ADDED'
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-gray-700 text-gray-400'
+                      }
                                 `}
                   >
                     {selectedDay.type.replace('_', ' ')}

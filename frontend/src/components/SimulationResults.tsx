@@ -36,13 +36,13 @@ const SimulationResults: React.FC<SimulationResultsProps> = ({ simulation }) => 
           <div
             className={`text-2xl font-black font-tech ${simulation.winRate >= 58 ? 'text-emerald-400' : 'text-red-400'}`}
           >
-            {(simulation.winRate * 1).toFixed(1)}%
+            {((simulation.winRate ?? 0) * 1).toFixed(1)}%
           </div>
         </div>
         <div>
           <div className="text-[8px] text-gray-500 uppercase tracking-widest mb-1">EV Score</div>
           <div className="text-2xl font-black font-tech text-white">
-            {simulation.evScore.toFixed(3)}
+            {(simulation.evScore ?? 0).toFixed(3)}
           </div>
         </div>
       </div>

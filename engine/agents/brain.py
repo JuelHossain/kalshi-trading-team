@@ -45,7 +45,7 @@ class BrainAgent(BaseAgent):
             api_key = os.environ.get("GEMINI_API_KEY")
             if api_key:
                 genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel("gemini-1.5-pro")
+                self.model = genai.GenerativeModel("gemini-pro")
             else:
                 self.model = None
         else:
@@ -62,33 +62,39 @@ class BrainAgent(BaseAgent):
         await self.log("Trading instructions updated from Soul.")
 
     async def process_opportunities(self, message):
-        """Process queued opportunities through AI debate and simulation"""
-        await self.log("Opportunities received. Initiating analysis...")
-
-        # Get top opportunity from Senses
+        """Process queued opportunities through AI debate and simulation (Event-driven)"""
+        # Get top opportunity from Senses internal queue
         if not self.senses:
-            await self.log("Senses agent not connected. Cannot process.", level="ERROR")
             return
 
         opportunity = self.senses.pop_opportunity()
-        if not opportunity:
-            await self.log("No opportunities to process.")
-            return
+        if opportunity:
+            await self.process_single_opportunity(opportunity)
 
+    async def run_intelligence(self, opp_queue: asyncio.Queue, exec_queue: asyncio.Queue):
+        """Process opportunities from shared queue (Engine-driven)"""
+        if not opp_queue.empty():
+            opportunity = await opp_queue.get()
+            await self.process_single_opportunity(opportunity)
+
+    async def process_single_opportunity(self, opportunity: Dict):
+        """Core analysis logic"""
         ticker = opportunity.get("ticker", "UNKNOWN")
         await self.log(f"Analyzing: {ticker}")
 
-        # 1. AI Debate (Optimist vs Critic)
+        # 1. AI Debate (Optimist vs Critic) & Probability Estimation
         debate_result = await self.run_debate(opportunity)
+        estimated_prob = debate_result.get("estimated_probability", 0.5)
 
         # 2. Monte Carlo Simulation
-        sim_result = self.run_simulation(opportunity)
+        sim_result = self.run_simulation(opportunity, override_prob=estimated_prob)
 
         # 3. Decision
         confidence = debate_result.get("confidence", 0)
         variance = sim_result.get("variance", 1)
+        ev = sim_result.get("ev", 0)
 
-        await self.log(f"Debate confidence: {confidence*100:.1f}% | Sim variance: {variance:.3f}")
+        await self.log(f"AI Prob: {estimated_prob:.2f} | Conf: {confidence*100:.1f}% | EV: {ev:.3f}")
 
         # Publish simulation result for UI
         await self.bus.publish(
@@ -96,7 +102,7 @@ class BrainAgent(BaseAgent):
             {
                 "ticker": ticker,
                 "win_rate": sim_result.get("win_rate", 0.5),
-                "ev_score": sim_result.get("ev", 0),
+                "ev_score": ev,
                 "variance": variance,
                 "iterations": self.SIMULATION_ITERATIONS,
                 "veto": confidence < self.CONFIDENCE_THRESHOLD or variance > self.MAX_VARIANCE,
@@ -104,19 +110,19 @@ class BrainAgent(BaseAgent):
             self.name,
         )
 
-        if confidence >= self.CONFIDENCE_THRESHOLD and variance <= self.MAX_VARIANCE:
+        if confidence >= self.CONFIDENCE_THRESHOLD and variance <= self.MAX_VARIANCE and ev > 0:
             await self.log(f"✅ APPROVED: {ticker} | Pushing to execution.")
             await self.queue_for_execution(
                 {
                     **opportunity,
                     "confidence": confidence,
                     "variance": variance,
-                    "ev": sim_result.get("ev", 0),
+                    "ev": ev,
                     "debate_reasoning": debate_result.get("reasoning", ""),
                 }
             )
         else:
-            reason = "Low confidence" if confidence < self.CONFIDENCE_THRESHOLD else "High variance"
+            reason = "Low confidence" if confidence < self.CONFIDENCE_THRESHOLD else ("High variance" if variance > self.MAX_VARIANCE else "Negative EV")
             await self.log(f"❌ VETOED: {ticker} | Reason: {reason}")
 
     async def run_debate(self, opportunity: Dict) -> Dict:
@@ -124,30 +130,49 @@ class BrainAgent(BaseAgent):
         if not self.model:
             await self.log("Gemini unavailable. Using heuristic confidence.")
             return {
-                "confidence": opportunity.get("value_gap", 0) * 10,
+                "confidence": 0.5,
                 "reasoning": "Heuristic only",
+                "estimated_probability": 0.5
             }
 
         ticker = opportunity.get("ticker", "UNKNOWN")
-        value_gap = opportunity.get("value_gap", 0)
+        market_data = opportunity.get("market_data", {})
+        title = market_data.get("title", ticker)
+        subtitle = market_data.get("subtitle", "")
+        
         kalshi_price = opportunity.get("kalshi_price", 0.5)
-        vegas_prob = opportunity.get("vegas_prob", 0.5)
+        
+        # Check if we have external odds (legacy support)
+        has_odds = opportunity.get("vegas_prob") is not None
+        external_context = f"Vegas Probability: {opportunity['vegas_prob']*100:.1f}%" if has_odds else "NO EXTERNAL ODDS AVAILABLE."
 
         prompt = f"""You are a trading committee with two personas debating a market opportunity.
 
 MARKET: {ticker}
-Kalshi Price: {kalshi_price*100:.1f}%
-Vegas/Pinnacle Probability: {vegas_prob*100:.1f}%
-Value Gap: {value_gap*100:.1f}%
+TITLE: {title}
+SUBTITLE: {subtitle}
+Current Kalshi Price: {kalshi_price*100:.1f}%
+Context: {external_context}
 
 {f"Today's Trading Instructions: {self.trading_instructions[:500]}" if self.trading_instructions else ""}
 
-OPTIMIST: Argue why this is a great opportunity. Be specific about the edge.
-CRITIC: Argue against this trade. Point out risks and potential traps.
-JUDGE: Based on both arguments, give a confidence score from 0-100.
+TASK:
+1. Estimate the TRUE probability of this event occurring (0.00 to 1.00) based on your knowledge of the world.
+2. Debate the trade at the current price.
+
+PERSONAS:
+OPTIMIST: Argue why this is a great opportunity.
+CRITIC: Argue against this trade.
+JUDGE: Final verdict.
 
 Respond in JSON format:
-{{"optimist": "...", "critic": "...", "judge_verdict": "...", "confidence": 85}}"""
+{{
+  "optimist": "...",
+  "critic": "...",
+  "judge_verdict": "...",
+  "estimated_probability": 0.75,
+  "confidence": 85
+}}"""
 
         try:
             response = await asyncio.get_event_loop().run_in_executor(
@@ -166,15 +191,19 @@ Respond in JSON format:
                 return {
                     "confidence": result.get("confidence", 50) / 100,
                     "reasoning": result.get("judge_verdict", ""),
+                    "estimated_probability": result.get("estimated_probability", 0.5)
                 }
         except Exception as e:
             await self.log(f"Debate error: {str(e)[:50]}", level="ERROR")
 
-        return {"confidence": 0.5, "reasoning": "Debate failed"}
+        return {"confidence": 0.5, "reasoning": "Debate failed", "estimated_probability": 0.5}
 
-    def run_simulation(self, opportunity: Dict) -> Dict:
+    def run_simulation(self, opportunity: Dict, override_prob: float = None) -> Dict:
         """Monte Carlo simulation for variance and EV calculation"""
-        vegas_prob = opportunity.get("vegas_prob", 0.5)
+        # Use overridden probability (AI estimate) if available, else default
+        vegas_prob = override_prob if override_prob is not None else opportunity.get("vegas_prob", 0.5)
+        if vegas_prob is None: vegas_prob = 0.5
+        
         kalshi_price = opportunity.get("kalshi_price", 0.5)
 
         # Simulate outcomes

@@ -15,5 +15,5 @@ npx pm2 save
 
 echo "✅ Bot is Online!"
 echo "📡 Backend: http://localhost:3001"
-echo "📊 HUD (Frontend): http://localhost:8501"
+echo "📊 HUD (Frontend): http://localhost:3000"
 echo "⚠️  REMINDER: Open the HUD in your browser to start the autonomous cycle."

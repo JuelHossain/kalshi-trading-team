@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   LogEntry,
   TimelineEvent,
-  TimelineEventType,
   SimulationState,
   VaultState,
 } from '@shared/types';
@@ -27,7 +26,7 @@ const VaultCard: React.FC<{ data: VaultState }> = ({ data }) => (
         Vault Balance
       </span>
       <span className="text-lg font-bold font-tech text-white">
-        ${(data.total / 100).toFixed(2)}
+        ${((data.total ?? 0) / 100).toFixed(2)}
       </span>
     </div>
     <div className="flex flex-col items-end">
@@ -35,7 +34,7 @@ const VaultCard: React.FC<{ data: VaultState }> = ({ data }) => (
       <span
         className={`text-sm font-bold font-mono ${data.currentProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
       >
-        {data.currentProfit >= 0 ? '+' : ''}${(data.currentProfit / 100).toFixed(2)}
+        {(data.currentProfit ?? 0) >= 0 ? '+' : ''}${((data.currentProfit ?? 0) / 100).toFixed(2)}
       </span>
     </div>
   </div>
@@ -56,15 +55,17 @@ const SimulationCard: React.FC<{ data: SimulationState }> = ({ data }) => (
     <div className="grid grid-cols-3 gap-2">
       <div className="bg-black/20 rounded p-1.5 text-center">
         <div className="text-[8px] text-gray-500 uppercase">Win Rate</div>
-        <div className="text-sm font-bold text-white">{(data.winRate * 100).toFixed(1)}%</div>
+        <div className="text-sm font-bold text-white">
+          {((data.winRate ?? 0) * 100).toFixed(1)}%
+        </div>
       </div>
       <div className="bg-black/20 rounded p-1.5 text-center">
         <div className="text-[8px] text-gray-500 uppercase">EV Score</div>
-        <div className="text-sm font-bold text-blue-300">{data.evScore.toFixed(2)}</div>
+        <div className="text-sm font-bold text-blue-300">{(data.evScore ?? 0).toFixed(2)}</div>
       </div>
       <div className="bg-black/20 rounded p-1.5 text-center">
         <div className="text-[8px] text-gray-500 uppercase">Variance</div>
-        <div className="text-sm font-bold text-purple-300">{data.variance.toFixed(3)}</div>
+        <div className="text-sm font-bold text-purple-300">{(data.variance ?? 0).toFixed(3)}</div>
       </div>
     </div>
   </div>
@@ -170,20 +171,17 @@ const PhaseAccordionItem: React.FC<{
   isComplete: boolean;
   onToggle: () => void;
   expanded: boolean;
-}> = ({ phaseId, events, isActive, isPending, isComplete, onToggle, expanded }) => {
+}> = ({ phaseId, events, isActive, _isPending, isComplete, onToggle, expanded }) => {
   const config = getPhaseConfig(phaseId);
 
   // Status visual logic
-  let statusColor = 'text-gray-600';
   let borderColor = 'border-white/5';
   let bgClass = 'bg-white/[0.02]';
 
   if (isActive) {
-    statusColor = 'text-blue-400 animate-pulse';
     borderColor = 'border-blue-500/30';
     bgClass = 'bg-blue-900/5';
   } else if (isComplete) {
-    statusColor = 'text-emerald-500';
     borderColor = 'border-emerald-500/20';
     bgClass = 'bg-emerald-900/5';
   }
