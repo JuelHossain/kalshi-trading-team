@@ -27,6 +27,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 from core.bus import EventBus
 from core.vault import RecursiveVault
 from core.network import kalshi_client
+from core.safety import execute_ragnarok
 
 # Import 4 Mega-Agents
 from agents.soul import SoulAgent
@@ -342,10 +343,69 @@ class GhostEngine:
 
             return response
 
+        async def auth_handler(request):
+            """Handle authentication check."""
+            # Mock auth for now, or validate against Kalshi if needed
+            # In 2-tier, we trust the client if they can hit localhost
+            return web.json_response({
+                "isAuthenticated": True,
+                "user": {
+                    "id": "user_1",
+                    "email": "demo@kalshi.com",
+                    "name": "Kalshi Trader"
+                }
+            })
+
+        async def get_pnl(request):
+            """Get PnL history (simulated for now)."""
+            # In a real scenario, query database for balance history
+            current_balance = engine.vault.current_balance / 100
+            
+            # Generate mock history for the last 24h
+            now = datetime.now()
+            history = []
+            for i in range(24):
+                ts = now.timestamp() - (i * 3600)
+                # Simulated fluctuation
+                val = current_balance - (i * 5) 
+                history.append({
+                    "timestamp": datetime.fromtimestamp(ts).isoformat(),
+                    "balance": val
+                })
+            
+            return web.json_response({
+                "currentBalance": current_balance,
+                "history": history[::-1] # Oldest first
+            })
+
+        async def get_pnl_heatmap(request):
+            """Get daily PnL heatmap."""
+            # Mock data for heatmap
+            heatmap = []
+            import random
+            today = datetime.now()
+            for i in range(30): # Last 30 days
+                date = today.timestamp() - (i * 86400)
+                heatmap.append({
+                    "date": datetime.fromtimestamp(date).strftime("%Y-%m-%d"),
+                    "pnl": random.uniform(-50, 100),
+                    "count": random.randint(1, 10)
+                })
+            return web.json_response({"heatmap": heatmap})
+
+        async def trigger_ragnarok(request):
+            """Manual trigger for Ragnarok Protocol."""
+            result = await execute_ragnarok()
+            return web.json_response(result)
+
         app.router.add_post("/trigger", trigger_cycle)
         app.router.add_post("/kill-switch", activate_kill_switch)
         app.router.add_post("/reset", reset_system)
         app.router.add_post("/cancel", cancel_cycle)
+        app.router.add_post("/auth", auth_handler)
+        app.router.add_get("/pnl", get_pnl)
+        app.router.add_get("/pnl/heatmap", get_pnl_heatmap)
+        app.router.add_post("/ragnarok", trigger_ragnarok) # Optional specific endpoint
         app.router.add_get("/health", health_check)
         app.router.add_get("/stream", stream_logs)
 

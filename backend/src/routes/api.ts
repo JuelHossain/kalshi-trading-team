@@ -29,6 +29,12 @@ export const setupAPIRoutes = (
 
   router.post('/run', async (req: Request, res: Response) => {
     const state = stateManager.getState();
+
+    // Block if kill switch is active
+    if (state.killSwitchActive) {
+      return res.status(403).json({ error: 'System locked. Kill switch is active.' });
+    }
+
     if (state.isProcessing) {
       return res.status(400).json({ error: 'System busy. Cycle already in progress.' });
     }
@@ -116,10 +122,11 @@ export const setupAPIRoutes = (
     res.json({ message: 'Cycle cancelled gracefully' });
   });
 
-  router.post('/kill-switch', async (req: Request, res: Response) => {
+  // Kill Switch - Activate (Locks the whole system)
+  router.post('/kill-switch/activate', async (req: Request, res: Response) => {
     console.log('[BRIDGE] 🚨 KILL SWITCH ACTIVATED 🚨');
 
-    stateManager.reset();
+    stateManager.activateKillSwitch();
     sseManager.broadcast({
       type: 'LOG',
       log: {
@@ -127,8 +134,59 @@ export const setupAPIRoutes = (
         timestamp: new Date().toISOString(),
         agentId: 0,
         cycleId: stateManager.getState().cycleCount,
+        phaseId: 0,
         level: 'ERROR',
-        message: '🚨 EMERGENCY KILL SWITCH ACTIVATED BY USER',
+        message: '🔒 KILL SWITCH ACTIVATED - System Locked',
+      },
+    });
+    sseManager.broadcast({ type: 'STATE', state: stateManager.getState() });
+
+    await engineBridge.triggerKillSwitch();
+    res.json({ message: 'Kill switch activated', killSwitchActive: true });
+  });
+
+  // Kill Switch - Deactivate (Unlocks the system)
+  router.post('/kill-switch/deactivate', async (req: Request, res: Response) => {
+    console.log('[BRIDGE] 🟢 KILL SWITCH DEACTIVATED');
+
+    stateManager.deactivateKillSwitch();
+    sseManager.broadcast({
+      type: 'LOG',
+      log: {
+        id: 'unlock-' + Date.now(),
+        timestamp: new Date().toISOString(),
+        agentId: 0,
+        cycleId: stateManager.getState().cycleCount,
+        phaseId: 0,
+        level: 'INFO',
+        message: '🟢 KILL SWITCH DEACTIVATED - System Unlocked',
+      },
+    });
+    sseManager.broadcast({ type: 'STATE', state: stateManager.getState() });
+
+    res.json({ message: 'Kill switch deactivated', killSwitchActive: false });
+  });
+
+  // Kill Switch - Get Status
+  router.get('/kill-switch/status', (req: Request, res: Response) => {
+    res.json({ killSwitchActive: stateManager.getState().killSwitchActive });
+  });
+
+  // Legacy kill-switch endpoint (kept for backwards compatibility)
+  router.post('/kill-switch', async (req: Request, res: Response) => {
+    console.log('[BRIDGE] 🚨 LEGACY KILL SWITCH ACTIVATED 🚨');
+
+    stateManager.activateKillSwitch();
+    sseManager.broadcast({
+      type: 'LOG',
+      log: {
+        id: 'kill-' + Date.now(),
+        timestamp: new Date().toISOString(),
+        agentId: 0,
+        cycleId: stateManager.getState().cycleCount,
+        phaseId: 0,
+        level: 'ERROR',
+        message: '🔒 EMERGENCY KILL SWITCH ACTIVATED BY USER',
       },
     });
     sseManager.broadcast({ type: 'STATE', state: stateManager.getState() });

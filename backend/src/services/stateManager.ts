@@ -8,6 +8,7 @@ export interface SystemState {
   activeAgentId: number | null;
   completedAgents: number[];
   agentData: Record<number, any>;
+  killSwitchActive: boolean;
 }
 
 export class StateManager {
@@ -21,6 +22,7 @@ export class StateManager {
       activeAgentId: null,
       completedAgents: [],
       agentData: {},
+      killSwitchActive: false,
     };
   }
 
@@ -43,5 +45,15 @@ export class StateManager {
   reset(): void {
     this.state.isProcessing = false;
     this.state.activeAgentId = null;
+  }
+
+  activateKillSwitch(): void {
+    this.state.killSwitchActive = true;
+    this.state.isProcessing = false;
+    this.state.activeAgentId = null;
+  }
+
+  deactivateKillSwitch(): void {
+    this.state.killSwitchActive = false;
   }
 }

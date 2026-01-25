@@ -1,92 +1,44 @@
-import {
-  LogEntry,
-  VaultState,
-  SimulationState,
-  SystemHealthData,
-  TimelineEvent,
-  TimelineEventType,
-} from '@shared/types';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
+import { useStore } from '../store/useStore';
+import { LogEntry, TimelineEventType, TimelineEvent } from '@shared/types';
 
-const BACKEND_URL = ''; // Relative path handled by Vite proxy
+const ENGINE_URL = 'http://localhost:3002';
 const PLAYBACK_SPEED_MS = 250;
 
 // Helper to determine phase for data events
 const getPhaseForType = (type: string, _data: any): number => {
   switch (type) {
-    case 'MARKET':
-      return 1; // Surveillance
-    case 'SIMULATION':
-      return 2; // Intelligence
-    case 'INTERCEPT':
-      return 2; // Intelligence
-    case 'VAULT':
-      return 4; // Accounting
-    case 'TRADE':
-      return 3; // Execution
-    default:
-      return 0;
+    case 'MARKET': return 1; // Surveillance
+    case 'SIMULATION': return 2; // Intelligence
+    case 'INTERCEPT': return 2; // Intelligence
+    case 'VAULT': return 4; // Accounting
+    case 'TRADE': return 3; // Execution
+    default: return 0;
   }
 };
 
 export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) => {
-  const [activeAgentId, setActiveAgentId] = useState<number | null>(null);
-  const [completedAgents, setCompletedAgents] = useState<number[]>([]);
-
-  // Unified Timeline State
-  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
-
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [cycleCount, setCycleCount] = useState(0);
-  const [autoPilot, setAutoPilot] = useState(false);
-  const [currentPhaseId, setCurrentPhaseId] = useState(0);
-
-  // Specific states for quick access if needed (optional)
-  const [vault, setVault] = useState<VaultState | undefined>(undefined);
-  const [simulation, setSimulation] = useState<SimulationState | undefined>(undefined);
-  const [health, setHealth] = useState<SystemHealthData | undefined>(undefined);
-
+  const store = useStore();
   const eventBuffer = useRef<any[]>([]);
 
+  // SSE Connection
   useEffect(() => {
-    const eventSource = new EventSource(`${BACKEND_URL}/api/stream`);
+    if (!isLoggedIn) return;
+
+    const eventSource = new EventSource(`${ENGINE_URL}/stream`);
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
-
-      if (data.type === 'INIT') {
-        eventBuffer.current = [];
-        // Initialize with logs converted to unified events
-        const initLogs: LogEntry[] = data.state.logs || [];
-        const initEvents: TimelineEvent[] = initLogs.map((l) => ({
-          id: l.id,
-          type: 'LOG',
-          timestamp: l.timestamp,
-          cycleId: l.cycleId,
-          phaseId: l.phaseId,
-          data: l,
-        }));
-
-        setTimelineEvents(initEvents);
-        setIsProcessing(data.state.isProcessing);
-        setActiveAgentId(data.state.activeAgentId);
-        setCompletedAgents(data.state.completedAgents || []);
-      } else {
-        eventBuffer.current.push(data);
-        if (data.type === 'STATE') {
-          setIsProcessing(data.state.isProcessing);
-          setActiveAgentId(data.state.activeAgentId);
-          setCompletedAgents(data.state.completedAgents || []);
-        }
-      }
+      eventBuffer.current.push(data);
     };
 
     eventSource.onerror = (err) => {
-      console.error('SSE Connection Error (will retry):', err);
+      console.error('SSE Connection Error:', err);
+      // Optional: Logic to reconnect or show status
     };
 
     return () => eventSource.close();
-  }, []);
+  }, [isLoggedIn]);
 
   // Cinematic Playback Loop
   useEffect(() => {
@@ -113,123 +65,112 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
             phaseId: log.phaseId,
             data: log,
           };
-          if (log.agentId) setActiveAgentId(log.agentId);
-          if (log.phaseId !== undefined) setCurrentPhaseId(log.phaseId);
+          if (log.agentId) store.setActiveAgentId(log.agentId);
+          // if (log.phaseId !== undefined) setCurrentPhaseId(log.phaseId); // Handled by store if needed
         } else if (['SIMULATION', 'VAULT', 'MARKET', 'INTERCEPT'].includes(eventType)) {
-          // Inject synthetic phase ID
           const phaseId = getPhaseForType(eventType, rawData.state);
           newEvent = {
             id: `evt-${Date.now()}-${Math.random()}`,
             type: eventType as TimelineEventType,
             timestamp: timestamp,
-            cycleId: cycleCount, // Use current known cycle
+            cycleId: store.cycleCount,
             phaseId: phaseId,
-            data: rawData.state || rawData, // Handle structure differences
+            data: rawData.state || rawData,
           };
 
-          // Side effects
-          if (eventType === 'VAULT') setVault(rawData.state);
-          if (eventType === 'SIMULATION') setSimulation(rawData.state);
+          if (eventType === 'VAULT') store.setVault(rawData.state);
+          if (eventType === 'SIMULATION') store.setSimulation(rawData.state);
         } else if (eventType === 'STATE') {
-          // State updates don't become timeline events, just state
-          if (rawData.state.isProcessing !== undefined) setIsProcessing(rawData.state.isProcessing);
-          if (rawData.state.activeAgentId !== undefined)
-            setActiveAgentId(rawData.state.activeAgentId);
-          if (rawData.state.completedAgents !== undefined)
-            setCompletedAgents(rawData.state.completedAgents);
-          if (rawData.state.cycleCount !== undefined) setCycleCount(rawData.state.cycleCount);
+          if (rawData.state.isProcessing !== undefined) store.setIsProcessing(rawData.state.isProcessing);
+          if (rawData.state.activeAgentId !== undefined) store.setActiveAgentId(rawData.state.activeAgentId);
+          if (rawData.state.completedAgents !== undefined) store.setCompletedAgents(rawData.state.completedAgents);
+          if (rawData.state.cycleCount !== undefined) store.setCycleCount(rawData.state.cycleCount);
+          if (rawData.state.killSwitchActive !== undefined) store.setKillSwitchActive(rawData.state.killSwitchActive);
         } else if (eventType === 'HEALTH') {
-          setHealth(rawData.state);
+          store.setHealth(rawData.state);
         }
 
         if (newEvent) {
-          setTimelineEvents((prev) => [...prev.slice(-499), newEvent!]);
+          store.addTimelineEvent(newEvent);
         }
       }
     }, PLAYBACK_SPEED_MS);
 
     return () => clearInterval(interval);
-  }, [cycleCount]); // Dependency on cycleCount for synthetic events
+  }, [store.cycleCount]); // Dependency on cycleCount if needed
 
   const runOrchestrator = useCallback(async () => {
-    if (isProcessing) return; // Prevent double trigger
+    if (store.isProcessing) return;
 
-    setIsProcessing(true);
+    store.setIsProcessing(true);
     try {
-      await fetch(`${BACKEND_URL}/api/run`, {
+      await fetch(`${ENGINE_URL}/trigger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isPaperTrading }),
       });
     } catch (error) {
-      console.error('[Orchestrator] Failed to trigger backend:', error);
-      setIsProcessing(false);
+      console.error('[Orchestrator] Failed to trigger engine:', error);
+      store.setIsProcessing(false);
     }
-  }, [isProcessing, isPaperTrading]);
+  }, [store.isProcessing, isPaperTrading]);
 
-  // Autopilot Logic: Automatically trigger next cycle when current one ends
+  // Autopilot Logic
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
-
-    if (autoPilot && !isProcessing && cycleCount > 0) {
-      // Wait a brief moment before starting next cycle to allow UI to settle
+    if (store.autoPilot && !store.isProcessing && store.cycleCount > 0) {
       timeoutId = setTimeout(() => {
         console.log('[Autopilot] Starting next cycle...');
         runOrchestrator();
       }, 2000);
     }
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [autoPilot, isProcessing, cycleCount, runOrchestrator]);
+    return () => clearTimeout(timeoutId);
+  }, [store.autoPilot, store.isProcessing, store.cycleCount, runOrchestrator]);
 
   const handleCancelCycle = async () => {
     try {
-      await fetch(`${BACKEND_URL}/api/cancel-cycle`, { method: 'POST' });
+      await fetch(`${ENGINE_URL}/cancel`, { method: 'POST' });
     } catch (e) {
       console.error('Cancel cycle failed', e);
     }
   };
 
   const handleKillSwitch = async () => {
-    setAutoPilot(false); // Disengage autopilot on manual stop
+    store.setAutoPilot(false);
     try {
-      await fetch(`${BACKEND_URL}/api/kill-switch`, { method: 'POST' });
+      await fetch(`${ENGINE_URL}/kill-switch`, { method: 'POST' });
     } catch (e) {
-      console.error('Kill switch activation failed', e);
+      console.error('Kill switch failed', e);
     }
   };
 
-  const handleAgentTest = async (agentId: number) => {
-    // Implement diagnostic API if needed
-    console.log(`Diagnostic requested for Agent ${agentId}`);
-  };
-
+  // Backwards compatibility return object
   return {
-    activeAgentId,
-    completedAgents,
-    timelineEvents, // EXPORTED NOW
-    logs: timelineEvents.filter((e) => e.type === 'LOG').map((e) => e.data as LogEntry), // Backwards compat
-    isProcessing,
-    cycleCount,
-    currentPhaseId,
-    autoPilot,
-    setAutoPilot,
+    activeAgentId: store.activeAgentId,
+    completedAgents: store.completedAgents,
+    timelineEvents: store.timelineEvents,
+    logs: store.timelineEvents.filter((e) => e.type === 'LOG').map((e) => e.data as LogEntry),
+    isProcessing: store.isProcessing,
+    cycleCount: store.cycleCount,
+    currentPhaseId: store.currentPhaseId,
+    autoPilot: store.autoPilot,
+    setAutoPilot: store.setAutoPilot,
     runOrchestrator,
     handleCancelCycle,
     handleKillSwitch,
-    addLog: (msg: string, _id: number, _level: any) =>
-      console.log('Direct logging disabled in playback mode', msg),
-    handleAgentTest,
+    handleActivateKillSwitch: handleKillSwitch, // Map to same for now or implement specific if needed
+    handleDeactivateKillSwitch: async () => { }, // Implement if engine supports it
+    addLog: () => { },
+    handleAgentTest: async () => { },
     viewedAgentId: null,
     setViewedAgentId: () => { },
     showHealth: false,
     setShowHealth: () => { },
-    vault,
-    simulation,
-    health,
+    vault: store.vault,
+    simulation: store.simulation,
+    health: store.health,
     targetMarket: null,
-    currentBalance: vault?.total || 0,
+    currentBalance: store.vault?.total || 0,
+    killSwitchActive: store.killSwitchActive,
   };
 };

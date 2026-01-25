@@ -130,22 +130,24 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center p-1 bg-black/40 rounded-full border border-white/5">
+            <div className={`flex items-center p-1 bg-black/40 rounded-full border border-white/5 ${orchestratorProps.killSwitchActive ? 'opacity-50' : ''}`}>
               <button
-                onClick={() => orchestratorProps.setAutoPilot(!orchestratorProps.autoPilot)}
+                onClick={() => !orchestratorProps.killSwitchActive && orchestratorProps.setAutoPilot(!orchestratorProps.autoPilot)}
+                disabled={orchestratorProps.killSwitchActive}
                 className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${orchestratorProps.autoPilot
-                    ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
-                    : 'text-gray-500 hover:text-gray-300'
-                  }`}
+                  ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
+                  : 'text-gray-500 hover:text-gray-300'
+                  } ${orchestratorProps.killSwitchActive ? 'cursor-not-allowed' : ''}`}
               >
                 AUTOPILOT
               </button>
               <button
-                onClick={() => !orchestratorProps.autoPilot && orchestratorProps.setAutoPilot(true)}
+                onClick={() => !orchestratorProps.killSwitchActive && !orchestratorProps.autoPilot && orchestratorProps.setAutoPilot(true)}
+                disabled={orchestratorProps.killSwitchActive}
                 className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${!orchestratorProps.autoPilot
-                    ? 'bg-white/10 text-white'
-                    : 'text-transparent w-0 p-0 overflow-hidden'
-                  }`}
+                  ? 'bg-white/10 text-white'
+                  : 'text-transparent w-0 p-0 overflow-hidden'
+                  } ${orchestratorProps.killSwitchActive ? 'cursor-not-allowed' : ''}`}
               >
                 MANUAL
               </button>
@@ -159,22 +161,19 @@ const App: React.FC = () => {
                   ? orchestratorProps.handleCancelCycle()
                   : orchestratorProps.runOrchestrator()
               }
-              className={`btn-primary !py-1.5 !px-5 !text-[10px] tracking-widest ${orchestratorProps.isProcessing ? 'bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border-orange-500/30' : 'hover:scale-105 active:scale-95'}`}
+              disabled={orchestratorProps.killSwitchActive}
+              className={`btn-primary !py-1.5 !px-5 !text-[10px] tracking-widest ${orchestratorProps.killSwitchActive
+                ? 'opacity-50 cursor-not-allowed'
+                : orchestratorProps.isProcessing
+                  ? 'bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border-orange-500/30'
+                  : 'hover:scale-105 active:scale-95'
+                }`}
             >
-              {orchestratorProps.isProcessing ? 'CANCEL CYCLE' : 'INITIATE CYCLE'}
-            </button>
-
-            {/* Kill Switch - Emergency Only */}
-            <button
-              onClick={() => {
-                if (window.confirm('⚠️ EMERGENCY KILL SWITCH\n\nThis will:\n• Cancel all open orders\n• Stop all agent activity\n• Reset the system\n\nAre you sure?')) {
-                  orchestratorProps.handleKillSwitch();
-                }
-              }}
-              className="!py-1.5 !px-3 !text-[10px] tracking-widest bg-red-900/30 hover:bg-red-600/40 text-red-500 border border-red-500/30 rounded-full font-bold transition-all hover:scale-105 active:scale-95 shadow-[0_0_10px_rgba(239,68,68,0.2)]"
-              title="Emergency Kill Switch"
-            >
-              ⚠️ KILL
+              {orchestratorProps.killSwitchActive
+                ? '🔒 LOCKED'
+                : orchestratorProps.isProcessing
+                  ? 'CANCEL CYCLE'
+                  : 'INITIATE CYCLE'}
             </button>
           </div>
         </div>
@@ -278,6 +277,49 @@ const App: React.FC = () => {
                     </div>
                     <div className="px-3 py-1 bg-emerald-500 text-black rounded-full text-[10px] font-bold">
                       ACTIVE
+                    </div>
+                  </div>
+
+                  {/* Kill Switch Section */}
+                  <div className={`p-5 rounded-xl border ${orchestratorProps.killSwitchActive ? 'bg-red-900/20 border-red-500/40' : 'bg-white/5 border-white/10'}`}>
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <div className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                          ⚠️ Emergency Kill Switch
+                        </div>
+                        <div className="text-[10px] text-gray-500 font-mono mt-1">
+                          Immediately stops all engines and blocks all actions until manually deactivated.
+                        </div>
+                      </div>
+                      <div className={`px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1.5 ${orchestratorProps.killSwitchActive
+                        ? 'bg-red-500 text-white animate-pulse'
+                        : 'bg-gray-700 text-gray-400'
+                        }`}>
+                        <span className={`w-2 h-2 rounded-full ${orchestratorProps.killSwitchActive ? 'bg-white' : 'bg-gray-500'}`}></span>
+                        {orchestratorProps.killSwitchActive ? 'ACTIVE' : 'INACTIVE'}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      {orchestratorProps.killSwitchActive ? (
+                        <button
+                          onClick={orchestratorProps.handleDeactivateKillSwitch}
+                          className="flex-1 py-2.5 px-4 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all"
+                        >
+                          🟢 Deactivate Kill Switch
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (window.confirm('⚠️ ACTIVATE KILL SWITCH?\n\nThis will:\n• Stop all engines immediately\n• Cancel any running cycles\n• Block all manual and automated actions\n\nSystem will remain locked until you deactivate.')) {
+                              orchestratorProps.handleActivateKillSwitch();
+                            }
+                          }}
+                          className="flex-1 py-2.5 px-4 bg-red-900/30 hover:bg-red-600/40 text-red-400 border border-red-500/30 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all"
+                        >
+                          🔴 Activate Kill Switch
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
