@@ -1,6 +1,5 @@
-# Sentient Alpha - Gemini Project Context
-
-This file provides persistent context to Gemini-CLI and Antigravity to ensure consistent performance across the Google ecosystem.
+## ⚠️ Entry Protocol (Token-Efficiency)
+Read **## Core Essence** and **Recent Intuition** in [identity.md](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/soul/identity.md) before starting. Skip for simple tasks.
 
 ## 🧱 The 4 Mega-Agents (Core Pillars)
 Refer to the following for agent specifics:

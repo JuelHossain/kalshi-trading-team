@@ -1,6 +1,5 @@
-# Sentient Alpha - Claude Code Onboarding Manual
-
-This guide provides Claude Code with the necessary context to maintain the Sentient Alpha trading bot autonomously.
+## ⚠️ Entry Protocol (Token-Efficiency)
+Always read the **## Core Essence** and the **last 3 entries** of [identity.md](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/soul/identity.md) before starting complex tasks. For minor UI tweaks, skip this to save tokens.
 
 ## 📌 Context (The WHY & WHAT)
 Sentient Alpha is an autonomous 2-tier trading system on Kalshi. It uses a committee of 4 Mega-Agents (Soul, Senses, Brain, Hand) to analyze and trade prediction markets.

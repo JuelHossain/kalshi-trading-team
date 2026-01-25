@@ -1,5 +1,8 @@
 # AGENTS.md - Sentient Alpha Trading Project
 
+## ⚠️ Entry Protocol
+Follow the [identity.md](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/soul/identity.md) guidelines for token-efficient session orientation. Read the **Core Essence** first.
+
 This file provides structured context for AI agents working on the Sentient Alpha Trading Bot. Adherence to these standards is mandatory for autonomous safety and system integrity.
 
 ## 🚀 Project Overview
