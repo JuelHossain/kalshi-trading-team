@@ -6,9 +6,9 @@
 **Objective:** Autonomous, multi-phase trading system leveraging AI agents to analyze, debate, and execute trades on Kalshi.
 **Core Philosophy:**
 
-- **Modular Intelligence:** 12+ specialized agents (Scout, Analyst, Auditor, etc.) working in a directed acyclic graph (DAG).
-- **Hybrid Architecture:** High-performance Python Engine for logic/AI <-> Node.js Orchestrator for state/connectivity <-> React Frontend for visualization.
-- **Safety First:** Strict distinct phases (Surveillance -> Intelligence -> Execution -> Protection) with multiple "Veto" safeguards (Agent 14, Agent 6).
+- **Modular Intelligence:** 4 specialized Mega-Agents (Soul, Senses, Brain, Hand) providing a robust, self-healing core.
+- **2-Tier Architecture:** High-performance Python Engine for all logic, AI, and streaming <--> React Frontend for real-time visualization and control.
+- **Safety First:** Strict distinct phases (Surveillance -> Intelligence -> Execution -> Protection) with automated Veto safeguards and the "Ragnarok" liquidation protocol.
 
 ## 2. System Architecture
 
@@ -16,78 +16,54 @@
 
 ```mermaid
 graph TD
-    UI[React Frontend] <-->|SSE / API| NODE[Node.js Backend]
-    NODE <-->|HTTP Trigger / SSE Stream| ENGINE[Python Ghost Engine]
-    ENGINE <-->|Internal Bus| AGENTS[AI Agents (Gemini/Llama)]
-    AGENTS -->|Read/Write| SUPABASE[(Supabase DB)]
-    NODE -->|Auth/Ops| SUPABASE
+    UI[React Frontend] <-->|SSE / API Proxy| ENGINE[Python Ghost Engine]
+    ENGINE <-->|Synapse Persistent Queues| AGENTS[4 Mega-Agents]
+    AGENTS -->|Persistence| SQLITE[(Ghost Memory SQLite)]
+    UI -->|Auth/Ops| ENGINE
 ```
 
 ### Components
 
 1.  **Frontend (`/frontend`)**:
-    - **Tech**: React, Vite, TailwindCSS (Glassmorphism), Tremor/Recharts.
+    - **Tech**: React, Vite, Zustand (State), Shadcn UI (Components), TailwindCSS.
     - **Role**: Real-time visualization of the "Brain", Terminal logs, PnL tracking, and Manual Override.
-    - **Sync Status**: Consumes `LogEntry`, `SystemState` from Backend SSE.
-2.  **Backend (`/backend`)**:
-    - **Tech**: Node.js, Express, TypeScript.
-    - **Role**: Orchestrator, Auth Gatekeeper, Hardware Bridge (talks to Python), API Proxy.
-    - **Sync Status**: Defines types in `@shared/types.ts`. Manages 'System State'.
-3.  **Engine (`/engine`)**:
-    - **Tech**: Python 3.12, Asyncio, Aiohttp.
-    - **Role**: The "Ghost" Brain. Runs the agent loop (Scout -> Interceptor -> Analyst...).
-    - **Sync Status**: Mirrors TS types via manual Dict construction (Needs hardening).
-4.  **Shared (`/shared`)**:
+    - **Sync Status**: Connects directly to Engine port 3002 via SSE (`/stream`) and REST API.
+2.  **Engine (`/engine`)**:
+    - **Tech**: Python 3.12, Asyncio, Aiohttp (Web Server), SQLite (Synapse).
+    - **Role**: The "Executive Collective". Orchestrates the full lifecycle via decoupled agents.
+    - **Core**: **Synapse** (Persistent Queues) ensures zero data loss during restarts/crashes.
+    - **Control**: **SoulAgent** manages the autonomous trade pulse (Autopilot) via the `/autopilot` endpoints.
+    - **API**: Serves `/auth`, `/trigger`, `/cancel`, `/pnl`, `/autopilot/*`, and `/stream`.
+3.  **Shared (`/shared`)**:
     - **Tech**: TypeScript.
-    - **Role**: Single source of truth for Constants, Types, and Configs.
-5.  **Legacy/Auxiliary**:
-    - `dashboard/`: Streamlit app (Python). Likely an early prototype or secondary view.
+    - **Role**: Shared Type definitions and Constants. (Note: Python uses manual Dict mirrors, hardening planned).
+4.  **Legacy (`/legacy`)**:
+    - `backend/`: Deprecated Node.js orchestrator.
+    - `dashboard/`: Early prototype.
 
-## 3. Synchronization Analysis
+## 3. Deployment & Ports
 
-_Current State of 'The Sync'_
+| Service      | Port | Tech Stack        |
+| :----------- | :--- | :---------------- |
+| **Frontend** | 3000 | React + Vite      |
+| **Engine**   | 3002 | Python + aiohttp  |
 
-| Feature       | Backend (TS)          | Engine (Py)          | Frontend (TS)         | Status                                                     |
-| :------------ | :-------------------- | :------------------- | :-------------------- | :--------------------------------------------------------- |
-| **Agent IDs** | `shared/constants.ts` | `main.py` (List)     | `shared/constants.ts` | ⚠️ **Fragile**. Python uses a manual list mapping.         |
-| **Phases**    | `CycleStatus` Enum    | `AGENT_TO_PHASE` Map | `Terminal.tsx`        | ✅ **Synced** (Logic matches).                             |
-| **Logs**      | `LogEntry` Interface  | Manual JSON Dict     | `Terminal` Component  | ⚠️ **Implicit**. Python dict keys must match TS interface. |
-| **Config**    | `.env` + `config.ts`  | `.env` + `dotenv`    | `config.ts`           | ⚠️ **Desynced**. Multiple `.env` files.                    |
-| **Comms**     | SSE (`/api/stream`)   | SSE (`/stream`)      | `EventSource`         | ✅ **Functional**.                                         |
+## 4. Current State & Recent Upgrades
 
-**Critical Gaps**:
+- **2-Tier Consolidation**: Removed the middle-man Node.js layer to reduce latency and type desync.
+- **Intelligence Core Upgraded**: 
+    - Migrated to `google-genai` SDK.
+    - Integrated `duckduckgo-search` for real-time market context.
+    - Verified Monte Carlo simulation math with unit tests.
+- **State Management**: Frontend now uses **Zustand** for a leaner, more responsive state container.
 
-- **Port hardcoding**: Ports 3001 (Backend) and 3002 (Engine) are hardcoded in multiple files.
-- **Type Safety**: Python does not import TS types. A change in `LogEntry` in TS will not error in Python until runtime.
+## 5. Coding Standards
 
-## 4. Reorganization & Optimization Plan
-
-### Immediate Cleanup (Executed)
-
-- [ ] Move root-level log files (`*.txt`) to `logs/`.
-- [ ] Consolidate `.env` loading logic.
-
-### Refactoring Opportunities (To Implement)
-
-1.  **Unified Config**:
-    - Create `shared/config.json` or a strictly typed `.env` schema that both Python and JS load.
-    - Remove hardcoded URLs (`http://localhost:3002`).
-2.  **Shared Schemas**:
-    - Define data models in JSON Schema (or Protocol Buffers).
-    - Generate TS Interfaces and Python Pydantic models from one source.
-3.  **Code Reduction**:
-    - **Backend**: `server.ts` has mixed responsibilities (Express routes + SSE mgmt + Process orchestration). Move SSE logic to `services/streamService.ts`.
-    - **Engine**: Agent initialization in `main.py` is verbose. Move to `core/factory.py`.
-4.  **Legacy Archival**:
-    - Move `dashboard/` to `legacy/` if it is no longer the primary interface, to reduce noise.
-
-## 5. Coding Standards & Best Practices (The "Codebase Manager" Rules)
-
-1.  **No "Magic Numbers"**: Agent IDs (1-14) should be Enums in both languages.
-2.  **Explicit Interfaces**: All inter-process communication (IPC) must follow a documented schema.
-3.  **Atomic Commits**: Frontend and Backend changes that affect types must be committed together.
-4.  **Log Levels**: Use standardized log levels (`INFO`, `WARN`, `ERROR`, `SUCCESS`) across the board.
+1.  **No "Magic Numbers"**: Agent IDs and Phase IDs are standardized across Python and TS.
+2.  **Atomic Commits**: UI and Engine changes must be committed together to ensure API compatibility.
+3.  **Log Levels**: `INFO`, `WARN`, `ERROR`, `SUCCESS`.
+4.  **Safety**: All trades must pass the Brain's simulation AND Hand's capital protection checks.
 
 ---
 
-_Generated by Antigravity (Codebase Manager)_
+_Updated by Antigravity (Codebase Manager)_

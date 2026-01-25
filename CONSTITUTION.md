@@ -4,30 +4,30 @@ Strict standards for all Human and AI collaborators to ensure project stability,
 
 ## 🛡️ PILLAR 1: Safety & Operational Security (The Anchor)
 
-- **Veto Supremacy**: If ANY security agent (Auditor, Sim Scientist) emits `veto: true` or `verdict: VETO`, the trade cycle must terminate immediately. No buy orders allowed.
+- **Veto Supremacy**: If ANY security check emits `veto: true`, the trade cycle must terminate immediately. No buy orders allowed.
 - **Vault Lock**: Zero trade execution if `VaultState.isLocked` is true.
-- **Paper-First**: All new agents and experimental workflows must default to `IS_PAPER_TRADING: true`.
-- **Credential Shield**: Never commit `.env` or `.env.local`. Use provided `update-env` workflow for key rotation.
+- **Paper-First**: All experimental workflows must default to `IS_PAPER_TRADING: true`.
+- **Ragnarok Protocol**: Manual and automated kill-switches must trigger an immediate liquidation of all open orders.
 
 ## 🔗 PILLAR 2: Agent Contract & Service Boundaries
 
-- **Decoupled I/O**: Agents communicate _exclusively_ via JSON on the `EventBus`. No direct file mutation or global state modification outside of your specific module.
-- **Runtime Validation**: Every published message must pass schema validation (Zod/Pydantic). Malformed data must trigger a `CRITICAL` log and cycle abortion.
-- **Latency Budget**: Market-critical agents (Scout, Interceptor) must return data within **2.5s**. No blocking I/O; use `asyncio` for all networking and LLM calls.
+- **Synapse Persistence**: High-value data handoff (Opportunities -> Signals -> Executions) must go through the **Synapse Persistent Queue** (SQLite).
+- **Decoupled I/O**: Agents communicate via the `EventBus` for triggers, but rely on Synapse for state persistence.
+- **Latency Budget**: Market-critical tasks must use `asyncio` to prevent blocking the event loop.
 
 ## 🛠️ PILLAR 3: Engineering & Git Workflow (The Shield)
 
 - **Git Protocol**: Never commit directly to `main`. Always work on the `opencode` branch.
-- **Clean History**: Always pull before pushing to prevent merge conflicts. Use `rebase` to keep history clean.
 - **Atomic Refactoring**: Commits must be testable units with conventional titles (`feat:`, `fix:`, `refactor:`).
-- **Deployment Lifecycle**: Always build and deploy after every walkthrough so the user can see changes in the UI.
-- **Verification**: Test every change thoroughly (build/deploy/UI check) before considering a task done or pushing code.
+- **Verification**: Test every change thoroughly (Build -> Deploy -> UI Check) before considering a task complete.
+- **Proof of Work**: Every significant task must result in a `.md` walkthrough in the `walkthroughs/` folder.
 
 ## 📈 PILLAR 4: Resilience & Scalability (The Layer)
 
-- **Defensive API Usage**: Implement **Exponential Backoff** for 429/500 errors. Agents should "Hibernate" after 5 failures to protect API reputation.
-- **Determinism**: Log enough context to recreate decisions using the `replay-debug` workflow.
-- **Alpha Efficiency**: Heavy math/filtering belongs in Python/Numpy. LLMs are reserved for high-value "Finalist" tickers only.
-- **Process Management**: Follow the `ecosystem.config.cjs` architecture. All services (Backend, Frontend, Engine) must be managed via PM2.
+- **2-Tier Architecture**: React Frontend connects directly to the Python Engine (Port 3002). No intermediate Node.js layer.
+- **AI Stack**: Use the `google-genai` SDK with Gemini 1.5 Pro.
+- **Process Management**: Follow the `ecosystem.config.cjs` architecture. Services must be managed via PM2.
+- **Environment**: Use `.env` for secrets; never commit keys to the repository.
 
-Note: Use opencode branch instead of antigravity.
+---
+_Constitution Ratified - Sentient Alpha Core_

@@ -1,71 +1,56 @@
 # AGENTS.md - Kalshi Trading Team Project Guidelines
 
-This file outlines the coding standards, tools, and rules for all agents and developers working on the Kalshi Trading Team project. Follow these guidelines to maintain code quality, consistency, and beauty across the entire codebase.
+This file outlines the coding standards, tools, and rules for all agents and developers working on the Kalshi Trading Team project (Sentient Alpha).
 
 ## Project Overview
-- **Type**: Monorepo with TypeScript/JavaScript (frontend/backend/shared) and Python (engine)
-- **Architecture**: AI-driven trading system with modular agents and OpenCode skills
-- **Tools**: ESLint, Prettier, Ruff, Black, Husky, OpenCode skills system
+- **Type**: Monorepo with React/Vite (Frontend) and Python 3.12+ (Engine).
+- **Architecture**: 2-Tier AI-driven system. Direct communication between UI and Python Engine.
+- **Core Agents**: 4 Mega-Agents (Soul, Senses, Brain, Hand).
+- **Tools**: ESM, TypeScript, Zustand, Shadcn UI, Python Asyncio, Google GenAI SDK.
 
 ## Coding Standards
 
 ### General Rules
-- **Language Consistency**: Use TypeScript for JS/TS parts, Python 3.12+ for engine
-- **Naming**: PascalCase for components/classes, camelCase for variables/functions, snake_case for Python
-- **Imports**: Absolute paths with @shared/* aliases
-- **Error Handling**: Try-catch with meaningful messages, no silent failures
-- **Documentation**: JSDoc for functions, inline comments for complex logic
+- **Language Consistency**: TypeScript for Frontend, Python for Engine.
+- **Naming**: PascalCase for React components, camelCase for JS functions/variables, snake_case for Python.
+- **Error Handling**: No silent failures. High-priority logs must include `agent_id` or `phase_id`.
 
-### TypeScript/JavaScript
-- **Strict Mode**: Enabled, no `any` types (warnings allowed during transition)
-- **React**: Functional components with hooks, proper prop interfaces
-- **Styling**: Tailwind CSS with custom utilities, consistent spacing
-- **Testing**: Vitest for unit tests, follow existing patterns
+### Frontend (@/frontend)
+- **State**: Use **Zustand** (`src/store/useStore.ts`) for global state.
+- **Components**: Shadcn UI + Tailwind. Keep components presentational where possible.
+- **API Standard**: All frontend calls must use the relative `/api` proxy.
+- **SSE**: Subscribes to `/api/stream` for live agent logs.
 
-### Python
-- **Style**: Black formatting (100 char lines), Ruff linting
-- **Async**: Use asyncio for all I/O operations
-- **Typing**: Type hints required, no bare `Any`
-- **Imports**: Follow PEP8, no wildcard imports
-
-## Tools & Automation
-- **Linting**: `npm run lint` (runs ESLint + Ruff)
-- **Formatting**: `npm run format` (Prettier + Black)
-- **Pre-commit**: Husky runs linting on commits
-- **Build**: `npm run build` for all components
-- **Dev**: `npm run dev` starts all services
+- **Persistence**: Inter-agent signals (Opportunities, Executions) must go through `Synapse` persistent queues (SQLite).
+- **Communication**: Use `EventBus` for events, but rely on `Synapse` for data handoff to ensure crash-recovery.
+- **AI**: Use `google-genai` SDK with Gemini 1.5 Pro.
+- **Risk**: Implementation of the "Ragnarok" protocol for emergency liquidation.
+- **Context**: Senses agent must fetch news context before Brain debate.
 
 ## File Structure
-- `frontend/`: React app (Vite, Tailwind)
-- `backend/`: Node/Express API (TypeScript)
-- `engine/`: Python AI agents (asyncio)
-- `shared/`: Common types/constants
-- `.opencode/skills/`: Project-specific skills and guidelines
-- `DESIGN_GUIDE.md`: Architectural standards
+- `frontend/`: React app (Vite, Zustand, Shadcn).
+- `engine/`: Python core logic.
+  - `agents/`: Mega-Agent implementations.
+  - `core/`: Bus, Vault, Network, and Safety utilities.
+- `shared/`: Shared TS types (mirrored in Python dicts).
+- `walkthroughs/`: Proof-of-work documentation (Read before starting new tasks).
+- `legacy/`: Archived components (old backend, early dashboard).
 
 ## Agent-Specific Rules
-- **Frontend Agents**: Focus on UI/UX, accessibility, responsive design (load ui-design skill)
-- **Backend Agents**: API design, security, performance (load safety-security skill)
-- **Engine Agents**: AI logic, async efficiency, error resilience (load agent-contracts skill)
-- **All Agents**: Follow DESIGN_GUIDE.md, load relevant skills, commit clean code, test changes
+- **UI Agents**: Focus on "Cinematic" visualization of agent logs. Load `ui-design` skill.
+- **Engine Agents**: Ensure AI debates are "Critically Objective". Logic must pass Monte Carlo simulation.
+- **Exec Agents**: Must respect the **Autopilot Pulse** managed by `SoulAgent`.
+- **All Agents**: Always build, deploy, and verify changes. Follow the `CONSTITUTION.md`.
 
 ## Quality Gates
-- No ESLint errors (warnings minimized)
-- No Ruff/Black formatting issues
-- Tests pass before commit
-- Code reviewed for consistency
-
-## Task Completion Requirements
-- **Build & Deploy**: Always build and deploy changes after task completion to verify in UI
-- **Git Workflow**: Commit changes with conventional messages, push to opencode branch
-- **Verification**: Test thoroughly before marking task complete
-- **Constitution Compliance**: Follow all 4 pillars of the project constitution
+- `pytest tests/unit/` must pass for all engine changes.
+- `npm run build` must pass for frontend changes.
+- Walkthroughs must be recorded for UI changes.
 
 ## Commands Reference
-- `npm run lint`: Lint all code
-- `npm run format`: Format all code
-- `npm run test`: Run all tests
-- `npm run dev`: Start development environment
-- `npm run build`: Build for production
+- `npm run dev`: Starts the Dev environment (PM2 handles Frontend + Engine).
+- `npm run build`: Builds the production bundle.
+- `python3 engine/main.py`: Starts the engine independently.
 
-Follow these rules to ensure the codebase remains beautiful, flawless, and maintainable. Refer to DESIGN_GUIDE.md for detailed patterns.
+---
+_Generated by Sentient Alpha Core_
