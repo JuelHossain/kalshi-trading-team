@@ -1,5 +1,8 @@
 ## ⚠️ Entry Protocol (Token-Efficiency)
-Always read the **## Core Essence** and the **last 3 entries** of [identity.md](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/soul/identity.md) before starting complex tasks. For minor UI tweaks, skip this to save tokens.
+1. Read the **Core Essence** and **last 3 entries** of [identity.md](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/soul/identity.md) before complex tasks.
+2. **Check the Task Board**: `cat ai-env/tasks/BOARD.md`
+3. **NLF Protocol**: When detecting complex work, ask: "Execute now or delegate?"
+4. **Shortcuts**: `/delegate`, `/execute`, `/verify`
 
 ## 📌 Context (The WHY & WHAT)
 Sentient Alpha is an autonomous 2-tier trading system on Kalshi. It uses a committee of 4 Mega-Agents (Soul, Senses, Brain, Hand) to analyze and trade prediction markets.

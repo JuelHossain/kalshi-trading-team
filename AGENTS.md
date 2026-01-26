@@ -3,6 +3,11 @@
 ## ⚠️ Entry Protocol
 1. Follow the [identity.md](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/soul/identity.md) guidelines for token-efficient session orientation. Read the **Core Essence** first.
 2. **Check the Task Board**: Run `cat ai-env/tasks/BOARD.md` to see any pending or delegated tasks.
+3. **NLF Protocol**: When detecting complex work, ask the user if they want to **execute now** or **delegate**. See [NLF_PROTOCOL.md](./ai-env/core-docs/NLF_PROTOCOL.md).
+4. **Delegation Shortcuts**:
+   - `/delegate <description>` - Instantly create a task for another agent.
+   - `/execute` - Pick up pending tasks from the board.
+   - `/verify` - Review completed tasks.
 
 This file provides structured context for AI agents working on the Sentient Alpha Trading Bot. Adherence to these standards is mandatory for autonomous safety and system integrity.
 

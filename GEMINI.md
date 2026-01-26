@@ -1,5 +1,8 @@
 ## ⚠️ Entry Protocol (Token-Efficiency)
-Read **## Core Essence** and **Recent Intuition** in [identity.md](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/soul/identity.md) before starting. Skip for simple tasks.
+1. Read **## Core Essence** and **Recent Intuition** in [identity.md](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/soul/identity.md) before starting.
+2. **Check the Task Board**: `cat ai-env/tasks/BOARD.md`
+3. **NLF Protocol**: When detecting complex work, ask: "Execute now or delegate?"
+4. **Shortcuts**: `/delegate`, `/execute`, `/verify`
 
 ## 🧱 The 4 Mega-Agents (Core Pillars)
 Refer to the following for agent specifics:
