@@ -16,7 +16,12 @@ This folder centralizes the configuration logic for various AI assistants to ens
 - **Standard**: Context is unified between `GEMINI.md` and `.gemini/gemini.md`.
 - **Mirror**: The Project Constitution is mirrored across both for safety.
 
-### 4. [Central Knowledge](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/README.md)
+### 4. [Warp](file:///home/jrrahman01/workspace/active/kalshi-trading-team/WARP.md)
+- **Standard**: Agentic Development Environment with terminal, code editing, and debugging.
+- **Workflow**: Context loaded via `WARP.md` in root, workflows in `ai-env/warp/workflows.md`.
+- **Strengths**: Platform compatibility fixes, dependency management, git operations, iterative problem-solving.
+
+### 5. [Central Knowledge](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/README.md)
 - **Skills**: [Universal Tools](./skills/) (Linked via `.opencode/skills`)
 - **Workflows**: [Operational Runbooks](./workflows/) (Linked via `.agent/workflows`)
 - **Core Docs**: [Constitution & Guides](./core-docs/) (Linked in root)

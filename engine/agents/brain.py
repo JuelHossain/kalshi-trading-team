@@ -26,7 +26,7 @@ except ImportError:
     GEMINI_AVAILABLE = False
 
 
-from core.synapse import Synapse, ExecutionSignal, Opportunity, MarketData
+from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
 
 
 class BrainAgent(BaseAgent):
@@ -65,11 +65,11 @@ class BrainAgent(BaseAgent):
             cri_path = os.path.join(base_path, "critic.md")
             
             if os.path.exists(opt_path):
-                with open(opt_path, "r") as f:
+                with open(opt_path) as f:
                     self.personas["optimist"] = f"OPTIMIST: {f.read().strip()}"
             
             if os.path.exists(cri_path):
-                with open(cri_path, "r") as f:
+                with open(cri_path) as f:
                     self.personas["critic"] = f"CRITIC: {f.read().strip()}"
                     
         except Exception as e:

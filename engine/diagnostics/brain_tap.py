@@ -1,18 +1,19 @@
 import asyncio
-import sys
 import os
-from colorama import init, Fore, Style
+import sys
+
+from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
 # Ensure engine path is in sys.path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 # Load environment
-load_dotenv(os.path.join(os.path.dirname(__file__), '../../.env'))
+load_dotenv(os.path.join(os.path.dirname(__file__), "../../.env"))
 
+from agents.brain import BrainAgent
 from core.bus import EventBus
 from core.synapse import Synapse
-from agents.brain import BrainAgent
 
 # Initialize Colorama
 init()
@@ -21,8 +22,8 @@ async def main():
     print(f"{Fore.BLUE}=========================================={Style.RESET_ALL}")
     print(f"{Fore.BLUE}    BRAIN AGENT - LIVE DIAGNOSTIC TAP     {Style.RESET_ALL}")
     print(f"{Fore.BLUE}=========================================={Style.RESET_ALL}")
-    print(f"Source: Synapse Persistent Queue")
-    print(f"Goal: Watch the Brain 'think' using real data\n")
+    print("Source: Synapse Persistent Queue")
+    print("Goal: Watch the Brain 'think' using real data\n")
 
     # 1. Setup Infrastructure
     bus = EventBus()
@@ -59,7 +60,7 @@ async def main():
     await bus.subscribe("SIM_RESULT", monitor_bus)
 
     # 3. Initialize Agent
-    print(f"Initializing BrainAgent...")
+    print("Initializing BrainAgent...")
     brain = BrainAgent(3, bus, synapse=synapse)
     await brain.setup()
 

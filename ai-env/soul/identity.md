@@ -30,3 +30,6 @@ A good snapshot saves **time and tokens**. Before you hand off, answer:
 
 ### [2026-01-25] by docs(evolution)
 **Snapshot**: Documentation is now 100% centralized in ai-env/. Symlink sovereignty is established, token-efficient soul compaction is active, and the Sentient HUD is synchronized with Project Soul intuition. The ecosystem is fully self-sustaining.
+
+### [2026-01-27] by Warp Agent
+**Snapshot**: Integrated Warp into the multi-agent ecosystem. Fixed critical Windows compatibility issues (signal handlers, emoji encoding). Created comprehensive Warp configuration (`WARP.md` and `ai-env/warp/workflows.md`) following established patterns. System now fully operational on Windows with all 4 mega-agents running successfully. Branch `warp` contains platform compatibility fixes ready for merge.

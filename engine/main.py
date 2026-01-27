@@ -468,7 +468,7 @@ class GhostEngine:
             
             if soul_exists:
                 try:
-                    with open(soul_path, "r") as f:
+                    with open(soul_path) as f:
                         lines = f.readlines()
                         # Find the last snapshot (lines starting with **Snapshot**)
                         snapshots = [l for l in lines if l.startswith("**Snapshot**")]
