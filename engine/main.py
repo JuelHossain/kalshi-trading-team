@@ -13,6 +13,7 @@ import asyncio
 import json
 import os
 import signal
+import sys
 from datetime import datetime
 
 from aiohttp import web
@@ -403,7 +404,7 @@ class GhostEngine:
         async def get_pnl(request):
             """Get PnL history (simulated for now)."""
             # In a real scenario, query database for balance history
-            current_balance = engine.vault.current_balance / 100
+            current_balance = self.vault.current_balance / 100
             
             # Generate mock history for the last 24h
             now = datetime.now()
@@ -436,6 +437,21 @@ class GhostEngine:
                     "count": random.randint(1, 10)
                 })
             return web.json_response({"heatmap": heatmap})
+
+        async def trigger_ragnarok(request):
+            """Emergency liquidation protocol."""
+            await self.bus.publish(
+                "SYSTEM_LOG",
+                {
+                    "level": "ERROR",
+                    "message": "[GHOST] 🔥 RAGNAROK PROTOCOL INITIATED",
+                    "agent_id": 1,
+                    "timestamp": datetime.now().isoformat(),
+                },
+                "GHOST",
+            )
+            await execute_ragnarok(kalshi_client, self.vault)
+            return web.json_response({"status": "ragnarok_executed", "message": "Emergency liquidation complete."})
 
         async def get_env_health(request):
             """Verify 'Stay Alive' environment integrity."""
@@ -559,8 +575,10 @@ class GhostEngine:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown()))
+        # Signal handlers only work on Unix-like systems
+        if sys.platform != "win32":
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown()))
 
         try:
             loop.run_until_complete(self.run())

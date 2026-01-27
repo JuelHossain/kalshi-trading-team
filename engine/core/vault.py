@@ -45,7 +45,7 @@ class RecursiveVault:
         if self.current_balance < threshold:
             if not self.kill_switch_active:
                 print(
-                    f"{Fore.RED}[VAULT] 🚨 CRITICAL: Balance (${self.current_balance/100:.2f}) < 85% Principal Threshold (${threshold/100:.2f}).{Style.RESET_ALL}"
+                    f"{Fore.RED}[VAULT] [!] CRITICAL: Balance (${self.current_balance/100:.2f}) < 85% Principal Threshold (${threshold/100:.2f}).{Style.RESET_ALL}"
                 )
                 print(
                     f"{Fore.RED}[VAULT] KILL SWITCH ACTIVATED. HALTING ALL OPERATIONS.{Style.RESET_ALL}"
@@ -64,7 +64,7 @@ class RecursiveVault:
         if daily_profit >= self.DAILY_PROFIT_THRESHOLD_CENTS:
             if not self.is_locked:
                 print(
-                    f"{Fore.GREEN}[VAULT] 🔒 PROFIT THRESHOLD (${daily_profit/100:.2f}) REACHED.{Style.RESET_ALL}"
+                    f"{Fore.GREEN}[VAULT] [LOCKED] PROFIT THRESHOLD (${daily_profit/100:.2f}) REACHED.{Style.RESET_ALL}"
                 )
                 print(
                     f"{Fore.GREEN}[VAULT] PRINCIPAL PROTECTION ACTIVATED. FROZEN ${self.PRINCIPAL_CAPITAL_CENTS/100:.2f}.{Style.RESET_ALL}"
