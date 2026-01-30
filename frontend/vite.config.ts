@@ -10,7 +10,18 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3002',
         changeOrigin: true,
-        // Note: Don't rewrite /api - backend routes include /api prefix
+        secure: false,
+        configure: (proxy, _options) => {
+          proxy.on('proxyRes', (proxyRes, _req, _res) => {
+            // Ensure the response body is forwarded
+            if (!proxyRes.headers['content-length']) {
+              proxyRes.headers['content-length'] = Buffer.byteLength(
+                proxyRes.body || '',
+                'utf8'
+              ).toString();
+            }
+          });
+        },
       },
     },
     fs: {
@@ -24,7 +35,17 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3002',
         changeOrigin: true,
-        // Note: Don't rewrite /api - backend routes include /api prefix
+        secure: false,
+        configure: (proxy, _options) => {
+          proxy.on('proxyRes', (proxyRes, _req, _res) => {
+            if (!proxyRes.headers['content-length']) {
+              proxyRes.headers['content-length'] = Buffer.byteLength(
+                proxyRes.body || '',
+                'utf8'
+              ).toString();
+            }
+          });
+        },
       },
     },
   },

@@ -38,6 +38,7 @@ export const useAuth = (): UseAuthReturn => {
       setIsAuthenticating(true);
 
       try {
+        console.log('[Auth] Attempting login for mode:', mode);
         const response = await fetch(`${ENGINE_URL}/auth/login`, {
           method: 'POST',
           headers: {
@@ -50,7 +51,21 @@ export const useAuth = (): UseAuthReturn => {
           }),
         });
 
-        const data: AuthResponse = await response.json();
+        console.log('[Auth] Response status:', response.status);
+        console.log('[Auth] Response headers:', response.headers);
+
+        // Clone response for debugging since we can only read body once
+        const clonedResponse = response.clone();
+
+        // Check if response body is empty
+        const text = await clonedResponse.text();
+        console.log('[Auth] Response body:', text);
+
+        if (!text) {
+          throw new Error('Empty response from server');
+        }
+
+        const data: AuthResponse = JSON.parse(text);
 
         if (!response.ok || !data.isAuthenticated) {
           throw new Error(data.error || 'Authentication failed');
@@ -62,6 +77,7 @@ export const useAuth = (): UseAuthReturn => {
 
         console.log(`[Auth] Successfully logged in as ${mode} mode`);
       } catch (error: any) {
+        console.error('[Auth] Login error:', error);
         const message = error.message || 'Failed to authenticate';
         setAuthError(message);
         store.setAuthenticated(false);

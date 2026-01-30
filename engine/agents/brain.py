@@ -54,6 +54,16 @@ class BrainAgent(BaseAgent):
     SIMULATION_ITERATIONS = 10000
     MAX_VARIANCE = 0.25  # Maximum acceptable variance
 
+    # Gemini model names to try (in order of preference)
+    # Can be overridden via GEMINI_MODEL env var
+    DEFAULT_MODELS = [
+        "gemini-2.5-flash-exp",
+        "gemini-2.5-flash-preview-04-17",
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+    ]
+
     def __init__(self, agent_id: int, bus: EventBus, senses_agent=None, synapse: Synapse = None):
         super().__init__("BRAIN", agent_id, bus, synapse)
         self.senses = senses_agent
@@ -61,12 +71,20 @@ class BrainAgent(BaseAgent):
         self.trading_instructions = ""
 
         # Initialize Gemini
+        self.gemini_model = None
         if GEMINI_AVAILABLE:
             api_key = os.environ.get("GEMINI_API_KEY")
             if api_key:
                 self.client = genai.Client(api_key=api_key)
+                # Try user-specified model first, then default list
+                user_model = os.environ.get("GEMINI_MODEL")
+                if user_model:
+                    self.gemini_model = user_model
+                else:
+                    self.gemini_model = self.DEFAULT_MODELS[0]
             else:
                 self.client = None
+                self.gemini_model = None
         
         # OpenCode Personas
         self.personas = {
@@ -96,7 +114,8 @@ class BrainAgent(BaseAgent):
             pass
 
     async def setup(self):
-        await self.log("Brain online. Intelligence & Decision engine ready.")
+        ai_status = f"AI Model: {self.gemini_model}" if self.client else "AI: UNAVAILABLE (No API key)"
+        await self.log(f"Brain online. Intelligence & Decision engine ready. {ai_status}")
         await self.bus.subscribe("OPPORTUNITIES_READY", self.process_opportunities)
         await self.bus.subscribe("INSTRUCTIONS_UPDATE", self.update_instructions)
 
@@ -302,7 +321,7 @@ Respond in JSON format:
 
         try:
             response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.client.models.generate_content(model="gemini-1.5-pro", contents=prompt)
+                None, lambda: self.client.models.generate_content(model=self.gemini_model, contents=prompt)
             )
 
             # Parse response

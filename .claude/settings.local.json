@@ -1,4 +1,16 @@
 {
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "github-mcp"
+      ],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  },
   "permissions": {
     "allow": [
       "Read(//c/Users/jrrah/.vscode/extensions/**)",
@@ -14,7 +26,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(gh:*)",
-      "Bash(./scripts/handoff.sh:*)"
+      "Bash(./scripts/handoff.sh:*)",
+      "Bash(pip install:*)",
+      "Bash(find:*)"
     ],
     "additionalDirectories": [
       "C:\\Users\\jrrah\\.serena"
