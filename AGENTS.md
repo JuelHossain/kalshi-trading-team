@@ -1,12 +1,22 @@
 # AGENTS.md - Sentient Alpha Trading Project
 
-## ⚠️ Entry Protocol
-1. Follow the [identity.md](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/soul/identity.md) guidelines for token-efficient session orientation. Read the **Core Essence** first.
-2. **Check the Task Board**: Run `cat ai-env/tasks/BOARD.md` to see any pending or delegated tasks.
-3. **NLF Protocol**: When detecting complex work (3+ files, features), **automatically delegate** via Task tool. See [NLF_PROTOCOL.md](./ai-env/core-docs/NLF_PROTOCOL.md).
+## ⚠️ CRITICAL: READ FIRST
+
+**🚨 AUTO-DELEGATION IS MANDATORY**
+- **3+ files? → DELEGATE via Task tool**
+- **Feature work? → DELEGATE via Task tool**
+- **NOT optional. NO exceptions.**
+- See [NLF_PROTOCOL.md](./ai-env/core-docs/NLF_PROTOCOL.md)
+
+**DO NOT do all the work yourself.** If you think "I can handle this", you're wrong. Delegate it.
+
+## Entry Protocol
+1. **Read identity.md**: Check `ai-env/soul/identity.md` for Core Essence first.
+2. **Check Task Board**: Run `cat ai-env/tasks/BOARD.md` for pending tasks.
+3. **DELEGATE complex work**: 3+ files, features, architectural changes → use Task tool.
 4. **Task Board Commands**:
-   - `/status` - Show current BOARD.md state.
-   - `/verify` - Review completed tasks.
+   - `/status` - Show current BOARD.md state
+   - `/verify` - Review completed tasks
 
 This file provides structured context for AI agents working on the Sentient Alpha Trading Bot. Adherence to these standards is mandatory for autonomous safety and system integrity.
 

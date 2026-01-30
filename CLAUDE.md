@@ -1,8 +1,15 @@
 ## ⚠️ Entry Protocol (Token-Efficiency)
+
+**🚨 MANDATORY AUTO-DELEGATION**
+- **3+ files affected? → DELEGATE**
+- **Feature implementation? → DELEGATE**
+- **NOT optional. See [NLF_PROTOCOL.md](ai-env/core-docs/NLF_PROTOCOL.md)**
+- **DO NOT do it yourself. That's what causes slow "one-by-one" completion.**
+
 1. Read the **Core Essence** and **last 3 entries** of [identity.md](ai-env/soul/identity.md) before complex tasks.
 2. **Check the Task Board**: Read `ai-env/tasks/BOARD.md` for cross-agent visibility (read-only for Claude).
 3. **Use Native Skills**: Common operations via `/skill-name` (see `.claude/skills/` directory).
-4. **Complex Tasks**: Use the Task tool for multi-step subagent delegation.
+4. **DELEGATE**: Use Task tool for ANY 3+ file task or feature work.
 
 ## 📌 Context (The WHY & WHAT)
 Sentient Alpha is an autonomous 2-tier trading system on Kalshi. It uses a committee of 4 Mega-Agents (Soul, Senses, Brain, Hand) to analyze and trade prediction markets.
