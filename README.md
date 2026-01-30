@@ -21,11 +21,35 @@ Sentient Alpha is an autonomous trading system that uses a committee of 4 Mega-A
 ### 1. Prerequisites
 
 - Node.js (v20+)
-- Python 3.12+ 
+- Python 3.12+
 - Supabase Account
 - API Keys (Gemini, Kalshi) in `.env`
 
-### 2. Setup
+### 2. Environment Configuration
+
+The system requires environment variables for secure operation. Copy the example file and configure your settings:
+
+```bash
+# From the engine directory
+cp .env.example .env
+```
+
+**Key Environment Variables:**
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `AUTH_PASSWORD` | Password for production mode authentication | `993728` | No |
+| `GHOST_API_KEY` | API key for internal authentication | Auto-generated | No |
+| `IS_PRODUCTION` | Enable production trading mode | `false` | No |
+| `KALSHI_DEMO_KEY_ID` | Kalshi demo API key ID | - | Yes |
+| `KALSHI_DEMO_PRIVATE_KEY` | Kalshi demo RSA private key | - | Yes |
+| `GEMINI_API_KEY` | Google Gemini AI API key | - | Yes |
+
+**Authentication Modes:**
+- **Demo Mode**: Login with empty password (or any password if `AUTH_PASSWORD` not set)
+- **Production Mode**: Login with the `AUTH_PASSWORD` value
+
+### 3. Setup
 
 ```bash
 # Install Frontend dependencies

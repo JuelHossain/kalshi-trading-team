@@ -431,16 +431,26 @@ class GhostEngine:
 
         async def auth_handler(request):
             """Handle authentication check."""
-            # Mock auth for now, or validate against Kalshi if needed
-            # In 2-tier, we trust the client if they can hit localhost
-            return web.json_response({
-                "isAuthenticated": True,
-                "user": {
-                    "id": "user_1",
-                    "email": "demo@kalshi.com",
-                    "name": "Kalshi Trader"
-                }
-            })
+            # Return actual session data from auth_manager
+            # In 2-tier architecture, we check the auth_manager session state
+            if auth_manager.authenticated:
+                return web.json_response({
+                    "isAuthenticated": True,
+                    "user": {
+                        "id": "user_1",
+                        "email": "trader@sentient-alpha.com" if auth_manager.is_production else "demo@kalshi.com",
+                        "name": "Sentient Trader" if auth_manager.is_production else "Demo Trader"
+                    },
+                    "mode": auth_manager.mode,
+                    "is_production": auth_manager.is_production
+                })
+            else:
+                return web.json_response({
+                    "isAuthenticated": False,
+                    "user": None,
+                    "mode": "demo",
+                    "is_production": False
+                })
 
         async def get_pnl(request):
             """Get PnL history (simulated for now)."""

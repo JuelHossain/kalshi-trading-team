@@ -10,6 +10,7 @@ Workflow:
 """
 
 import asyncio
+import json
 import os
 import uuid
 from typing import Any
@@ -306,7 +307,6 @@ Respond in JSON format:
 
             # Parse response
             text = response.text
-            import json
             import re
 
             # Extract JSON from response

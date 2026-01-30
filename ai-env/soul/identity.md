@@ -54,3 +54,6 @@ A good snapshot saves **time and tokens**. Before you hand off, answer:
 
 ### [2026-01-29] by chore(agent-workflow)
 **Snapshot**: Agent workflow visualization improvements, added specialized reviewer agents for security and trading logic validation
+
+### [2026-01-29] by chore
+**Snapshot**: Engine configuration cleanup, brain agent updates, test improvements

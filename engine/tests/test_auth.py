@@ -428,13 +428,17 @@ class TestAuthManagerStateTransitions:
 class TestAuthPasswordConstant:
     """Test the AUTH_PASSWORD constant."""
 
-    def test_auth_password_is_correct_value(self):
-        """Auth password is set to expected value."""
-        assert AuthManager.AUTH_PASSWORD == "993728"
-
     def test_auth_password_is_string(self):
         """Auth password is a string type."""
         assert isinstance(AuthManager.AUTH_PASSWORD, str)
+
+    def test_auth_password_has_default_value(self):
+        """Auth password has a default value when not set in environment."""
+        # If AUTH_PASSWORD is not set in environment, it should default to "993728"
+        # This test assumes the environment variable is not set
+        import os
+        if "AUTH_PASSWORD" not in os.environ:
+            assert AuthManager.AUTH_PASSWORD == "993728"
 
 
 if __name__ == "__main__":
