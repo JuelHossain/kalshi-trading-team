@@ -1,5 +1,4 @@
 import React from 'react';
-import VaultGauge from './VaultGauge';
 
 interface SidebarProps {
   activeTab: string;
@@ -75,11 +74,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
             ))}
           </div>
 
-          {/* Vault Gauge Compact - Auto Expands */}
+          {/* Status Indicator - Auto Expands */}
           <div className="mt-auto px-2 w-full overflow-hidden">
-            <div className="opacity-0 group-hover:opacity-100 transition-all duration-700 delay-100">
-              <VaultGauge compact={false} />
-            </div>
             <div className="absolute bottom-8 left-0 w-16 flex justify-center group-hover:opacity-0 transition-opacity duration-300 pointer-events-none">
               <span className="text-2xl animate-pulse">🔒</span>
             </div>

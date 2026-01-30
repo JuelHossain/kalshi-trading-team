@@ -11,8 +11,8 @@ from aiohttp import web
 class AuthManager:
     """Manages API authentication for the Ghost Engine."""
 
-    # Demo password for authentication
-    AUTH_PASSWORD = "993728"
+    # Production password for authentication (loaded from environment)
+    AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "993728")
 
     def __init__(self):
         # Load API key from environment
@@ -30,7 +30,9 @@ class AuthManager:
 
         # List of paths that don't require authentication
         # In 2-tier local architecture, these endpoints are trusted
+        # Note: Vite proxy now preserves /api prefix
         self.public_paths = {
+            # Direct access (port 3002)
             "/health",
             "/auth",
             "/pnl",
@@ -44,9 +46,23 @@ class AuthManager:
             "/autopilot/start",
             "/autopilot/stop",
             "/autopilot/status",
+            # Proxied access (port 3000 via Vite)
+            "/api/health",
+            "/api/auth",
             "/api/auth/login",
             "/api/auth/verify",
             "/api/auth/logout",
+            "/api/pnl",
+            "/api/pnl/heatmap",
+            "/api/stream",
+            "/api/trigger",
+            "/api/cancel",
+            "/api/kill-switch",
+            "/api/deactivate-kill-switch",
+            "/api/reset",
+            "/api/autopilot/start",
+            "/api/autopilot/stop",
+            "/api/autopilot/status",
         }
 
     def is_public_path(self, path: str) -> bool:
@@ -121,7 +137,7 @@ async def login_handler(request: web.Request) -> web.Response:
             auth_manager.is_production = False
             print(f"[AUTH] Demo mode login successful")
             return web.json_response({
-                "success": True,
+                "isAuthenticated": True,
                 "mode": "demo",
                 "is_production": False,
                 "message": "Logged in to demo mode"
@@ -142,7 +158,7 @@ async def login_handler(request: web.Request) -> web.Response:
         print(f"[AUTH] Login successful - Mode: {mode}")
 
         return web.json_response({
-            "success": True,
+            "isAuthenticated": True,
             "mode": mode,
             "is_production": auth_manager.is_production,
             "message": f"Logged in to {mode} mode"
@@ -162,7 +178,7 @@ async def verify_handler(request: web.Request) -> web.Response:
     Returns current session state.
     """
     return web.json_response({
-        "authenticated": auth_manager.authenticated,
+        "isAuthenticated": auth_manager.authenticated,
         "mode": auth_manager.mode,
         "is_production": auth_manager.is_production
     })

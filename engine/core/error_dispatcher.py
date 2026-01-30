@@ -220,7 +220,7 @@ class ErrorDispatcher:
         ]
 
         if error.hint:
-            parts.append(f"\n{Colors.GRAY}  💡 Hint: {error.hint}{Colors.RESET}")
+            parts.append(f"\n{Colors.GRAY}  [!] Hint: {error.hint}{Colors.RESET}")
 
         if error.context:
             context_str = ", ".join(f"{k}={v}" for k, v in error.context.items())
@@ -302,7 +302,6 @@ class ErrorDispatcher:
         """Broadcast error to frontend via EventBus"""
         try:
             if self.event_bus:
-                from core.network import Message
                 await self.event_bus.publish(
                     "SYSTEM_ERROR",
                     error.to_dict(),

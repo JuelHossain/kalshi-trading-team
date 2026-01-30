@@ -67,6 +67,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      console.log('[Orchestrator] SSE Event received:', data.type, data);
       eventBuffer.current.push(data);
     };
 
@@ -121,7 +122,31 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
                 lastAction: log.message,
                 lastUpdated: timestamp,
               });
-              // Set back to idle after a delay
+
+              // Add transition for workflow visualization
+              const flowTypes: Record<
+                number,
+                'authorization' | 'opportunity' | 'decision' | 'execution'
+              > = {
+                1: 'authorization',
+                2: 'opportunity',
+                3: 'decision',
+                4: 'execution',
+              };
+
+              const transition = {
+                id: `trans-${Date.now()}-${log.agentId}`,
+                fromAgent: log.agentId,
+                toAgent: log.agentId < 4 ? log.agentId + 1 : 4,
+                flowType: flowTypes[log.agentId] || 'authorization',
+                timestamp,
+                data: { message: log.message },
+                active: true,
+              };
+
+              store.addTransition(transition);
+
+              // Set back to idle after a delay and deactivate transition
               setTimeout(() => {
                 store.setAgentState(log.agentId, { status: 'idle' });
               }, 2000);
@@ -272,5 +297,6 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     targetMarket: null,
     currentBalance: store.vault?.total || 0,
     killSwitchActive: store.killSwitchActive,
+    activeTransitions: store.activeTransitions,
   };
 };

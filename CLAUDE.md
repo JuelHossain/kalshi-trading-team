@@ -1,10 +1,17 @@
 ## ⚠️ Entry Protocol (Token-Efficiency)
 
-**🚨 MANDATORY AUTO-DELEGATION**
+**🚨 TWO NON-NEGOTIABLE RULES:**
+
+**1. AUTO-DELEGATION IS MANDATORY**
 - **3+ files affected? → DELEGATE**
 - **Feature implementation? → DELEGATE**
 - **NOT optional. See [NLF_PROTOCOL.md](ai-env/core-docs/NLF_PROTOCOL.md)**
-- **DO NOT do it yourself. That's what causes slow "one-by-one" completion.**
+- **DO NOT do it yourself.**
+
+**2. ALWAYS COMMIT YOUR WORK**
+- **Before ending: `./scripts/handoff.sh "message"`**
+- **Uncommitted work = FAILED session**
+- **NO exceptions.**
 
 1. Read the **Core Essence** and **last 3 entries** of [identity.md](ai-env/soul/identity.md) before complex tasks.
 2. **Check the Task Board**: Read `ai-env/tasks/BOARD.md` for cross-agent visibility (read-only for Claude).

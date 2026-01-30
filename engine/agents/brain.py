@@ -80,19 +80,19 @@ class BrainAgent(BaseAgent):
         try:
             opt_path = os.path.join(base_path, "optimist.md")
             cri_path = os.path.join(base_path, "critic.md")
-            
+
             if os.path.exists(opt_path):
                 with open(opt_path, "r") as f:
                     self.personas["optimist"] = f"OPTIMIST: {f.read().strip()}"
-            
+
             if os.path.exists(cri_path):
                 with open(cri_path, "r") as f:
                     self.personas["critic"] = f"CRITIC: {f.read().strip()}"
-                    
+
         except Exception as e:
             print(f"[BRAIN] Persona Load Warning: {e}")
-        else:
-            self.client = None
+            # Continue with default personas
+            pass
 
     async def setup(self):
         await self.log("Brain online. Intelligence & Decision engine ready.")
@@ -106,37 +106,74 @@ class BrainAgent(BaseAgent):
 
     async def process_opportunities(self, message):
         """Process queued opportunities > Synapse (Primary) or Senses (Legacy)"""
-        
+
+        # Track decision statistics
+        approved_count = 0
+        vetoed_count = 0
+        skipped_count = 0
+
         # 1. Synapse Flow (Persistent Queue)
         if self.synapse:
             try:
-                opp_model = await self.synapse.opportunities.pop()
-                if opp_model:
+                queue_size = await self.synapse.opportunities.size()
+                await self.log(f"Synapse Queue Size: {queue_size} opportunities to process")
+
+                # Process ALL opportunities in the queue, not just one
+                processed_count = 0
+                while True:
+                    opp_model = await self.synapse.opportunities.pop()
+                    if not opp_model:
+                        # Queue is empty
+                        break
+
                     safe_log(f"Synapse Input: {opp_model.ticker}")
-                    
+
                     # Map Pydantic Model -> Legacy Dict for compatibility
                     opp_dict = opp_model.model_dump()
-                    
+
                     # Fix Price: Model has int (50), Brain logic expects float (0.50)
                     kalshi_cents = opp_model.market_data.yes_price
                     opp_dict["kalshi_price"] = kalshi_cents / 100.0
-                    
+
                     # Ensure flattened structure matches expectations
                     opp_dict["market_data"] = opp_model.market_data.model_dump()
-                    
-                    await self.process_single_opportunity(opp_dict)
-                    return # Process one at a time per event
-                    
+
+                    # Track decision
+                    result = await self.process_single_opportunity(opp_dict)
+                    processed_count += 1
+
+                    if result == "APPROVED":
+                        approved_count += 1
+                    elif result == "VETOED":
+                        vetoed_count += 1
+                    elif result == "SKIPPED":
+                        skipped_count += 1
+
+                # Log summary of decisions
+                await self.log(f"Synapse Processing Complete: {processed_count} analyzed | [OK] {approved_count} approved | [VETO] {vetoed_count} vetoed | [SKIP] {skipped_count} skipped")
+
             except Exception as e:
                 await self.log(f"Synapse Pop Error: {e}", level="ERROR")
 
-        # 2. Legacy Flow (Direct Senses Link)
+        # 2. Legacy Flow (Direct Senses Link) - DEPRECATED
         if not self.senses:
             return
 
-        opportunity = self.senses.pop_opportunity()
-        if opportunity:
-            await self.process_single_opportunity(opportunity)
+        # Process legacy queue until empty
+        processed_legacy = 0
+        while True:
+            opportunity = self.senses.pop_opportunity()
+            if not opportunity:
+                break
+            result = await self.process_single_opportunity(opportunity)
+            processed_legacy += 1
+            if result == "APPROVED":
+                approved_count += 1
+            elif result == "VETOED":
+                vetoed_count += 1
+
+        if processed_legacy > 0:
+            await self.log(f"Legacy Queue Processed: {processed_legacy} opportunities")
 
     async def run_intelligence(self, opp_queue: asyncio.Queue, exec_queue: asyncio.Queue):
         """Process opportunities from shared queue (Engine-driven)"""
@@ -161,7 +198,14 @@ class BrainAgent(BaseAgent):
         variance = sim_result.get("variance", 1)
         ev = sim_result.get("ev", 0)
 
-        await self.log(f"AI Prob: {estimated_prob:.2f} | Conf: {confidence*100:.1f}% | EV: {ev:.3f}")
+        # Only log and publish if we have valid data (variance 999 indicates no valid probability)
+        if variance == 999.0:
+            # Skip processing opportunities with no valid probability data
+            await self.log(f"[SKIP] SKIPPED: {ticker} | No valid probability data available", level="DEBUG")
+            return "SKIPPED"
+
+        prob_str = f"{estimated_prob:.2f}" if estimated_prob is not None else "N/A"
+        await self.log(f"AI Prob: {prob_str} | Conf: {confidence*100:.1f}% | EV: {ev:.3f}")
 
         # Publish simulation result for UI
         await self.bus.publish(
@@ -178,7 +222,7 @@ class BrainAgent(BaseAgent):
         )
 
         if confidence >= self.CONFIDENCE_THRESHOLD and variance <= self.MAX_VARIANCE and ev > 0:
-            safe_log(f"APPROVED: {ticker} | Pushing to execution.")
+            safe_log(f"[OK] APPROVED: {ticker} | Pushing to execution.")
             await self.queue_for_execution(
                 {
                     **opportunity,
@@ -188,9 +232,11 @@ class BrainAgent(BaseAgent):
                     "debate_reasoning": debate_result.get("reasoning", ""),
                 }
             )
+            return "APPROVED"
         else:
             reason = "Low confidence" if confidence < self.CONFIDENCE_THRESHOLD else ("High variance" if variance > self.MAX_VARIANCE else "Negative EV")
-            safe_log(f"VETOED: {ticker} | Reason: {reason}")
+            safe_log(f"[X] VETOED: {ticker} | Reason: {reason}")
+            return "VETOED"
 
     async def run_debate(self, opportunity: dict) -> dict:
         """Multi-persona AI debate using Gemini"""
@@ -344,7 +390,10 @@ Respond in JSON format:
         kalshi_price = opportunity.get("kalshi_price", 0.5)
 
         # Simulate outcomes
-        np.random.seed(42)  # Reproducibility
+        # Only use fixed seed for debugging/testing (set SIMULATION_USE_FIXED_SEED=true in .env)
+        # Production simulations should be truly random for accurate variance estimation
+        if os.getenv("SIMULATION_USE_FIXED_SEED") == "true":
+            np.random.seed(42)
         outcomes = np.random.binomial(1, vegas_prob, self.SIMULATION_ITERATIONS)
 
         # Calculate returns per simulation

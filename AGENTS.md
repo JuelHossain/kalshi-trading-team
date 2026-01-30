@@ -2,13 +2,19 @@
 
 ## ⚠️ CRITICAL: READ FIRST
 
-**🚨 AUTO-DELEGATION IS MANDATORY**
+**🚨 TWO NON-NEGOTIABLE RULES:**
+
+**1. AUTO-DELEGATION IS MANDATORY**
 - **3+ files? → DELEGATE via Task tool**
 - **Feature work? → DELEGATE via Task tool**
 - **NOT optional. NO exceptions.**
 - See [NLF_PROTOCOL.md](./ai-env/core-docs/NLF_PROTOCOL.md)
 
-**DO NOT do all the work yourself.** If you think "I can handle this", you're wrong. Delegate it.
+**2. ALWAYS COMMIT YOUR WORK**
+- **Before ending your session: COMMIT EVERYTHING**
+- **Use: `./scripts/handoff.sh "your message"`**
+- **Uncommitted work = failed session**
+- **NO exceptions. NO "I'll do it later".**
 
 ## Entry Protocol
 1. **Read identity.md**: Check `ai-env/soul/identity.md` for Core Essence first.

@@ -10,7 +10,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3002',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        // Note: Don't rewrite /api - backend routes include /api prefix
       },
     },
     fs: {
@@ -24,7 +24,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3002',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        // Note: Don't rewrite /api - backend routes include /api prefix
       },
     },
   },

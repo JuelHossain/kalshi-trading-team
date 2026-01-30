@@ -147,7 +147,7 @@ class TestLoginHandler:
 
         assert response.status == 200
         data = await get_response_json(response)
-        assert data["success"] is True
+        assert data["isAuthenticated"] is True
         assert data["mode"] == "demo"
         assert data["is_production"] is False
         assert auth_manager.authenticated is True
@@ -167,7 +167,7 @@ class TestLoginHandler:
 
         assert response.status == 200
         data = await get_response_json(response)
-        assert data["success"] is True
+        assert data["isAuthenticated"] is True
         assert data["mode"] == "production"
         assert data["is_production"] is True
         assert auth_manager.authenticated is True
@@ -204,7 +204,7 @@ class TestLoginHandler:
 
         assert response.status == 200
         data = await get_response_json(response)
-        assert data["success"] is True
+        assert data["isAuthenticated"] is True
         assert data["mode"] == "demo"
         assert data["is_production"] is False
 
@@ -246,7 +246,7 @@ class TestVerifyHandler:
 
         assert response.status == 200
         data = await get_response_json(response)
-        assert data["authenticated"] is False
+        assert data["isAuthenticated"] is False
         assert data["mode"] == "demo"
         assert data["is_production"] is False
 
@@ -261,7 +261,7 @@ class TestVerifyHandler:
         response = await verify_handler(mock_request)
 
         data = await get_response_json(response)
-        assert data["authenticated"] is True
+        assert data["isAuthenticated"] is True
         assert data["mode"] == "demo"
         assert data["is_production"] is False
 
@@ -276,7 +276,7 @@ class TestVerifyHandler:
         response = await verify_handler(mock_request)
 
         data = await get_response_json(response)
-        assert data["authenticated"] is True
+        assert data["isAuthenticated"] is True
         assert data["mode"] == "production"
         assert data["is_production"] is True
 
@@ -354,7 +354,7 @@ class TestAuthManagerStateTransitions:
         mock_request = MagicMock()
         response = await verify_handler(mock_request)
         data = await get_response_json(response)
-        assert data["authenticated"] is True
+        assert data["isAuthenticated"] is True
         assert data["mode"] == "demo"
 
         # Logout
@@ -366,7 +366,7 @@ class TestAuthManagerStateTransitions:
         mock_request = MagicMock()
         response = await verify_handler(mock_request)
         data = await get_response_json(response)
-        assert data["authenticated"] is False
+        assert data["isAuthenticated"] is False
 
     @pytest.mark.asyncio
     async def test_full_flow_production_mode(self):
@@ -384,7 +384,7 @@ class TestAuthManagerStateTransitions:
         mock_request = MagicMock()
         response = await verify_handler(mock_request)
         data = await get_response_json(response)
-        assert data["authenticated"] is True
+        assert data["isAuthenticated"] is True
         assert data["mode"] == "production"
         assert data["is_production"] is True
 
@@ -397,7 +397,7 @@ class TestAuthManagerStateTransitions:
         mock_request = MagicMock()
         response = await verify_handler(mock_request)
         data = await get_response_json(response)
-        assert data["authenticated"] is False
+        assert data["isAuthenticated"] is False
         assert data["is_production"] is False
 
     @pytest.mark.asyncio
@@ -421,7 +421,7 @@ class TestAuthManagerStateTransitions:
         mock_request = MagicMock()
         response = await verify_handler(mock_request)
         data = await get_response_json(response)
-        assert data["authenticated"] is True
+        assert data["isAuthenticated"] is True
         assert data["mode"] == "demo"
 
 

@@ -43,9 +43,21 @@ class BaseAgent(ABC):
         """Handler for periodic ticks."""
 
     async def log(self, message: str, level: str = "INFO"):
+        # Filter emojis for Windows console compatibility
+        import re
+        emoji_pattern = re.compile("["
+            u"\U0001F600-\U0001F64F"  # emoticons
+            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+            u"\U0001F680-\U0001F6FF"  # transport & map symbols
+            u"\U0001F1E0-\U0001F1FF"  # flags
+            u"\U00002702-\U000027B0"
+            u"\U000024C2-\U0001F251"
+            "]+", flags=re.UNICODE)
+        clean_message = emoji_pattern.sub(r'', message)
+
         payload = {
             "level": level,
-            "message": message,
+            "message": message,  # Keep original message for frontend
             "agent_id": self.agent_id,
             "agent_name": self.name,
             "timestamp": datetime.now().isoformat(),
@@ -55,7 +67,7 @@ class BaseAgent(ABC):
         if os.getenv("JSON_LOGS") == "true":
             print(json.dumps({"type": "LOG", "data": payload}))
         else:
-            print(f"[{self.name}] {message}")
+            print(f"[{self.name}] {clean_message}")
 
     async def log_error(
         self,

@@ -531,6 +531,7 @@ class GhostEngine:
             )
             return web.json_response({"status": "ragnarok_executed", "message": "Emergency liquidation complete. Vault locked."})
 
+        # Routes for direct access (port 3002)
         app.router.add_get("/env-health", get_env_health)
         app.router.add_post("/trigger", trigger_cycle)
         app.router.add_post("/kill-switch", activate_kill_switch)
@@ -538,19 +539,40 @@ class GhostEngine:
         app.router.add_post("/reset", reset_system)
         app.router.add_post("/cancel", cancel_cycle)
         app.router.add_post("/auth", auth_handler)
-        # New authentication endpoints for demo/production mode
-        from core.auth import login_handler, verify_handler, logout_handler
-        app.router.add_post("/api/auth/login", login_handler)
-        app.router.add_get("/api/auth/verify", verify_handler)
-        app.router.add_post("/api/auth/logout", logout_handler)
         app.router.add_get("/pnl", get_pnl)
         app.router.add_get("/pnl/heatmap", get_pnl_heatmap)
-        app.router.add_post("/ragnarok", trigger_ragnarok) # Optional specific endpoint
+        app.router.add_post("/ragnarok", trigger_ragnarok)
         app.router.add_get("/health", health_check)
         app.router.add_post("/autopilot/start", start_autopilot)
         app.router.add_post("/autopilot/stop", stop_autopilot)
         app.router.add_get("/autopilot/status", autopilot_status)
         app.router.add_get("/stream", stream_logs)
+
+        # Authentication endpoints
+        from core.auth import login_handler, verify_handler, logout_handler
+        app.router.add_post("/auth/login", login_handler)
+        app.router.add_get("/auth/verify", verify_handler)
+        app.router.add_post("/auth/logout", logout_handler)
+
+        # Proxied routes (Vite proxy preserves /api prefix)
+        app.router.add_get("/api/env-health", get_env_health)
+        app.router.add_post("/api/trigger", trigger_cycle)
+        app.router.add_post("/api/kill-switch", activate_kill_switch)
+        app.router.add_post("/api/deactivate-kill-switch", deactivate_kill_switch)
+        app.router.add_post("/api/reset", reset_system)
+        app.router.add_post("/api/cancel", cancel_cycle)
+        app.router.add_post("/api/auth", auth_handler)
+        app.router.add_post("/api/auth/login", login_handler)
+        app.router.add_get("/api/auth/verify", verify_handler)
+        app.router.add_post("/api/auth/logout", logout_handler)
+        app.router.add_get("/api/pnl", get_pnl)
+        app.router.add_get("/api/pnl/heatmap", get_pnl_heatmap)
+        app.router.add_post("/api/ragnarok", trigger_ragnarok)
+        app.router.add_get("/api/health", health_check)
+        app.router.add_post("/api/autopilot/start", start_autopilot)
+        app.router.add_post("/api/autopilot/stop", stop_autopilot)
+        app.router.add_get("/api/autopilot/status", autopilot_status)
+        app.router.add_get("/api/stream", stream_logs)
 
         runner = web.AppRunner(app)
         await runner.setup()

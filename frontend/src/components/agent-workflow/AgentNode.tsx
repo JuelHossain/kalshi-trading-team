@@ -279,7 +279,7 @@ const AgentNode = memo(({ data, selected }: NodeProps<AgentNodeData>) => {
               <motion.span
                 className="font-mono font-bold"
                 style={{ color }}
-                key={value}
+                key={`${key}-val-${value}`}
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.3 }}
@@ -303,7 +303,7 @@ const AgentNode = memo(({ data, selected }: NodeProps<AgentNodeData>) => {
               initial={{ opacity: 0, x: -5 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3 }}
-              key={lastAction}
+              key={`action-${agentId}-${lastAction}`}
             >
               {lastAction}
             </motion.p>

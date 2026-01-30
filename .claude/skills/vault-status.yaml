@@ -1,0 +1,20 @@
+description: Quick vault state check without starting full HUD (balance, positions, risk metrics)
+
+allowed_abilities:
+  - Run shell commands
+
+prompt: |
+  Check vault status including balance, positions, and risk metrics.
+  Usage: /vault-status [options]
+
+  Options:
+    --json              Output as JSON
+    --balance-only      Show only balance information
+    --positions         Show only positions
+
+  Examples:
+    /vault-status                    # Full status
+    /vault-status --balance-only     # Quick balance check
+    /vault-status --json             # Machine-readable output
+
+  Command: python3 ai-env/skills/core-ops/scripts/vault_status.py {args}

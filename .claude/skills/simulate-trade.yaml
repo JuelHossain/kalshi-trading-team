@@ -1,0 +1,14 @@
+description: Run quick trade simulations against Brain agent logic (variance, EV, confidence checks)
+
+allowed_abilities:
+  - Run shell commands
+
+prompt: |
+  Run a trade simulation to validate Brain agent decision logic.
+  Usage: /simulate-trade <ticker> <price> [--vegas-prob <prob>]
+
+  Examples:
+    /simulate-trade INX-2024-01 0.50
+    /simulate-trade INX-2024-01 0.45 --vegas-prob 0.60
+
+  Command: python3 ai-env/skills/core-ops/scripts/simulate_trade.py {args}

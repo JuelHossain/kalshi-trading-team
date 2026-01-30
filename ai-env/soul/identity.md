@@ -51,3 +51,6 @@ A good snapshot saves **time and tokens**. Before you hand off, answer:
 
 ### [2026-01-29] by feat(evolution)
 **Snapshot**: Fixed handoff.sh with evolution integration, created git_enforcer.py, added 'never use mock data' rule to AGENTS.md
+
+### [2026-01-29] by chore(agent-workflow)
+**Snapshot**: Agent workflow visualization improvements, added specialized reviewer agents for security and trading logic validation

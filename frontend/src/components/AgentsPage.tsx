@@ -7,6 +7,7 @@ interface AgentsPageProps {
   onSelectAgent: (id: number) => void;
   activeAgentId: number | null;
   viewedAgentId: number | null;
+  isLoggedIn?: boolean;
 }
 
 const AgentsPage: React.FC<AgentsPageProps> = ({
@@ -14,6 +15,7 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
   onSelectAgent,
   activeAgentId,
   viewedAgentId,
+  isLoggedIn = true,
 }) => {
   const [filter, setFilter] = useState<'ALL' | 'WORKING' | 'IDLE'>('ALL');
 
@@ -125,19 +127,28 @@ const AgentsPage: React.FC<AgentsPageProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation(); // Prevent card select when clicking button
-                onTestAgent(agent.id);
-                onSelectAgent(agent.id); // Also select it
+                if (isLoggedIn) {
+                  onTestAgent(agent.id);
+                  onSelectAgent(agent.id); // Also select it
+                }
               }}
+              disabled={!isLoggedIn}
               className={`
                         w-full py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all
                         ${
-                          activeAgentId === agent.id
-                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-wait'
-                            : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-black hover:shadow-[0_0_15px_rgba(16,185,129,0.4)]'
+                          !isLoggedIn
+                            ? 'bg-gray-500/10 text-gray-500 border border-gray-500/20 cursor-not-allowed'
+                            : activeAgentId === agent.id
+                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-wait'
+                              : 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-black hover:shadow-[0_0_15px_rgba(16,185,129,0.4)]'
                         }
                     `}
             >
-              {activeAgentId === agent.id ? 'DIAGNOSING...' : 'RUN SELF-TEST'}
+              {!isLoggedIn
+                ? 'LINK OFFLINE'
+                : activeAgentId === agent.id
+                  ? 'DIAGNOSING...'
+                  : 'RUN SELF-TEST'}
             </button>
           </div>
         ))}

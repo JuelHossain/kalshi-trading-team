@@ -362,8 +362,10 @@ const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({ className }) =>
   // Activate edges based on active agent
   useEffect(() => {
     if (activeAgentId !== null) {
+      console.log('[AgentWorkflowGraph] Active agent ID changed:', activeAgentId);
       const agentMap: Record<number, string> = { 1: 'soul', 2: 'senses', 3: 'brain', 4: 'hand' };
       const activeAgent = agentMap[activeAgentId];
+      console.log('[AgentWorkflowGraph] Active agent:', activeAgent);
 
       // Activate edges for the active agent
       setEdges((edges) =>

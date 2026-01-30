@@ -92,33 +92,42 @@ class SensesAgent(BaseAgent):
         try:
             # 1. Fetch Kalshi markets
             markets = await self.fetch_kalshi_markets()
-            
+
             if not markets:
                 await self.log("No markets found to scan.", level="WARN")
                 return
 
-            await self.log(f"Scanned {len(markets)} Kalshi markets.")
+            await self.log(f"Scanning {len(markets)} Kalshi markets...")
 
             # 2. Select Top 10 by Volume (Liquidity Priority)
             opportunities = await self.select_top_opportunities(markets)
 
             if opportunities:
-                await self.log(f"Selected {len(opportunities)} high-volume opportunities for analysis.")
+                await self.log(f"Selected {len(opportunities)} high-volume opportunities for queuing...")
+                queued_count = 0
                 for opp in opportunities:
                     await self.queue_opportunity(opp)
-            else:
-                await self.log("WARNING: No significant opportunities detected", level="WARN")
+                    queued_count += 1
 
-            # 3. Signal Brain if opportunities exist
-            if self.opportunity_queue:
+                await self.log(f"Queue Summary: {queued_count} opportunities queued successfully")
+
+                # Verify queue size
+                if self.synapse:
+                    queue_size = await self.synapse.opportunities.size()
+                    await self.log(f"Synapse Queue Size: {queue_size}", level="INFO")
+
+                # 3. Signal Brain if opportunities exist
                 await self.bus.publish(
                     "OPPORTUNITIES_READY",
                     {
-                        "count": len(self.opportunity_queue),
-                        "top": self.opportunity_queue[0] if self.opportunity_queue else None,
+                        "count": queued_count,
+                        "source": "SENSES",
                     },
                     self.name,
                 )
+                await self.log("Signaled Brain: OPPORTUNITIES_READY event published")
+            else:
+                await self.log("WARNING: No significant opportunities detected", level="WARN")
 
         except Exception as e:
             await self.log(f"Surveillance error: {str(e)[:100]}", level="ERROR")
@@ -132,19 +141,34 @@ class SensesAgent(BaseAgent):
         try:
             # Use shared Kalshi client
             markets = await self.kalshi_client.get_active_markets()
-            
+
             if markets is None:
                 await self.log(
                     "ERROR: Kalshi API request failed - check network and credentials",
                     level="ERROR",
                 )
                 return []
-                
-            await self.log(f"DEBUG: Active markets fetched: {len(markets)}", level="INFO")
-            
-            # Simple filter for demo: Active status is handled by API
+
+            if not isinstance(markets, list):
+                await self.log(
+                    f"ERROR: Expected list of markets, got {type(markets).__name__}",
+                    level="ERROR",
+                )
+                return []
+
+            await self.log(f"Fetched {len(markets)} markets from Kalshi API", level="INFO")
+
+            # Log sample market for debugging
+            if len(markets) > 0:
+                sample = markets[0]
+                ticker = sample.get("ticker", "NO_TICKER")
+                volume = sample.get("volume", 0)
+                await self.log(f"Sample market: {ticker} | Volume: {volume}", level="DEBUG")
+            else:
+                await self.log("WARNING: No markets returned from Kalshi API", level="WARN")
+
             return markets
-            
+
         except Exception as e:
             await self.log(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
             return []
@@ -184,21 +208,33 @@ class SensesAgent(BaseAgent):
                 }
             )
 
-        # Log filtering results
-        await self.log(f"Selection Report: Picked top {len(opportunities)} markets by volume. Max Vol: {opportunities[0]['volume'] if opportunities else 0}", level="INFO")
+        # Log filtering results with market details
+        await self.log(f"Selected {len(opportunities)} top markets by volume", level="INFO")
+        for i, opp in enumerate(opportunities, 1):
+            ticker = opp.get("ticker", "UNKNOWN")
+            volume = opp.get("volume", 0)
+            price = opp.get("kalshi_price", 0)
+            await self.log(f"  {i}. {ticker} | Vol: ${volume} | Price: {price*100:.1f}c", level="DEBUG")
+
+        max_vol = opportunities[0]['volume'] if opportunities else 0
+        await self.log(f"Max Volume: ${max_vol}", level="INFO")
         return opportunities
 
     async def queue_opportunity(self, opportunity: dict):
-        """Add opportunity to queue and Supabase"""
-        # Synapse Integration
+        """Add opportunity to Synapse queue (primary) and legacy queue (fallback)"""
+        ticker = opportunity.get("ticker", "UNKNOWN")
+        volume = opportunity.get("volume", 0)
+
+        # Synapse Integration (Primary Queue)
+        synapse_success = False
         if self.synapse:
             try:
                 # Basic Mapping
                 m_data = opportunity.get("market_data", {})
                 def g(k, d=None): return m_data.get(k, d)
-                
+
                 market_payload = MarketData(
-                    ticker=opportunity["ticker"],
+                    ticker=ticker,
                     title=g("title", "Unknown"),
                     subtitle=g("subtitle", ""),
                     yes_price=int(opportunity.get("kalshi_price", 0) * 100),
@@ -207,36 +243,38 @@ class SensesAgent(BaseAgent):
                     expiration=g("expiration_time", str(datetime.now())),
                     raw_response=m_data
                 )
-                
+
                 opp_model = Opportunity(
-                    ticker=opportunity["ticker"],
+                    ticker=ticker,
                     market_data=market_payload,
                     source="SENSES",
-                    # timestamp default
                 )
-                
+
                 await self.synapse.opportunities.push(opp_model)
-                await self.log(f"Synapse Push: {opportunity['ticker']}")
+
+                # Verify the push succeeded by checking queue size
+                queue_size = await self.synapse.opportunities.size()
+                await self.log(f"[OK] Queued to Synapse: {ticker} (Queue Size: {queue_size}) | Volume: {volume}")
+                synapse_success = True
 
             except Exception as e:
-                await self.log(f"Synapse Push Failed: {e}", level="ERROR")
+                await self.log(f"[FAIL] Synapse Push Failed for {ticker}: {e}", level="ERROR")
+                synapse_success = False
 
-
-        # Legacy Flow (Keep for Brain compatibility until Phase 3)
-        signal_package = {
-            "market_id": opportunity["ticker"],
-            "source": opportunity.get("source", "Kalshi"),
-            "gap_delta": 0,  
-            "pinnacle_odds": 0,
-            "kalshi_price": opportunity["kalshi_price"],
-            "status": "QUEUED",
-            "market_data": opportunity.get("market_data", {})
-        }
-        self.opportunity_queue.append(opportunity) 
-        await log_to_db("opportunity_queue", signal_package)
-        await self.log(
-            f"Queued: {signal_package['market_id']} | Vol: {opportunity['volume']}"
-        )
+        # Legacy Flow (Fallback - only if Synapse failed or not available)
+        if not synapse_success or not self.synapse:
+            signal_package = {
+                "market_id": ticker,
+                "source": opportunity.get("source", "Kalshi"),
+                "gap_delta": 0,
+                "pinnacle_odds": 0,
+                "kalshi_price": opportunity.get("kalshi_price", 0),
+                "status": "QUEUED",
+                "market_data": opportunity.get("market_data", {})
+            }
+            self.opportunity_queue.append(opportunity)
+            await log_to_db("opportunity_queue", signal_package)
+            await self.log(f"[WARN] Fallback to Legacy Queue: {ticker} | Volume: {volume}", level="WARN")
 
     def pop_opportunity(self) -> dict | None:
         """Get next opportunity for Brain"""

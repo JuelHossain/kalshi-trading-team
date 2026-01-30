@@ -2,7 +2,22 @@
   "permissions": {
     "allow": [
       "Read(//c/Users/jrrah/.vscode/extensions/**)",
-      "Read(//c/Users/jrrah/.vscode/**)"
+      "Read(//c/Users/jrrah/.vscode/**)",
+      "Read(//c/Users/jrrah/.serena/**)",
+      "mcp__plugin_serena_serena__get_current_config",
+      "mcp__plugin_playwright_playwright__browser_console_messages",
+      "Read(//c/Users/jrrah/.claude/**)",
+      "mcp__plugin_playwright_playwright__browser_click",
+      "Bash(timeout:*)",
+      "Bash(npm install:*)",
+      "Bash(dir \"C:\\\\Users\\\\jrrah\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\e--Projects-kalshi-trading-team\\\\tasks\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(gh:*)",
+      "Bash(./scripts/handoff.sh:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\jrrah\\.serena"
     ],
     "allow_all": true,
     "read": true,
@@ -10,5 +25,21 @@
     "bash": true,
     "web": true,
     "mcp": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "pattern": "engine/**/*.py",
+        "command": "npx kill-port 3002 && cd engine && python main.py",
+        "description": "Restart engine after Python changes"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "pattern": "**/.env*",
+        "block": true,
+        "message": "SECURITY: Direct modification of .env files is blocked. Use environment variable management or contact system administrator."
+      }
+    ]
   }
 }

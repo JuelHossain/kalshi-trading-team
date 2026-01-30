@@ -1,59 +1,80 @@
 import React from 'react';
-import { SimulationState } from '@shared/types';
+import { motion } from 'framer-motion';
+
+interface SimulationState {
+  confidence?: number;
+  variance?: number;
+  veto?: boolean;
+}
 
 interface SimulationResultsProps {
   simulation?: SimulationState;
 }
 
 const SimulationResults: React.FC<SimulationResultsProps> = ({ simulation }) => {
-  if (!simulation) {
-    return (
-      <div className="bg-white/5 rounded-2xl p-5 border border-white/5 flex items-center justify-center opacity-40">
-        <span className="text-[10px] font-mono tracking-widest uppercase">
-          Awaiting Monte Carlo Data...
-        </span>
-      </div>
-    );
-  }
+  const confidence = simulation?.confidence ?? 0;
+  const variance = simulation?.variance ?? 0;
+  const veto = simulation?.veto ?? false;
 
   return (
-    <div className="bg-white/5 rounded-2xl p-5 border border-white/5 relative overflow-hidden group">
-      <div className="flex justify-between items-center mb-4">
-        <span className="text-[10px] text-blue-400/80 uppercase font-mono tracking-widest flex items-center gap-2">
-          <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
-          Sim Scientist Results
+    <div className="bg-white/5 rounded-xl p-4 border border-white/10 h-full">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">
+          Simulation
         </span>
-        {simulation.veto && (
-          <span className="text-[9px] text-red-400 font-bold uppercase px-2 py-0.5 rounded-full bg-red-400/10 border border-red-400/20">
-            VETO TRIGGERED
+        {veto ? (
+          <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded text-[9px] font-bold uppercase">
+            VETO
+          </span>
+        ) : (
+          <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-[9px] font-bold uppercase">
+            PASS
           </span>
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-4">
+        {/* Confidence Bar */}
         <div>
-          <div className="text-[8px] text-gray-500 uppercase tracking-widest mb-1">Win Rate</div>
-          <div
-            className={`text-2xl font-black font-tech ${simulation.winRate >= 58 ? 'text-emerald-400' : 'text-red-400'}`}
-          >
-            {((simulation.winRate ?? 0) * 1).toFixed(1)}%
+          <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+            <span>Confidence</span>
+            <span>{(confidence * 100).toFixed(1)}%</span>
+          </div>
+          <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-purple-500 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${confidence * 100}%` }}
+              transition={{ duration: 0.5 }}
+            />
           </div>
         </div>
-        <div>
-          <div className="text-[8px] text-gray-500 uppercase tracking-widest mb-1">EV Score</div>
-          <div className="text-2xl font-black font-tech text-white">
-            {(simulation.evScore ?? 0).toFixed(3)}
-          </div>
-        </div>
-      </div>
 
-      <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center">
-        <span className="text-[8px] text-gray-600 font-mono uppercase">
-          Iterations: {simulation.iterations}k
-        </span>
-        <span className="text-[8px] text-gray-600 font-mono uppercase">
-          Variance: {simulation.variance}%
-        </span>
+        {/* Variance Bar */}
+        <div>
+          <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+            <span>Variance</span>
+            <span>{(variance * 100).toFixed(1)}%</span>
+          </div>
+          <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+            <motion.div
+              className={`h-full rounded-full ${variance > 0.25 ? 'bg-red-500' : 'bg-cyan-500'}`}
+              initial={{ width: 0 }}
+              animate={{ width: `${variance * 100}%` }}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+        </div>
+
+        {veto && (
+          <motion.div
+            className="p-2 bg-red-500/10 border border-red-500/20 rounded text-[9px] text-red-400"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            Heuristic veto triggered: Variance &gt; 0.25
+          </motion.div>
+        )}
       </div>
     </div>
   );

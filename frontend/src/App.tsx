@@ -9,29 +9,16 @@ import PnLChart from './components/PnLChart';
 import PnLHeatmap from './components/PnLHeatmap';
 import Login from './components/Login';
 import { useOrchestrator } from './hooks/useOrchestrator';
+import { useStore } from './store/useStore';
 import { useAuth } from './hooks/useAuth';
-import SimulationResults from './components/SimulationResults';
-import VaultGauge from './components/VaultGauge';
 import LogisticsCenter from './components/LogisticsCenter';
+import SensesMetrics from './components/SensesMetrics';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { AgentWorkflowGraph } from './components/agent-workflow';
-
-interface QueueItem {
-  id: string;
-  data: unknown;
-}
+import { AgentWorkflowGraph, WorkflowControls, WorkflowTimeline } from './components/agent-workflow';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [isPaperTrading, setIsPaperTrading] = useState(true);
-
-  // Queue states for Logistics Center
-  const [opportunityQueue] = useState<QueueItem[]>([]);
-  const [executionQueue] = useState<QueueItem[]>([]);
-  const [scoutStatus] = useState('active');
-  const [brainStatus] = useState('idle');
-  const [sniperStatus] = useState('ready');
 
   const addLogToOrchestrator = (msg: string, _id: number, _level: string) => {
     // This will be handled by the backend broadcast,
@@ -39,23 +26,66 @@ const App: React.FC = () => {
     console.log(`[UI LOG] ${msg}`);
   };
 
+  // New auth system - Demo/Production mode
   const {
-    apiKeyId,
-    setApiKeyId,
-    apiSecret,
-    setApiSecret,
-    isLoggedIn,
+    isAuthenticated: isLoggedIn,
+    authMode,
     isAuthenticating,
     authError,
-    handleLogin,
-  } = useAuth(addLogToOrchestrator, isPaperTrading);
+    login,
+  } = useAuth();
 
-  const orchestratorProps = useOrchestrator(isLoggedIn, isPaperTrading);
+  const orchestratorProps = useOrchestrator(isLoggedIn, authMode === 'demo');
 
   const [viewedAgentId, setViewedAgentId] = useState<number | null>(null);
 
   const handleSelectAgent = (id: number) => {
     setViewedAgentId(id);
+  };
+
+  // Demo animation handler - manually triggers workflow animations
+  const handleDemoAnimation = () => {
+    console.log('[App] Starting demo animation...');
+    const store = useStore.getState();
+
+    // Sequential animation through all 4 agents
+    const agents = [1, 2, 3, 4]; // SOUL -> SENSES -> BRAIN -> HAND
+    const delays = [0, 1000, 2000, 3000];
+
+    agents.forEach((agentId, index) => {
+      setTimeout(() => {
+        console.log(`[App] Demo animation: Activating agent ${agentId}`);
+        store.setActiveAgentId(agentId);
+        store.setAgentState(agentId, {
+          status: 'active',
+          lastAction: `Demo action ${index + 1}`,
+          lastUpdated: new Date().toISOString(),
+        });
+
+        // Add transition
+        const transition = {
+          id: `demo-trans-${Date.now()}-${agentId}`,
+          fromAgent: agentId,
+          toAgent: agentId < 4 ? agentId + 1 : 4,
+          flowType: ['authorization', 'opportunity', 'decision', 'execution'][index] as any,
+          timestamp: new Date().toISOString(),
+          data: { message: `Demo transition ${index + 1}` },
+          active: true,
+        };
+        store.addTransition(transition);
+
+        // Reset to idle after animation
+        setTimeout(() => {
+          store.setAgentState(agentId, { status: 'idle' });
+        }, 2000);
+      }, delays[index]);
+    });
+
+    // Reset all after sequence completes
+    setTimeout(() => {
+      store.setActiveAgentId(null);
+      console.log('[App] Demo animation complete');
+    }, 5000);
   };
 
   // Header Status Logic
@@ -73,17 +103,13 @@ const App: React.FC = () => {
     return 'Neural Link Standby';
   };
 
-  if (!isLoggedIn && !isPaperTrading) {
+  // Show login screen when not authenticated
+  if (!isLoggedIn) {
     return (
       <Login
-        apiKeyId={apiKeyId}
-        setApiKeyId={setApiKeyId}
-        apiSecret={apiSecret}
-        setApiSecret={setApiSecret}
-        isPaperTrading={isPaperTrading}
-        setIsPaperTrading={setIsPaperTrading}
-        handleLogin={handleLogin}
+        onLogin={login}
         authError={authError}
+        isAuthenticating={isAuthenticating}
       />
     );
   }
@@ -134,34 +160,36 @@ const App: React.FC = () => {
 
           <div className="flex items-center gap-4">
             <div
-              className={`flex items-center p-1 bg-black/40 rounded-full border border-white/5 ${orchestratorProps.killSwitchActive ? 'opacity-50' : ''}`}
+              className={`flex items-center p-1 bg-black/40 rounded-full border border-white/5 ${orchestratorProps.killSwitchActive || !isLoggedIn ? 'opacity-50' : ''}`}
             >
               <button
                 onClick={() =>
                   !orchestratorProps.killSwitchActive &&
+                  isLoggedIn &&
                   orchestratorProps.setAutoPilot(!orchestratorProps.autoPilot)
                 }
-                disabled={orchestratorProps.killSwitchActive}
+                disabled={orchestratorProps.killSwitchActive || !isLoggedIn}
                 className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${
                   orchestratorProps.autoPilot
                     ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
                     : 'text-gray-500 hover:text-gray-300'
-                } ${orchestratorProps.killSwitchActive ? 'cursor-not-allowed' : ''}`}
+                } ${orchestratorProps.killSwitchActive || !isLoggedIn ? 'cursor-not-allowed' : ''}`}
               >
                 AUTOPILOT
               </button>
               <button
                 onClick={() =>
                   !orchestratorProps.killSwitchActive &&
+                  isLoggedIn &&
                   !orchestratorProps.autoPilot &&
                   orchestratorProps.setAutoPilot(true)
                 }
-                disabled={orchestratorProps.killSwitchActive}
+                disabled={orchestratorProps.killSwitchActive || !isLoggedIn}
                 className={`px-4 py-1.5 rounded-full text-[10px] font-bold transition-all ${
                   !orchestratorProps.autoPilot
                     ? 'bg-white/10 text-white'
                     : 'text-transparent w-0 p-0 overflow-hidden'
-                } ${orchestratorProps.killSwitchActive ? 'cursor-not-allowed' : ''}`}
+                } ${orchestratorProps.killSwitchActive || !isLoggedIn ? 'cursor-not-allowed' : ''}`}
               >
                 MANUAL
               </button>
@@ -175,20 +203,22 @@ const App: React.FC = () => {
                   ? orchestratorProps.handleCancelCycle()
                   : orchestratorProps.runOrchestrator()
               }
-              disabled={orchestratorProps.killSwitchActive}
+              disabled={orchestratorProps.killSwitchActive || !isLoggedIn}
               className={`!py-1.5 !px-5 !text-[10px] tracking-widest btn-primary ${
-                orchestratorProps.killSwitchActive
+                orchestratorProps.killSwitchActive || !isLoggedIn
                   ? 'opacity-50 cursor-not-allowed'
                   : orchestratorProps.isProcessing
                     ? 'bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border-orange-500/30'
                     : 'hover:scale-105 active:scale-95'
               }`}
             >
-              {orchestratorProps.killSwitchActive
-                ? '🔒 LOCKED'
-                : orchestratorProps.isProcessing
-                  ? 'CANCEL CYCLE'
-                  : 'INITIATE CYCLE'}
+              {!isLoggedIn
+                ? '🔗 LINK OFFLINE'
+                : orchestratorProps.killSwitchActive
+                  ? '🔒 LOCKED'
+                  : orchestratorProps.isProcessing
+                    ? 'CANCEL CYCLE'
+                    : 'INITIATE CYCLE'}
             </Button>
           </div>
         </Card>
@@ -198,39 +228,45 @@ const App: React.FC = () => {
         <div className="flex-1 overflow-y-auto no-scrollbar relative z-0 p-6 lg:p-10">
           <div className="max-w-[1600px] mx-auto h-full">
             {activeTab === 'dashboard' && (
-              <div className="grid grid-cols-12 gap-10 h-full animate-scale-in">
-                {/* Left Content: Visualizer & Charts */}
-                <div className="col-span-12 xl:col-span-8 flex flex-col gap-10">
-                  <LogisticsCenter
-                    opportunityQueue={opportunityQueue}
-                    executionQueue={executionQueue}
-                    scoutStatus={scoutStatus}
-                    brainStatus={brainStatus}
-                    sniperStatus={sniperStatus}
+              <div className="flex flex-col gap-6 h-full animate-scale-in">
+                {/* Top: Compact Terminal */}
+                <div className="h-[280px] shrink-0">
+                  <Terminal
+                    timelineEvents={orchestratorProps.timelineEvents}
+                    activeAgentId={orchestratorProps.activeAgentId}
                   />
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    <VaultGauge vault={orchestratorProps.vault} />
-                    <SimulationResults simulation={orchestratorProps.simulation} />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    <Card className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors">
-                      <PnLChart />
-                    </Card>
-                    <Card className="glass-panel rounded-[2rem] p-8 h-[420px] shadow-lg hover:border-white/10 transition-colors">
-                      <PnLHeatmap />
-                    </Card>
-                  </div>
                 </div>
 
-                {/* Right Content: Terminal */}
-                <div className="col-span-12 xl:col-span-4 flex flex-col min-h-[600px]">
-                  <div className="h-full">
-                    <Terminal
-                      timelineEvents={orchestratorProps.timelineEvents}
-                      activeAgentId={orchestratorProps.activeAgentId}
+                {/* Bottom: Visualizer & Charts */}
+                <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
+                  <div className="col-span-12 xl:col-span-8 flex flex-col gap-6">
+                    <LogisticsCenter />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1">
+                      <Card className="glass-panel rounded-[2rem] p-8 h-full min-h-[300px] shadow-lg hover:border-white/10 transition-colors">
+                        <PnLChart />
+                      </Card>
+                      <Card className="glass-panel rounded-[2rem] p-8 h-full min-h-[300px] shadow-lg hover:border-white/10 transition-colors">
+                        <PnLHeatmap />
+                      </Card>
+                    </div>
+                  </div>
+
+                  {/* Right Side: Senses Metrics & Additional Widgets */}
+                  <div className="col-span-12 xl:col-span-4 flex flex-col gap-6">
+                    <SensesMetrics
+                      logs={orchestratorProps.logs}
+                      cycleCount={orchestratorProps.cycleCount}
                     />
+                    <Card className="glass-panel rounded-[2rem] p-6 flex-1 flex items-center justify-center border border-white/5">
+                      <div className="text-center">
+                        <div className="text-4xl mb-3">📊</div>
+                        <div className="text-[10px] text-gray-500 font-mono uppercase tracking-widest">
+                          Metrics Panel
+                        </div>
+                        <div className="text-xs text-gray-600 mt-1">Coming Soon</div>
+                      </div>
+                    </Card>
                   </div>
                 </div>
               </div>
@@ -238,24 +274,59 @@ const App: React.FC = () => {
 
             {activeTab === 'workflow' && (
               <div className="animate-scale-in h-full">
-                <div className="grid grid-cols-1 gap-6 h-[calc(100vh-200px)]">
-                  {/* Main Workflow Visualization */}
-                  <Card className="glass-panel rounded-[2rem] p-6 shadow-2xl border border-white/10 overflow-hidden">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-2xl font-tech font-bold text-white uppercase tracking-wider">
-                        Agent Workflow
-                      </h2>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                        <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
-                          Live
-                        </span>
+                <div className="grid grid-cols-12 gap-6 h-[calc(100vh-140px)]">
+                  {/* Left: Workflow Visualization */}
+                  <div className="col-span-12 xl:col-span-9 flex flex-col gap-4">
+                    {/* Workflow Controls */}
+                    <WorkflowControls
+                      isProcessing={orchestratorProps.isProcessing}
+                      autoPilot={orchestratorProps.autoPilot}
+                      killSwitchActive={orchestratorProps.killSwitchActive}
+                      isLoggedIn={isLoggedIn}
+                      onInitiateCycle={orchestratorProps.runOrchestrator}
+                      onCancelCycle={orchestratorProps.handleCancelCycle}
+                      onToggleAutopilot={() => orchestratorProps.setAutoPilot(!orchestratorProps.autoPilot)}
+                      onReset={() => {
+                        // Clear transitions and reset view
+                        useStore.getState().clearTransitions?.();
+                      }}
+                      onDemoAnimation={handleDemoAnimation}
+                    />
+
+                    {/* Main Workflow Graph */}
+                    <Card className="glass-panel rounded-[2rem] p-6 shadow-2xl border border-white/10 overflow-hidden flex-1">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h2 className="text-2xl font-tech font-bold text-white uppercase tracking-wider">
+                            Agent Workflow
+                          </h2>
+                          <p className="text-[10px] text-gray-500 font-mono mt-1">
+                            Real-time visualization of the 4 Mega-Agent pipeline
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                          <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
+                            Live
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="h-[calc(100%-60px)]">
-                      <AgentWorkflowGraph />
-                    </div>
-                  </Card>
+                      <div className="h-[calc(100%-80px)]">
+                        <AgentWorkflowGraph />
+                      </div>
+                    </Card>
+                  </div>
+
+                  {/* Right: Senses Metrics & Timeline Panel */}
+                  <div className="col-span-12 xl:col-span-3 flex flex-col gap-4">
+                    <SensesMetrics
+                      logs={orchestratorProps.logs}
+                      cycleCount={orchestratorProps.cycleCount}
+                    />
+                    <WorkflowTimeline
+                      transitions={(orchestratorProps as any).activeTransitions || []}
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -267,6 +338,7 @@ const App: React.FC = () => {
                   onSelectAgent={handleSelectAgent}
                   activeAgentId={orchestratorProps.activeAgentId}
                   viewedAgentId={viewedAgentId}
+                  isLoggedIn={isLoggedIn}
                 />
               </div>
             )}
