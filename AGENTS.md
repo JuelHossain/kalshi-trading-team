@@ -2,25 +2,26 @@
 
 ## ⚠️ CRITICAL: READ FIRST
 
-**🚨 TWO NON-NEGOTIABLE RULES:**
+**🛑 STOP! Before doing ANY work, answer this:**
 
-**1. AUTO-DELEGATION IS MANDATORY**
-- **3+ files? → DELEGATE via Task tool**
-- **Feature work? → DELEGATE via Task tool**
-- **NOT optional. NO exceptions.**
-- See [NLF_PROTOCOL.md](./ai-env/core-docs/NLF_PROTOCOL.md)
+**Am I about to modify 3+ files OR implement a feature?**
+- **YES** → You MUST use Task tool to delegate. DO NOT proceed.
+- **NO** → You may proceed with simple 1-2 file changes only.
 
-**2. ALWAYS COMMIT YOUR WORK**
-- **Before ending your session: COMMIT EVERYTHING**
-- **Use: `./scripts/handoff.sh "your message"`**
-- **Uncommitted work = failed session**
-- **NO exceptions. NO "I'll do it later".**
+**If you proceed without delegating when you should have, YOU ARE FAILING.**
+
+---
+
+**ALWAYS COMMIT BEFORE LEAVING:**
+- `./scripts/handoff.sh "message"`
+- Uncommitted work = FAILED session
+
+---
 
 ## Entry Protocol
 1. **Read identity.md**: Check `ai-env/soul/identity.md` for Core Essence first.
 2. **Check Task Board**: Run `cat ai-env/tasks/BOARD.md` for pending tasks.
-3. **DELEGATE complex work**: 3+ files, features, architectural changes → use Task tool.
-4. **Task Board Commands**:
+3. **Task Board Commands**:
    - `/status` - Show current BOARD.md state
 
 This file provides structured context for AI agents working on the Sentient Alpha Trading Bot. Adherence to these standards is mandatory for autonomous safety and system integrity.
