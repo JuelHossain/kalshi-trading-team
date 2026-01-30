@@ -1,6 +1,7 @@
 # Skill: System Evolution (Self-Healing)
 ---
 description: Autonomous generation and maintenance of project skills.
+last_modified: 2026-01-29
 ---
 
 This skill enables AI assistants to extend the technical capabilities of Sentient Alpha by creating new skills in `ai-env/skills/`.
@@ -16,3 +17,27 @@ Every skill MUST follow the structure defined in [SKILL_TEMPLATE.md](./scripts/S
 ## 🛡️ Safety Guardrails
 - NEVER modify existing core skills (`git-workflow`, `sys-maintenance`) without explicit user review.
 - Always sync new skills to the root `ai-env/skills/` via symlink protocol.
+
+## Evolution Context
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `.claude/skills/test-generator/scripts/generate_test.py`, `ai-env/skills/task-delegation/scripts/task_manager.py`, `scripts/evolution/README.md`
+- **Additional**: 21 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `.claude/skills/test-generator/scripts/generate_test.py`, `ai-env/skills/task-delegation/scripts/task_manager.py`, `scripts/evolution/README.md`
+- **Additional**: 21 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `.claude/skills/test-generator/scripts/generate_test.py`, `ai-env/skills/task-delegation/scripts/task_manager.py`, `scripts/evolution/README.md`
+- **Additional**: 21 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `.claude/skills/test-generator/scripts/generate_test.py`, `ai-env/skills/task-delegation/scripts/task_manager.py`, `scripts/evolution/README.md`
+- **Additional**: 21 more files

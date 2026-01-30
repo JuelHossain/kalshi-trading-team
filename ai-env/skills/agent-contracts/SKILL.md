@@ -1,6 +1,7 @@
 ---
 name: agent-contracts
 description: Agent Contract & Service Boundaries for clean inter-agent communication
+last_modified: 2026-01-29
 ---
 
 ## Overview
@@ -39,3 +40,27 @@ This skill enforces the Agent Contract & Service Boundaries pillar, ensuring cle
 - Ensure cycle aborts correctly on malformed Synapse records.
 - Response times under 2.5s for critical paths.
 - No direct state mutations between agents.
+
+## Evolution Context
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Additional**: 2 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Additional**: 2 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Additional**: 2 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Additional**: 2 more files

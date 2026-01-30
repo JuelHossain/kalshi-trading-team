@@ -58,12 +58,18 @@ class PersistentQueue(Generic[T]):
     Asyncio-compatible queue backed by SQLite.
     Ensures data survival across crashes/restarts.
     """
+    # Whitelist of allowed table names to prevent SQL injection
+    ALLOWED_TABLES = {"queue_opportunities", "queue_executions"}
+
     def __init__(self, db_path: str, table_name: str, model_cls: type[T]):
+        if table_name not in self.ALLOWED_TABLES:
+            raise ValueError(f"Invalid table name: {table_name}. Must be one of: {self.ALLOWED_TABLES}")
+
         self.db_path = db_path
         self.table_name = table_name
         self.model_cls = model_cls
         self._lock = asyncio.Lock()
-        
+
         # Initialize DB synchronously (safe at startup)
         self._init_db()
 

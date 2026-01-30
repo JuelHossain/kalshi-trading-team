@@ -8,7 +8,7 @@ groq
 google-genai
 supabase
 psutil
-duckduckgo-search
+ddgs>=4.1.0  # DuckDuckGo search (replaces duckduckgo-search)
 numpy
 ruff
 black

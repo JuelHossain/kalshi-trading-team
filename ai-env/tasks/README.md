@@ -4,11 +4,11 @@ This directory is the **shared workspace** for all AI agents. It eliminates manu
 
 ## 📋 How It Works
 
-### For Planning Agents
-1. Create a task file in `active/` with status `PENDING`.
-2. The `BOARD.md` will be auto-updated.
+### For Claude Code
+- **Task Tool**: Use the native Task tool for subagent delegation and complex multi-step work.
+- **BOARD.md**: Read-only reference for cross-agent visibility.
 
-### For Execution Agents
+### For Other AI Agents (Gemini, OpenCode, etc.)
 1. Check `BOARD.md` to see what's pending.
 2. Claim a task, implement it, and run the completion command.
 3. The task will move to `completed/` and the board updates.
@@ -23,22 +23,25 @@ This directory is the **shared workspace** for all AI agents. It eliminates manu
 - `completed/` - Tasks that are done but awaiting verification.
 - `BOARD.md` - The Kanban dashboard (auto-updated).
 
-## 🚀 Commands
+## 🚀 Commands (For non-Claude agents)
 ```bash
 # List all tasks
-python3 ai-env/skills/task-delegation/scripts/task_manager.py list
+cat ai-env/tasks/BOARD.md
 
 # Claim a task
-python3 ai-env/skills/task-delegation/scripts/task_manager.py claim TASK-001
+# Edit the task file in active/, set status to IN_PROGRESS
 
 # Complete a task
-python3 ai-env/skills/task-delegation/scripts/task_manager.py complete TASK-001
+# Edit the task file, fill the Walkthrough section, move to completed/
 
 # Verify a task
-python3 ai-env/skills/task-delegation/scripts/task_manager.py verify TASK-001
+# Edit the task file, set status to VERIFIED
 ```
 
-## ⚡ Workflows (Shortcuts)
-Instead of typing commands, use these workflows:
-- `/execute` - Check the board and work on pending tasks.
-- `/verify` - Check the board and verify completed tasks.
+## ⚡ Claude Skills (Native)
+Claude Code uses native skills defined in `.claude/skills/`:
+- `health-check` - Full system diagnostics
+- `inspect-signals` - View trade signals in Synapse
+- `run-app` - Application control (dev/prod/status/stop)
+- `sync-docs` - Documentation synchronization
+- `git-handoff` - Atomic git commits with soul snapshot

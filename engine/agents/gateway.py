@@ -24,6 +24,7 @@ class GatewayAgent(BaseAgent):
         await self.bus.subscribe("SYSTEM_LOG", self.handle_system_log)
         await self.bus.subscribe("SIM_RESULT", self.handle_sim)
         await self.bus.subscribe("SYSTEM_HEALTH", self.handle_health)
+        await self.bus.subscribe("SYSTEM_ERROR", self.handle_error)  # Add error handler
 
     # Agent to Phase mapping (mirrors shared/constants.ts)
     AGENT_TO_PHASE = {
@@ -98,6 +99,41 @@ class GatewayAgent(BaseAgent):
     async def handle_health(self, message):
         await self.emit("HEALTH", message.payload)
 
+    async def handle_error(self, message):
+        """Handle SYSTEM_ERROR events from ErrorDispatcher"""
+        from datetime import datetime
+
+        error_data = message.payload
+
+        # Get agent_id for phase mapping
+        agent_name = error_data.get("agent_name", "")
+        agent_id_map = {
+            "SOUL": 1,
+            "SENSES": 2,
+            "BRAIN": 4,
+            "HAND": 8,
+            "GATEWAY": 14
+        }
+        agent_id = agent_id_map.get(agent_name, 0)
+        phase_id = self.AGENT_TO_PHASE.get(agent_id, 0)
+
+        # Format error for frontend
+        error_event = {
+            "id": f"error-{datetime.now().timestamp()}",
+            "timestamp": error_data.get("timestamp", datetime.now().isoformat()),
+            "agentId": agent_id,
+            "cycleId": 1,  # Will be updated by main.py cycle_count
+            "phaseId": phase_id,
+            "code": error_data.get("code", "UNKNOWN_ERROR"),
+            "message": error_data.get("message", "An error occurred"),
+            "severity": error_data.get("severity", "MEDIUM"),
+            "domain": error_data.get("domain", "SYSTEM"),
+            "hint": error_data.get("hint", ""),
+            "context": error_data.get("context", {}),
+        }
+
+        await self.emit("ERROR", error_event)
+
     async def emit(self, msg_type: str, data: Any):
         """Helper to print JSON to stdout and publish to bus for SSE streaming."""
         # Wrap for bus if needed
@@ -110,6 +146,8 @@ class GatewayAgent(BaseAgent):
             bus_topic = "SYSTEM_HEALTH"
         elif msg_type == "STATE":
             bus_topic = "SYSTEM_STATE"
+        elif msg_type == "ERROR":
+            bus_topic = "SYSTEM_ERROR"
 
         if bus_topic:
             await self.bus.publish(bus_topic, data, self.name)
@@ -122,7 +160,7 @@ class GatewayAgent(BaseAgent):
                         "type": msg_type,
                         (
                             "state"
-                            if msg_type in ["VAULT", "SIMULATION", "HEALTH", "STATE"]
+                            if msg_type in ["VAULT", "SIMULATION", "HEALTH", "STATE", "ERROR"]
                             else "log"
                         ): data,
                     }

@@ -1,0 +1,8 @@
+description: Perform a full system health check for Sentient Alpha (React + Python tiers)
+
+allowed_abilities:
+  - Run shell commands
+
+prompt: |
+  Run the health check script to verify system status.
+  Command: python3 ai-env/skills/core-ops/scripts/health_check.py

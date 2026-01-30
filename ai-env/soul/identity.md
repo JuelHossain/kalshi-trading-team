@@ -33,3 +33,21 @@ A good snapshot saves **time and tokens**. Before you hand off, answer:
 
 ### [2026-01-25] by chore(git)
 **Snapshot**: Established Git Maintenance best practices. 'main' is now the Gold Master branch (Production-Ready). 'opencode' remains the primary Agent Workspace for active forge work. Implemented automated GC, pruning, and branch hierarchy enforcement.
+
+### [2026-01-29] by feat(evolution)
+**Snapshot**: Fixed handoff.sh with evolution integration, created git_enforcer.py, added 'never use mock data' rule to AGENTS.md
+
+### [2026-01-29] by feat(evolution)
+**Snapshot**: Fixed handoff.sh with evolution integration, created git_enforcer.py, added 'never use mock data' rule to AGENTS.md
+
+### [2026-01-29] by feat(evolution)
+**Snapshot**: Fixed handoff.sh with evolution integration, created git_enforcer.py, added 'never use mock data' rule to AGENTS.md
+
+### [2026-01-29] by feat(evolution)
+**Snapshot**: Fixed handoff.sh with evolution integration, created git_enforcer.py, added 'never use mock data' rule to AGENTS.md
+
+### [2026-01-29] by feat(evolution)
+**Snapshot**: Fixed handoff.sh with evolution integration, created git_enforcer.py, added 'never use mock data' rule to AGENTS.md
+
+### [2026-01-29] by feat(evolution)
+**Snapshot**: Fixed handoff.sh with evolution integration, created git_enforcer.py, added 'never use mock data' rule to AGENTS.md

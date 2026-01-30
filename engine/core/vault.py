@@ -23,6 +23,9 @@ class RecursiveVault:
         self.initialized = False
         self._lock = asyncio.Lock()
 
+        # Atomic balance tracking
+        self._reserved_funds: int = 0  # Funds reserved for pending orders
+
     async def initialize(self, current_balance_cents: int):
         async with self._lock:
             self.start_of_day_balance = current_balance_cents
@@ -86,3 +89,54 @@ class RecursiveVault:
                 return max(0, tradeable)
 
             return self.current_balance
+
+    def get_available_balance(self) -> int:
+        """Return balance minus reserved funds (what can actually be used)."""
+        return self.current_balance - self._reserved_funds
+
+    def reserve_funds(self, amount: int) -> bool:
+        """
+        Reserve funds for a pending order.
+        Returns True if reservation successful, False if insufficient funds.
+        """
+        available = self.get_available_balance()
+        if available < amount:
+            return False
+
+        self._reserved_funds += amount
+        print(
+            f"{Fore.YELLOW}[VAULT] Reserved ${amount/100:.2f}. "
+            f"Available: ${self.get_available_balance()/100:.2f}{Style.RESET_ALL}"
+        )
+        return True
+
+    def confirm_reservation(self, amount: int):
+        """
+        Confirm a reservation as spent (deduct from actual balance).
+        Called when order is successfully placed.
+        """
+        self._reserved_funds -= amount
+        self.current_balance -= amount
+        print(
+            f"{Fore.CYAN}[VAULT] Order confirmed. Deducted ${amount/100:.2f}. "
+            f"New balance: ${self.current_balance/100:.2f}{Style.RESET_ALL}"
+        )
+
+    def release_reservation(self, amount: int):
+        """
+        Release reserved funds back to available pool.
+        Called when order fails or is cancelled.
+        """
+        self._reserved_funds -= amount
+        print(
+            f"{Fore.GREEN}[VAULT] Released ${amount/100:.2f} reservation. "
+            f"Available: ${self.get_available_balance()/100:.2f}{Style.RESET_ALL}"
+        )
+
+    def lock_principal(self):
+        """Lock the principal amount to prevent trading with it."""
+        self.is_locked = True
+        print(
+            f"{Fore.GREEN}[VAULT] PRINCIPAL LOCKED. ${self.PRINCIPAL_CAPITAL_CENTS/100:.2f} protected. "
+            f"Trading with house money only.{Style.RESET_ALL}"
+        )

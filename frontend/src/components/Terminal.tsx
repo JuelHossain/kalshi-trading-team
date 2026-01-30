@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LogEntry, TimelineEvent, SimulationState, VaultState } from '@shared/types';
+import { LogEntry, TimelineEvent, SimulationState, VaultState, ErrorEvent } from '@shared/types';
 import { PHASES, PHASE_ORDER, INTERVENTION_PHASE, PhaseConfig } from '@shared/constants';
 
 interface TerminalProps {
@@ -103,22 +103,81 @@ const LogLine: React.FC<{ log: LogEntry }> = ({ log }) => {
 
 // --- ERROR & FIXER CARDS (Inline Agent 13) ---
 
-const ErrorCard: React.FC<{ error: any }> = ({ error }) => (
-  <div className="bg-red-900/20 border border-red-500/40 rounded-xl p-4 my-3 backdrop-blur-sm animate-shake relative overflow-hidden">
-    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-red-400 to-red-500 animate-pulse"></div>
-    <div className="flex items-start gap-3">
-      <div className="w-10 h-10 rounded-lg bg-red-500/20 border border-red-500/40 flex items-center justify-center shrink-0">
-        <span className="text-xl">⚠️</span>
-      </div>
-      <div className="flex-1">
-        <div className="text-[10px] text-red-400 uppercase tracking-widest font-mono mb-1">
-          System Error Detected
+const ErrorCard: React.FC<{ error: ErrorEvent }> = ({ error }) => {
+  // Get severity color
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'CRITICAL':
+        return 'border-red-500 bg-red-500/20';
+      case 'HIGH':
+        return 'border-orange-500 bg-orange-500/20';
+      case 'MEDIUM':
+        return 'border-yellow-500 bg-yellow-500/20';
+      case 'LOW':
+        return 'border-blue-500 bg-blue-500/20';
+      default:
+        return 'border-gray-500 bg-gray-500/20';
+    }
+  };
+
+  const severityColor = getSeverityColor(error.severity);
+
+  return (
+    <div
+      className={`${severityColor} border rounded-xl p-4 my-3 backdrop-blur-sm animate-scale-in relative overflow-hidden`}
+    >
+      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 via-orange-400 to-yellow-500 animate-pulse"></div>
+      <div className="flex items-start gap-3">
+        <div
+          className={`w-10 h-10 rounded-lg bg-red-500/20 border border-red-500/40 flex items-center justify-center shrink-0`}
+        >
+          <span className="text-xl">⚠️</span>
         </div>
-        <div className="text-sm text-red-200 font-mono break-words">{error.message || error}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="text-[10px] text-red-400 uppercase tracking-widest font-mono">
+              {error.code}
+            </div>
+            <div
+              className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${
+                error.severity === 'CRITICAL'
+                  ? 'bg-red-500 text-white'
+                  : error.severity === 'HIGH'
+                    ? 'bg-orange-500 text-white'
+                    : error.severity === 'MEDIUM'
+                      ? 'bg-yellow-500 text-black'
+                      : 'bg-blue-500 text-white'
+              }`}
+            >
+              {error.severity}
+            </div>
+            <div className="text-[8px] text-gray-400 uppercase font-mono">{error.domain}</div>
+          </div>
+          <div className="text-sm text-red-200 font-mono break-words mb-2">{error.message}</div>
+          {error.hint && (
+            <div className="text-xs text-yellow-300 font-mono bg-black/20 rounded p-2 border border-yellow-500/30">
+              <span className="font-bold">💡 Hint:</span> {error.hint}
+            </div>
+          )}
+          {error.context && Object.keys(error.context).length > 0 && (
+            <details className="mt-2">
+              <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-300">
+                Context ({Object.keys(error.context).length})
+              </summary>
+              <div className="mt-1 text-[9px] text-gray-500 font-mono bg-black/20 rounded p-2">
+                {Object.entries(error.context).map(([key, value]) => (
+                  <div key={key}>
+                    <span className="text-gray-400">{key}:</span> {String(value)}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 const FixerCard: React.FC<{ data: any }> = ({ data }) => {
   const actionColors: Record<string, string> = {
@@ -273,7 +332,17 @@ const Terminal: React.FC<TerminalProps> = ({ timelineEvents }) => {
           lastLog.count = (lastLog.count || 1) + 1;
           lastLog.timestamp = log.timestamp;
         } else {
-          if (lastLog) compressed.push(lastLog.event);
+          if (lastLog) {
+            // Create a new event with unique ID for compressed logs
+            compressed.push({
+              ...lastLog.event,
+              id: `${lastLog.event.id}-compressed-${lastLog.count}`,
+              data: {
+                ...lastLog.event.data,
+                count: lastLog.count,
+              } as LogEntry,
+            });
+          }
           lastLog = {
             message: log.message,
             level: log.level,
@@ -284,13 +353,31 @@ const Terminal: React.FC<TerminalProps> = ({ timelineEvents }) => {
         }
       } else {
         if (lastLog) {
-          compressed.push(lastLog.event);
+          // Create a new event with unique ID for compressed logs
+          compressed.push({
+            ...lastLog.event,
+            id: `${lastLog.event.id}-compressed-${lastLog.count}`,
+            data: {
+              ...lastLog.event.data,
+              count: lastLog.count,
+            } as LogEntry,
+          });
           lastLog = null;
         }
         compressed.push(event);
       }
     }
-    if (lastLog) compressed.push(lastLog.event);
+    if (lastLog) {
+      // Create a new event with unique ID for compressed logs
+      compressed.push({
+        ...lastLog.event,
+        id: `${lastLog.event.id}-compressed-${lastLog.count}`,
+        data: {
+          ...lastLog.event.data,
+          count: lastLog.count,
+        } as LogEntry,
+      });
+    }
     return compressed;
   };
 

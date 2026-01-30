@@ -1,0 +1,46 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "env": {
+        "CONTEXT7_LOG_LEVEL": "info"
+      },
+      "description": "Live documentation lookup for React, Python, and Supabase libraries",
+      "libraries": [
+        {
+          "name": "react",
+          "description": "React 19 documentation for hooks, components, and patterns"
+        },
+        {
+          "name": "python",
+          "description": "Python 3.11 standard library and common patterns"
+        },
+        {
+          "name": "supabase-js",
+          "description": "Supabase JavaScript client for PostgreSQL operations"
+        },
+        {
+          "name": "zustand",
+          "description": "Zustand state management for React"
+        },
+        {
+          "name": "vitest",
+          "description": "Vitest testing framework documentation"
+        },
+        {
+          "name": "pytest",
+          "description": "pytest testing framework documentation"
+        }
+      ]
+    },
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server-supabase@latest"],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}"
+      },
+      "description": "Direct Supabase database management for migration and querying"
+    }
+  }
+}

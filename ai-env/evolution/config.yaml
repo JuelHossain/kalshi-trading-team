@@ -1,0 +1,149 @@
+# Sentient Alpha - Automatic Documentation Evolution Configuration
+# This file defines how code changes trigger documentation updates
+
+mappings:
+  # Agent logic changes - significant, require sync updates
+  engine_agents:
+    patterns:
+      - "engine/agents/*.py"
+      - "engine/agents/*.pyi"
+    doc_targets:
+      - "ai-env/personas/*.md"
+      - "ai-env/schemas/logic_gates.md"
+    update_mode: "sync"
+    triggers_soul: true
+
+  # Core schema changes - significant, require sync updates
+  engine_core:
+    patterns:
+      - "engine/core/synapse.py"
+      - "engine/core/vault.py"
+      - "engine/core/bus.py"
+      - "engine/core/network.py"
+    doc_targets:
+      - "ai-env/schemas/synapse_schema.md"
+      - "ai-env/schemas/logic_gates.md"
+    update_mode: "sync"
+    triggers_soul: true
+
+  # Main entry point changes
+  engine_main:
+    patterns:
+      - "engine/main.py"
+    doc_targets:
+      - "ai-env/skills/core-ops/SKILL.md"
+      - "ai-env/workflows/run_app.md"
+    update_mode: "sync"
+    triggers_soul: true
+
+  # Frontend component changes - async updates
+  frontend_components:
+    patterns:
+      - "frontend/src/components/*.tsx"
+      - "frontend/src/components/*.ts"
+      - "frontend/src/hooks/*.ts"
+      - "frontend/src/store/*.ts"
+    doc_targets:
+      - "ai-env/skills/ui-design/SKILL.md"
+    update_mode: "async"
+    triggers_soul: false
+
+  # Frontend configuration changes
+  frontend_config:
+    patterns:
+      - "frontend/*.config.ts"
+      - "frontend/*.config.js"
+      - "frontend/package.json"
+    doc_targets:
+      - "ai-env/skills/ui-design/SKILL.md"
+    update_mode: "async"
+    triggers_soul: false
+
+  # Workflow documentation changes
+  workflow_changes:
+    patterns:
+      - "ai-env/workflows/*.md"
+    doc_targets:
+      - "ai-env/workflows/"
+    update_mode: "async"
+    triggers_soul: false
+
+  # Skill documentation changes
+  skill_changes:
+    patterns:
+      - "ai-env/skills/*/SKILL.md"
+      - "ai-env/skills/*/scripts/*.py"
+    doc_targets:
+      - "ai-env/skills/"
+    update_mode: "async"
+    triggers_soul: false
+
+  # Schema documentation changes
+  schema_changes:
+    patterns:
+      - "ai-env/schemas/*.md"
+    doc_targets:
+      - "ai-env/schemas/"
+    update_mode: "async"
+    triggers_soul: false
+
+  # Test file changes
+  test_changes:
+    patterns:
+      - "engine/tests/*.py"
+      - "engine/tests/**/*.py"
+      - "frontend/src/**/*.test.ts"
+      - "frontend/src/**/*.test.tsx"
+    doc_targets:
+      - "ai-env/skills/agent-contracts/SKILL.md"
+    update_mode: "async"
+    triggers_soul: false
+
+  # Configuration changes
+  config_changes:
+    patterns:
+      - "*.yaml"
+      - "*.yml"
+      - "*.json"
+      - "pyproject.toml"
+      - "requirements*.txt"
+    doc_targets:
+      - "ai-env/skills/sys-maintenance/SKILL.md"
+    update_mode: "async"
+    triggers_soul: false
+
+# Significance determination rules
+significance:
+  # Minimum lines changed to be considered significant
+  min_lines_changed: 5
+
+  # High-value files that always trigger significance
+  high_value_files:
+    - "engine/agents/brain.py"
+    - "engine/agents/hand.py"
+    - "engine/agents/senses.py"
+    - "engine/agents/soul.py"
+    - "engine/core/synapse.py"
+    - "engine/core/vault.py"
+    - "engine/core/bus.py"
+    - "engine/main.py"
+
+  # Patterns that indicate high-value changes
+  high_value_patterns:
+    - "engine/agents/base.py"
+    - "engine/core/auth.py"
+    - "shared/types.ts"
+
+# Evolution system settings
+evolution:
+  # Maximum number of soul snapshots to keep
+  max_soul_snapshots: 50
+
+  # Days to keep evolution log entries
+  log_retention_days: 90
+
+  # Whether to auto-stage documentation updates
+  auto_stage_updates: true
+
+  # Whether to allow commits when evolution fails
+  allow_commit_on_failure: true

@@ -15,6 +15,7 @@ import VaultGauge from './components/VaultGauge';
 import LogisticsCenter from './components/LogisticsCenter';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { AgentWorkflowGraph } from './components/agent-workflow';
 
 interface QueueItem {
   id: string;
@@ -231,6 +232,30 @@ const App: React.FC = () => {
                       activeAgentId={orchestratorProps.activeAgentId}
                     />
                   </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'workflow' && (
+              <div className="animate-scale-in h-full">
+                <div className="grid grid-cols-1 gap-6 h-[calc(100vh-200px)]">
+                  {/* Main Workflow Visualization */}
+                  <Card className="glass-panel rounded-[2rem] p-6 shadow-2xl border border-white/10 overflow-hidden">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-2xl font-tech font-bold text-white uppercase tracking-wider">
+                        Agent Workflow
+                      </h2>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                        <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
+                          Live
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-[calc(100%-60px)]">
+                      <AgentWorkflowGraph />
+                    </div>
+                  </Card>
                 </div>
               </div>
             )}

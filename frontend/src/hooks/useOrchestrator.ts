@@ -26,6 +26,38 @@ const getPhaseForType = (type: string, _data: any): number => {
 export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) => {
   const store = useStore();
   const eventBuffer = useRef<any[]>([]);
+  const hasInitialized = useRef(false);
+
+  // Fetch autopilot status from backend on mount to sync state
+  useEffect(() => {
+    if (!hasInitialized.current && isLoggedIn) {
+      fetch(`${ENGINE_URL}/autopilot/status`)
+        .then((res) => res.json())
+        .then((data) => {
+          // Sync frontend state with backend reality
+          store.setAutoPilot(data.autopilot_enabled || false);
+          store.setKillSwitchActive(data.is_locked_down || false);
+          store.setCycleCount(data.cycle_count || 0);
+          store.setIsProcessing(data.is_processing || false);
+
+          // Clear stale timeline events from previous session
+          store.setTimelineEvents([]);
+
+          console.log('[Orchestrator] Synced with backend state:', {
+            autopilot: data.autopilot_enabled,
+            locked: data.is_locked_down,
+            cycle: data.cycle_count,
+          });
+
+          hasInitialized.current = true;
+        })
+        .catch((err) => {
+          console.error('[Orchestrator] Failed to sync backend state:', err);
+          // Still mark as initialized to avoid retry loops
+          hasInitialized.current = true;
+        });
+    }
+  }, [isLoggedIn, store]);
 
   // SSE Connection
   useEffect(() => {
@@ -71,7 +103,30 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
             phaseId: log.phaseId,
             data: log,
           };
-          if (log.agentId) store.setActiveAgentId(log.agentId);
+          if (log.agentId) {
+            store.setActiveAgentId(log.agentId);
+            // Update agent state in agentSlice for workflow visualization
+            const agentMap: Record<number, string> = {
+              1: 'SOUL',
+              2: 'SENSES',
+              3: 'BRAIN',
+              4: 'HAND',
+              11: 'VAULT',
+              14: 'GATEWAY',
+            };
+            const agentName = agentMap[log.agentId] || log.agentName;
+            if (agentName && ['SOUL', 'SENSES', 'BRAIN', 'HAND'].includes(agentName)) {
+              store.setAgentState(log.agentId, {
+                status: 'active',
+                lastAction: log.message,
+                lastUpdated: timestamp,
+              });
+              // Set back to idle after a delay
+              setTimeout(() => {
+                store.setAgentState(log.agentId, { status: 'idle' });
+              }, 2000);
+            }
+          }
           // if (log.phaseId !== undefined) setCurrentPhaseId(log.phaseId); // Handled by store if needed
         } else if (['SIMULATION', 'VAULT', 'MARKET', 'INTERCEPT'].includes(eventType)) {
           const phaseId = getPhaseForType(eventType, rawData.state);
@@ -98,6 +153,17 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
             store.setKillSwitchActive(rawData.state.killSwitchActive);
         } else if (eventType === 'HEALTH') {
           store.setHealth(rawData.state);
+        } else if (eventType === 'ERROR') {
+          // Handle error events from ErrorDispatcher
+          const error = rawData.error;
+          newEvent = {
+            id: error.id,
+            type: 'ERROR' as TimelineEventType,
+            timestamp: error.timestamp,
+            cycleId: error.cycleId,
+            phaseId: error.phaseId,
+            data: error,
+          };
         }
 
         if (newEvent) {
@@ -124,6 +190,30 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
       store.setIsProcessing(false);
     }
   }, [store.isProcessing, isPaperTrading]);
+
+  const handleToggleAutopilot = useCallback(
+    async (enabled: boolean) => {
+      try {
+        const endpoint = enabled ? '/autopilot/start' : '/autopilot/stop';
+        const response = await fetch(`${ENGINE_URL}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isPaperTrading }),
+        });
+
+        if (response.ok) {
+          // Sync local state with backend
+          store.setAutoPilot(enabled);
+          console.log(`[Orchestrator] Autopilot ${enabled ? 'enabled' : 'disabled'}`);
+        } else {
+          console.error(`[Orchestrator] Failed to ${enabled ? 'enable' : 'disable'} autopilot`);
+        }
+      } catch (error) {
+        console.error('[Orchestrator] Autopilot toggle error:', error);
+      }
+    },
+    [isPaperTrading, store]
+  );
 
   // Autopilot Logic
   useEffect(() => {
@@ -164,7 +254,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     cycleCount: store.cycleCount,
     currentPhaseId: store.currentPhaseId,
     autoPilot: store.autoPilot,
-    setAutoPilot: store.setAutoPilot,
+    setAutoPilot: handleToggleAutopilot, // Use backend-syncing function
     runOrchestrator,
     handleCancelCycle,
     handleKillSwitch,

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/jrrah/.vscode/extensions/**)",
+      "Read(//c/Users/jrrah/.vscode/**)"
+    ],
+    "allow_all": true,
+    "read": true,
+    "write": true,
+    "bash": true,
+    "web": true,
+    "mcp": true
+  }
+}

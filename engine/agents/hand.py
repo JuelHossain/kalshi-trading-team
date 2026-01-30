@@ -171,15 +171,60 @@ class HandAgent(BaseAgent):
         return min(stake, self.MAX_STAKE_CENTS)
 
     async def execute_order(self, ticker: str, price: int, stake: int) -> dict:
-        """Place limit order on Kalshi v2"""
+        """Place limit order on Kalshi v2 with comprehensive pre-trade validation."""
+
+        # === PRE-TRADE VALIDATION ===
+
+        # 1. Check kill switch
+        if self.vault.kill_switch_active:
+            return {"success": False, "error": "Kill switch active - trading halted"}
+
+        # 2. Validate ticker format (basic sanity check)
+        if not ticker or not isinstance(ticker, str) or len(ticker) < 3:
+            return {"success": False, "error": f"Invalid ticker format: {ticker}"}
+
+        # 3. Validate price range (Kalshi: 1-99 cents)
+        if not isinstance(price, int) or price < 1 or price > 99:
+            return {"success": False, "error": f"Price must be 1-99 cents, got: {price}"}
+
+        # 4. Validate stake
+        if not isinstance(stake, int) or stake <= 0:
+            return {"success": False, "error": f"Stake must be positive integer, got: {stake}"}
+
+        if stake > self.MAX_STAKE_CENTS:
+            return {"success": False, "error": f"Stake ${stake/100:.2f} exceeds max ${self.MAX_STAKE_CENTS/100:.2f}"}
+
+        # 5. Check available balance (including reserved funds)
+        available_balance = self.vault.get_available_balance()
+        if available_balance < stake:
+            return {
+                "success": False,
+                "error": f"Insufficient funds: available=${available_balance/100:.2f}, required=${stake/100:.2f}"
+            }
+
+        # 6. Check hard floor (emergency stop if balance drops too low)
+        if self.vault.current_balance < 25500:  # $255 hard floor
+            return {"success": False, "error": "Hard floor breach - emergency lockdown active"}
+
+        # === SIMULATION MODE ===
         if not self.kalshi_client:
             await self.log("Kalshi client unavailable. Simulating order.")
-            # Deduct from vault in simulation
-            self.vault.current_balance -= stake
+            # Use atomic balance reservation
+            if not self.vault.reserve_funds(stake):
+                return {"success": False, "error": "Failed to reserve funds for simulation"}
+            # In simulation, we immediately confirm the reservation as spent
+            self.vault.confirm_reservation(stake)
             return {"success": True, "order_id": "SIM-001", "simulated": True}
 
-        if price <= 0 or stake <= 0:
-            return {"success": False, "error": "Invalid price or stake"}
+        # === LIVE TRADING ===
+        # Calculate contract count
+        contract_count = stake // price
+        if contract_count <= 0:
+            return {"success": False, "error": f"Stake ${stake/100:.2f} too small for price {price}¢"}
+
+        # Reserve funds atomically before placing order
+        if not self.vault.reserve_funds(stake):
+            return {"success": False, "error": "Failed to reserve funds"}
 
         try:
             result = await self.kalshi_client.place_order(
@@ -187,10 +232,16 @@ class HandAgent(BaseAgent):
                 side="yes",
                 type="limit",
                 price=price,
-                count=stake // price,  # Number of contracts
+                count=contract_count,
             )
+
+            # Order placed successfully - confirm the reservation
+            self.vault.confirm_reservation(stake)
             return {"success": True, "order_id": result.get("order_id")}
+
         except Exception as e:
+            # Order failed - release the reserved funds
+            self.vault.release_reservation(stake)
             return {"success": False, "error": str(e)[:100]}
 
     async def send_notification(self, ticker: str, stake: int, result: dict):

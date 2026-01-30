@@ -1,0 +1,10 @@
+description: Synchronize project documentation and AI context files
+
+allowed_abilities:
+  - Run shell commands
+
+prompt: |
+  Sync documentation after code changes.
+  Commands:
+  - python3 ai-env/skills/sys-maintenance/scripts/sync_skills.py
+  - python3 ai-env/skills/sys-maintenance/scripts/compact_soul.py

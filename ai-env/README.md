@@ -10,6 +10,7 @@ This folder centralizes the configuration logic for various AI assistants to ens
 
 ### 2. [Claude Code](file:///home/jrrahman01/workspace/active/kalshi-trading-team/CLAUDE.md)
 - **Standard**: Context is automatically loaded via `CLAUDE.md` in the root.
+- **Skills**: Native skills in `.claude/skills/` for common operations (health-check, inspect-signals, run-app, sync-docs, git-handoff).
 - **Workflow**: For custom Claude workflows, see `ai-env/claudecode/workflows.md`.
 
 ### 3. [Antigravity / Gemini](file:///home/jrrahman01/workspace/active/kalshi-trading-team/.gemini/gemini.md)
@@ -27,7 +28,8 @@ This folder centralizes the configuration logic for various AI assistants to ens
 ## 🛠️ Cross-Agent Technical Strategy
 - **Central Persistence**: Every assistant must verify handoffs via `Synapse`.
 - **Symlink Sovereignty**: Never delete `.opencode/skills` or `.agent/workflows`. They are symlinks to `ai-env/`.
-- **Project Soul**: High-level intuition lives in `ai-env/soul/identity.md`. 
+- **Project Soul**: High-level intuition lives in `ai-env/soul/identity.md`.
+- **Claude Skills**: Located in `.claude/skills/` (not symlinks, native to Claude Code). 
 
 ## 🧠 Memory & Token Management
 - **Token Hygiene**: We use **Soul Compaction**. If `identity.md` gets long, run `python3 ai-env/skills/sys-maintenance/scripts/compact_soul.py`.

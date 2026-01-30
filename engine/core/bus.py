@@ -1,4 +1,5 @@
 import asyncio
+from collections import deque
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -39,7 +40,7 @@ class EventBus:
 
     def __init__(self):
         self.subscribers: dict[str, list[Callable[[Message], Any]]] = {}
-        self.history: list[Message] = []  # Short-term memory
+        self.history: deque[Message] = deque(maxlen=1000)  # Short-term memory with auto-trim
         self._lock = asyncio.Lock()
 
     async def subscribe(self, topic: str, callback: Callable[[Message], Any]):
@@ -62,10 +63,7 @@ class EventBus:
             return
 
         async with self._lock:
-            self.history.append(msg)
-            # Keep history light (last 1000 messages)
-            if len(self.history) > 1000:
-                self.history.pop(0)
+            self.history.append(msg)  # Auto-trims when maxlen exceeded
 
         if topic in self.subscribers:
             # Dispatch to all subscribers in parallel

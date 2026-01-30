@@ -1,6 +1,7 @@
 ---
 name: git-workflow
 description: Engineering & Git Workflow practices for version control and development
+last_modified: 2026-01-29
 ---
 
 ## Overview
@@ -50,3 +51,27 @@ This skill enforces the Engineering & Git Workflow pillar, ensuring clean versio
 - Main branch never receives direct commits
 - Conflicts resolved before push
 - All changes tested and deployed
+
+## Evolution Context
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `ai-env/workflows/delegate.md`, `ai-env/workflows/execute.md`, `ai-env/workflows/health.md`
+- **Additional**: 4 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `ai-env/workflows/delegate.md`, `ai-env/workflows/execute.md`, `ai-env/workflows/health.md`
+- **Additional**: 4 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `ai-env/workflows/delegate.md`, `ai-env/workflows/execute.md`, `ai-env/workflows/health.md`
+- **Additional**: 4 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `ai-env/workflows/delegate.md`, `ai-env/workflows/execute.md`, `ai-env/workflows/health.md`
+- **Additional**: 4 more files

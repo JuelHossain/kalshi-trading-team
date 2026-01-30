@@ -1,83 +1,151 @@
-import { useState, useEffect } from 'react';
-import { CONFIG } from '../config';
-import { useStore } from '../store/useStore';
+import { useState, useEffect, useCallback } from 'react';
+import { useStore, getStoredAuthMode } from '../store/useStore';
+import { AuthMode } from '../components/Login';
 
-const ENGINE_URL = 'http://localhost:3002';
+const ENGINE_URL = '/api';
 
-export const useAuth = (
-  addLog: (msg: string, id: number, level: string) => void,
-  isPaperTrading: boolean
-) => {
+interface AuthResponse {
+  isAuthenticated: boolean;
+  mode?: AuthMode;
+  error?: string;
+}
+
+export interface UseAuthReturn {
+  // State
+  isAuthenticated: boolean;
+  authMode: AuthMode | null;
+  isAuthenticating: boolean;
+  authError: string | null;
+
+  // Actions
+  login: (mode: AuthMode, password?: string) => Promise<void>;
+  verifyAuth: () => Promise<boolean>;
+  logout: () => Promise<void>;
+}
+
+export const useAuth = (): UseAuthReturn => {
   const store = useStore();
 
-  // Fallback demo credentials if none provided in CONFIG
-  const FALLBACK_DEMO_KEY = 'demo-key-id';
-  const FALLBACK_DEMO_SECRET =
-    '-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAyDemoKeyForTestingPurposesOnly123456789ABCDEFGH\n-----END RSA PRIVATE KEY-----';
-
-  const [apiKeyId, setApiKeyId] = useState(CONFIG.KALSHI.DEMO_KEY_ID || FALLBACK_DEMO_KEY);
-  const [apiSecret, setApiSecret] = useState(FALLBACK_DEMO_SECRET);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const handleLogin = async (silent: boolean = false) => {
-    if (!silent) setAuthError(null);
-    setIsAuthenticating(true);
+  /**
+   * Login with the specified mode and optional password
+   */
+  const login = useCallback(
+    async (mode: AuthMode, password?: string): Promise<void> => {
+      setAuthError(null);
+      setIsAuthenticating(true);
 
-    if (!silent) addLog(`SYSTEM: Initiating V2 Handshake via Engine...`, 0, 'WARN');
+      try {
+        const response = await fetch(`${ENGINE_URL}/auth/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            mode,
+            password: password || '',
+          }),
+        });
 
+        const data: AuthResponse = await response.json();
+
+        if (!response.ok || !data.isAuthenticated) {
+          throw new Error(data.error || 'Authentication failed');
+        }
+
+        // Update store with auth state
+        store.setAuthMode(mode);
+        store.setAuthenticated(true);
+
+        console.log(`[Auth] Successfully logged in as ${mode} mode`);
+      } catch (error: any) {
+        const message = error.message || 'Failed to authenticate';
+        setAuthError(message);
+        store.setAuthenticated(false);
+        throw error;
+      } finally {
+        setIsAuthenticating(false);
+      }
+    },
+    [store]
+  );
+
+  /**
+   * Verify the current authentication status with the server
+   */
+  const verifyAuth = useCallback(async (): Promise<boolean> => {
     try {
-      const authBody = isPaperTrading
-        ? { useSystemAuth: true, isPaperTrading: true }
-        : {
-            keyId: apiKeyId || FALLBACK_DEMO_KEY,
-            privateKey: apiSecret || FALLBACK_DEMO_SECRET,
-            isPaperTrading,
-          };
-
-      const response = await fetch(`${ENGINE_URL}/auth`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(authBody),
+      const response = await fetch(`${ENGINE_URL}/auth/verify`, {
+        method: 'GET',
+        credentials: 'include',
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Auth Failed');
+        store.setAuthenticated(false);
+        store.setAuthMode(null);
+        return false;
       }
 
-      const data = await response.json();
+      const data: AuthResponse = await response.json();
+
       if (data.isAuthenticated) {
-        store.login(); // Update global store
-        // We can also set user data if returned
-        if (!silent) addLog(`SYSTEM: V2 Secure Session Established.`, 0, 'SUCCESS');
+        store.setAuthenticated(true);
+        // Use server-returned mode or fall back to stored mode
+        const mode = data.mode || getStoredAuthMode();
+        if (mode) {
+          store.setAuthMode(mode);
+        }
+        return true;
       } else {
-        throw new Error('Authentication rejected by engine');
+        store.setAuthenticated(false);
+        store.setAuthMode(null);
+        return false;
       }
-    } catch (e: any) {
-      if (!silent) setAuthError(e.message);
-      store.logout();
-      if (!silent) addLog(`SYSTEM: Auth Failed - ${e.message}`, 0, 'ERROR');
-    } finally {
-      setIsAuthenticating(false);
+    } catch (error) {
+      console.error('[Auth] Verification failed:', error);
+      store.setAuthenticated(false);
+      return false;
     }
-  };
+  }, [store]);
 
-  useEffect(() => {
-    // Auto-login for Demo Mode (Paper Trading)
-    if (isPaperTrading && !store.isAuthenticated && !isAuthenticating) {
-      handleLogin(true);
+  /**
+   * Logout the current user
+   */
+  const logout = useCallback(async (): Promise<void> => {
+    try {
+      await fetch(`${ENGINE_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch (error) {
+      console.error('[Auth] Logout error:', error);
+    } finally {
+      // Always clear local state even if server request fails
+      store.logout();
     }
-  }, [isPaperTrading, store.isAuthenticated]);
+  }, [store]);
+
+  // Verify auth on mount
+  useEffect(() => {
+    // Check if we have a stored mode, verify with server
+    const storedMode = getStoredAuthMode();
+    if (storedMode) {
+      verifyAuth();
+    }
+  }, [verifyAuth]);
 
   return {
-    apiKeyId,
-    setApiKeyId,
-    apiSecret,
-    setApiSecret,
-    isLoggedIn: store.isAuthenticated,
+    isAuthenticated: store.isAuthenticated,
+    authMode: store.authMode,
     isAuthenticating,
     authError,
-    handleLogin,
+    login,
+    verifyAuth,
+    logout,
   };
 };
+
+export default useAuth;

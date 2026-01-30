@@ -43,4 +43,9 @@ Pushed by **BRAIN**, consumed by **HAND**.
 }
 ```
 
-- **Persistence Rule**: Every decision by Brain must be committed to `queue_executions` before triggering the Hand agent.
+- **Persistence Rule**: Every decision by Brain must be committed to `queue_executions` before triggering the Hand agent.---
+
+*Last schema evolution: 2026-01-29 20:34*
+*Triggered by changes in: `engine/core/bus.py`, `engine/core/network.py`, `engine/core/synapse.py`, `engine/core/vault.py`*
+*Triggered by changes in: `engine/core/bus.py`, `engine/core/network.py`, `engine/core/synapse.py`, `engine/core/vault.py`*
+*Triggered by changes in: `engine/core/bus.py`, `engine/core/network.py`, `engine/core/synapse.py`, `engine/core/vault.py`*

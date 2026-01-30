@@ -1,6 +1,7 @@
 ---
 name: core-ops
 description: Essential operational tools for environment verification and connectivity
+last_modified: 2026-01-29
 ---
 
 ## Overview
@@ -17,3 +18,27 @@ When an agent encounters "Connection Refused" or "404 Not Found" errors, it shou
 ## Files
 - `scripts/health_check.py`: Port and service validator.
 - `resources/architecture_map.md`: Visual diagram of the 2-tier system.
+
+## Evolution Context
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/auth.py`, `engine/core/bus.py`, `engine/core/error_dispatcher.py`
+- **Additional**: 3 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/auth.py`, `engine/core/bus.py`, `engine/core/error_dispatcher.py`
+- **Additional**: 3 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/auth.py`, `engine/core/bus.py`, `engine/core/error_dispatcher.py`
+- **Additional**: 3 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/auth.py`, `engine/core/bus.py`, `engine/core/error_dispatcher.py`
+- **Additional**: 3 more files

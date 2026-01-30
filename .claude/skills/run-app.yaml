@@ -1,0 +1,12 @@
+description: Run the Sentient Alpha application (dev/prod/status/stop)
+
+allowed_abilities:
+  - Run shell commands
+
+prompt: |
+  Run the application control script.
+  Commands:
+  - python scripts/run.py dev      # Development mode
+  - python scripts/run.py prod     # Production mode
+  - python scripts/run.py status   # Check status
+  - python scripts/run.py stop     # Stop services

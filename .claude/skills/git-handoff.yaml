@@ -1,0 +1,8 @@
+description: Perform atomic git handoff with soul snapshot
+
+allowed_abilities:
+  - Run shell commands
+
+prompt: |
+  Execute atomic git handoff with Project Soul snapshot.
+  Command: ./scripts/handoff.sh "your commit message"

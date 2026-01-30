@@ -1,6 +1,7 @@
 ---
 name: resilience
 description: Resilience & Scalability practices for system reliability and efficiency
+last_modified: 2026-01-29
 ---
 
 ## Overview
@@ -38,3 +39,23 @@ This skill enforces the Resilience pillar, ensuring robust operation and seamles
 - Kill engine during a cycle and verify Synapse recovers the state.
 - Verify backoff triggers on rate limits.
 - Confirm news context is attached to Brain prompts.
+
+## Evolution Context
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/vault.py`
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/vault.py`
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/vault.py`
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/vault.py`

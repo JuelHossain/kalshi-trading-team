@@ -3,10 +3,9 @@
 ## ⚠️ Entry Protocol
 1. Follow the [identity.md](file:///home/jrrahman01/workspace/active/kalshi-trading-team/ai-env/soul/identity.md) guidelines for token-efficient session orientation. Read the **Core Essence** first.
 2. **Check the Task Board**: Run `cat ai-env/tasks/BOARD.md` to see any pending or delegated tasks.
-3. **NLF Protocol**: When detecting complex work, ask the user if they want to **execute now** or **delegate**. See [NLF_PROTOCOL.md](./ai-env/core-docs/NLF_PROTOCOL.md).
-4. **Delegation Shortcuts**:
-   - `/delegate <description>` - Instantly create a task for another agent.
-   - `/execute` - Pick up pending tasks from the board.
+3. **NLF Protocol**: When detecting complex work (3+ files, features), **automatically delegate** via Task tool. See [NLF_PROTOCOL.md](./ai-env/core-docs/NLF_PROTOCOL.md).
+4. **Task Board Commands**:
+   - `/status` - Show current BOARD.md state.
    - `/verify` - Review completed tasks.
 
 This file provides structured context for AI agents working on the Sentient Alpha Trading Bot. Adherence to these standards is mandatory for autonomous safety and system integrity.
@@ -54,7 +53,12 @@ Sentient Alpha is an autonomous 2-tier trading system on Kalshi.
 ## 🛡️ Security & Safety
 - **Veto Supremacy**: Any security veto terminates the cycle immediately.
 - **Ragnarok Protocol**: Hand agent must execute liquidation on fatal errors.
-- **Credentials**: NEVER commit `.env` or RSA keys. 
+- **Credentials**: NEVER commit `.env` or RSA keys.
+
+## 📊 Data Integrity Rules (CRITICAL)
+- **NEVER Use Mock Data**: All market data, signals, and trading decisions MUST use real data from the Kalshi API or verified sources. Mock data is strictly prohibited in any production code path.
+- **Validate Sources**: Always verify data source authenticity before processing.
+- **Fail Real**: If data is unavailable, fail explicitly rather than falling back to synthetic data. 
 
 ## 🔄 Maintenance & Evolution
 - **Sync**: After any logic refactor, use the `/sync` workflow to update `.opencode/` and `ai-env/` folders.
@@ -72,9 +76,11 @@ Sentient Alpha is an autonomous 2-tier trading system on Kalshi.
   - `personas/`: AI mental model definitions.
 
 ## 🤝 Multi-Agent Git Protocol
-- **Pull First**: ALWAYS run `git pull --rebase origin opencode` before starting work.
+- **Pull First**: ALWAYS run `git pull --rebase origin main` before starting work.
 - **Atomic Handoff**: Use `./scripts/handoff.sh "Your message"` to sync documentation and commit atomically.
+- **Never Leave Uncommitted Changes**: Agents MUST commit all changes before ending their session.
 - **Linear History**: Keep a clean commit history for the next agent's context.
+- **Git Enforcement**: Run `python scripts/evolution/git_enforcer.py check` to verify compliance.
 
 ---
 _Generated for OpenCode Autonomous Performance_

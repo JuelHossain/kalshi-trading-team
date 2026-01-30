@@ -1,6 +1,7 @@
 ---
 name: agent-logic
 description: Reasoning frameworks and personas for AI decision making
+last_modified: 2026-01-29
 ---
 
 ## Overview
@@ -18,3 +19,27 @@ A trade must pass the following checks within this skill's logic:
 
 ## Usage
 Agents should load these personas when generating prompts for the Brain's Gemini cycle.
+
+## Evolution Context
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Additional**: 2 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Additional**: 2 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Additional**: 2 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Additional**: 2 more files

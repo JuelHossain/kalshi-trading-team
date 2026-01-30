@@ -1,0 +1,8 @@
+description: Inspect the latest persistent trade signals in Synapse (SQLite)
+
+allowed_abilities:
+  - Run shell commands
+
+prompt: |
+  Run the signals inspection script.
+  Command: python3 ai-env/skills/market-intel/scripts/inspect_signals.py

@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "after-edit": {
+      "description": "Auto-format modified files after editing",
+      "commands": [
+        {
+          "name": "Format TypeScript/React files",
+          "pattern": "*.{ts,tsx}",
+          "command": "npx prettier --write {file}",
+          "condition": "file_modified"
+        },
+        {
+          "name": "Format Python files with Black",
+          "pattern": "*.py",
+          "command": "python -m black {file}",
+          "condition": "file_modified"
+        },
+        {
+          "name": "Lint Python files with Ruff",
+          "pattern": "*.py",
+          "command": "python -m ruff check {file} --fix",
+          "condition": "file_modified"
+        }
+      ]
+    },
+    "before-commit": {
+      "description": "Run pre-commit checks",
+      "commands": [
+        {
+          "name": "Type check TypeScript",
+          "pattern": "*.{ts,tsx}",
+          "command": "cd frontend && npx tsc --noEmit",
+          "condition": "any_file_modified"
+        }
+      ]
+    }
+  },
+  "settings": {
+    "parallel_execution": false,
+    "fail_on_error": false,
+    "show_output": true
+  }
+}

@@ -1,6 +1,7 @@
 ---
 name: safety-security
 description: Safety & Operational Security protocols for tactical trading
+last_modified: 2026-01-29
 ---
 
 ## Overview
@@ -37,3 +38,23 @@ This skill enforces the Safety pillar of the Sentient Alpha constitution. It pri
 - Trigger Ragnarok from UI and verify order cancellation.
 - Verify Autopilot Pulse halt upon negative authorization.
 - Confirm isolated diagnostic scripts pass before main engine deployment.
+
+## Evolution Context
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/auth.py`, `engine/core/vault.py`
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/auth.py`, `engine/core/vault.py`
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/auth.py`, `engine/core/vault.py`
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `engine/core/auth.py`, `engine/core/vault.py`

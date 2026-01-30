@@ -18,6 +18,7 @@ import numpy as np
 from agents.base import BaseAgent
 from core.bus import EventBus
 from core.db import log_to_db
+from core.error_dispatcher import ErrorSeverity
 
 try:
     from google import genai
@@ -27,6 +28,22 @@ except ImportError:
 
 
 from core.synapse import Synapse, ExecutionSignal, Opportunity, MarketData
+
+
+def safe_log(message: str, level: str = "INFO"):
+    """Windows-safe logging that removes emojis."""
+    import re
+    # Remove emojis for Windows console compatibility
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map symbols
+        u"\U0001F1E0-\U0001F1FF"  # flags
+        u"\U00002702-\U000027B0"
+        u"\U000024C2-\U0001F251"
+        "]+", flags=re.UNICODE)
+    clean_message = emoji_pattern.sub(r'', message)
+    print(f"[{level}] {clean_message}")
 
 
 class BrainAgent(BaseAgent):
@@ -95,7 +112,7 @@ class BrainAgent(BaseAgent):
             try:
                 opp_model = await self.synapse.opportunities.pop()
                 if opp_model:
-                    await self.log(f"🧠 Synapse Input: {opp_model.ticker}")
+                    safe_log(f"Synapse Input: {opp_model.ticker}")
                     
                     # Map Pydantic Model -> Legacy Dict for compatibility
                     opp_dict = opp_model.model_dump()
@@ -161,7 +178,7 @@ class BrainAgent(BaseAgent):
         )
 
         if confidence >= self.CONFIDENCE_THRESHOLD and variance <= self.MAX_VARIANCE and ev > 0:
-            await self.log(f"✅ APPROVED: {ticker} | Pushing to execution.")
+            safe_log(f"APPROVED: {ticker} | Pushing to execution.")
             await self.queue_for_execution(
                 {
                     **opportunity,
@@ -173,16 +190,22 @@ class BrainAgent(BaseAgent):
             )
         else:
             reason = "Low confidence" if confidence < self.CONFIDENCE_THRESHOLD else ("High variance" if variance > self.MAX_VARIANCE else "Negative EV")
-            await self.log(f"❌ VETOED: {ticker} | Reason: {reason}")
+            safe_log(f"VETOED: {ticker} | Reason: {reason}")
 
     async def run_debate(self, opportunity: dict) -> dict:
         """Multi-persona AI debate using Gemini"""
         if not self.client:
-            await self.log("Gemini unavailable. Using heuristic confidence.")
+            # Use centralized error system
+            await self.log_error(
+                code="INTELLIGENCE_AI_UNAVAILABLE",
+                severity=ErrorSeverity.HIGH,
+                context={"opportunity": opportunity.get("ticker", "UNKNOWN")}
+            )
+            # Return zero confidence to trigger veto
             return {
-                "confidence": 0.5,
-                "reasoning": "Heuristic only",
-                "estimated_probability": 0.5
+                "confidence": 0.0,  # Force veto
+                "reasoning": "AI service unavailable - trade rejected for safety",
+                "estimated_probability": None  # No fallback estimation
             }
 
         ticker = opportunity.get("ticker", "UNKNOWN")
@@ -249,17 +272,75 @@ Respond in JSON format:
                     "reasoning": result.get("judge_verdict", ""),
                     "estimated_probability": result.get("estimated_probability", 0.5)
                 }
-        except Exception as e:
-            await self.log(f"Debate error: {str(e)[:50]}", level="ERROR")
+            else:
+                await self.log_error(
+                    code="INTELLIGENCE_PARSE_ERROR",
+                    message="No JSON found in AI response",
+                    severity=ErrorSeverity.HIGH,
+                    context={"ticker": ticker}
+                )
+                # Return zero confidence to trigger veto
+                return {"confidence": 0.0, "reasoning": "Invalid AI response format - trade rejected", "estimated_probability": None}
 
-        return {"confidence": 0.5, "reasoning": "Debate failed", "estimated_probability": 0.5}
+        except json.JSONDecodeError as e:
+            await self.log_error(
+                code="INTELLIGENCE_PARSE_ERROR",
+                message=f"JSON parsing failed for {ticker}",
+                severity=ErrorSeverity.HIGH,
+                context={"ticker": ticker, "error": str(e)[:100]},
+                exception=e
+            )
+            # Return zero confidence to trigger veto
+            return {"confidence": 0.0, "reasoning": f"JSON parse error - trade rejected: {str(e)[:50]}", "estimated_probability": None}
+
+        except AttributeError as e:
+            await self.log_error(
+                code="INTELLIGENCE_PARSE_ERROR",
+                message="AI response format error",
+                severity=ErrorSeverity.HIGH,
+                context={"ticker": ticker, "error": str(e)[:100]},
+                exception=e
+            )
+            # Return zero confidence to trigger veto
+            return {"confidence": 0.0, "reasoning": f"Invalid AI response format - trade rejected: {str(e)[:50]}", "estimated_probability": None}
+
+        except ConnectionError as e:
+            await self.log_error(
+                code="INTELLIGENCE_TIMEOUT",
+                message="AI API connection failed",
+                severity=ErrorSeverity.HIGH,
+                context={"ticker": ticker, "error": str(e)[:100]},
+                exception=e
+            )
+            # Return zero confidence to trigger veto
+            return {"confidence": 0.0, "reasoning": "AI service unavailable - trade rejected", "estimated_probability": None}
+
+        except Exception as e:
+            # Catch-all for unexpected errors - log full details for debugging
+            error_type = type(e).__name__
+            await self.log_error(
+                code="INTELLIGENCE_DEBATE_FAILED",
+                message=f"Debate error ({error_type}) for {ticker}",
+                severity=ErrorSeverity.HIGH,
+                context={"ticker": ticker, "error_type": error_type, "error": str(e)[:100]},
+                exception=e
+            )
+            # Return zero confidence to trigger veto
+            return {"confidence": 0.0, "reasoning": f"Debate failed ({error_type}) - trade rejected", "estimated_probability": None}
 
     def run_simulation(self, opportunity: dict, override_prob: float = None) -> dict:
         """Monte Carlo simulation for variance and EV calculation"""
-        # Use overridden probability (AI estimate) if available, else default
-        vegas_prob = override_prob if override_prob is not None else opportunity.get("vegas_prob", 0.5)
-        if vegas_prob is None: vegas_prob = 0.5
-        
+        # Use overridden probability (AI estimate) if available
+        vegas_prob = override_prob if override_prob is not None else opportunity.get("vegas_prob")
+
+        # If no valid probability available, return failure state
+        if vegas_prob is None:
+            return {
+                "win_rate": 0.0,
+                "ev": -999.0,  # Highly negative EV to force veto
+                "variance": 999.0  # High variance to force veto
+            }
+
         kalshi_price = opportunity.get("kalshi_price", 0.5)
 
         # Simulate outcomes

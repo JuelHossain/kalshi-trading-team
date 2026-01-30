@@ -1,0 +1,29 @@
+description: Generate test files for new components and functions
+
+allowed_abilities:
+  - Read files
+  - Write files
+  - Run shell commands
+
+prompt: |
+  Generate test scaffolding for a source file.
+
+  Usage: /test-gen <file-path>
+
+  This skill analyzes the source file and generates appropriate test scaffolding:
+  - .tsx files → Vitest + React Testing Library tests in __tests__/ directory
+  - .ts files → Vitest tests for utilities/hooks
+  - .py files → pytest tests in engine/tests/
+
+  The script will:
+  1. Analyze the source file to detect components, functions, and classes
+  2. Generate appropriate mocks and test templates
+  3. Create the test file in the correct location
+  4. Follow project testing conventions
+
+  Command: python3 .claude/skills/test-generator/scripts/generate_test.py {file_path}
+
+  Examples:
+  - /test-gen frontend/src/components/Button.tsx
+  - /test-gen frontend/src/hooks/useAuth.ts
+  - /test-gen engine/core/vault.py

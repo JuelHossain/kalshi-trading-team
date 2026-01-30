@@ -90,6 +90,20 @@ export interface ErrorAnalysis {
   confidence: number;
 }
 
+export interface ErrorEvent {
+  id: string;
+  timestamp: string;
+  agentId: number;
+  cycleId: number;
+  phaseId: number;
+  code: string;
+  message: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+  domain: 'NETWORK' | 'TRADING' | 'INTELLIGENCE' | 'DATA' | 'AUTH' | 'CONFIG' | 'SYSTEM';
+  hint: string;
+  context: Record<string, any>;
+}
+
 export type TimelineEventType =
   | 'LOG'
   | 'SIMULATION'

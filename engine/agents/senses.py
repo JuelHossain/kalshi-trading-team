@@ -26,10 +26,11 @@ RAPIDAPI_HOST = "odds.p.rapidapi.com"
 from core.synapse import MarketData, Opportunity, Synapse
 
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
     DDGS_AVAILABLE = True
 except ImportError:
     DDGS_AVAILABLE = False
+    print("[SENSES] Warning: ddgs package not available. Install with: pip install ddgs")
 
 class SensesAgent(BaseAgent):
     """The 24/7 Observer - Surveillance & Signal Detection"""
@@ -46,16 +47,24 @@ class SensesAgent(BaseAgent):
         """Fetch external context (news) for a market"""
         if not DDGS_AVAILABLE:
             return ["Search unavailable"]
-        
+
         try:
-            # Run simple search
+            # Run simple search with timeout
             query = f"{title} news"
             loop = asyncio.get_event_loop()
-            results = await loop.run_in_executor(
-                None, 
-                lambda: list(DDGS().text(query, max_results=3))
+
+            # Use wait_for to add timeout to the executor call
+            results = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: list(DDGS(proxy=None).text(query, max_results=3))
+                ),
+                timeout=10.0  # 10 second timeout for search
             )
             return [r.get("body", "") for r in results]
+        except asyncio.TimeoutError:
+            await self.log(f"Search timeout for {ticker}", level="WARN")
+            return []
         except Exception as e:
             await self.log(f"Search error for {ticker}: {str(e)[:50]}", level="WARN")
             return []
@@ -162,12 +171,12 @@ class SensesAgent(BaseAgent):
             context_str = "\\n".join(context_snippets)
 
             # Define opportunity without external odds
+            # Note: value_gap removed - Brain uses AI estimation, not external odds comparison
             opportunities.append(
                 {
                     "ticker": ticker,
                     "kalshi_price": kalshi_price,
-                    "vegas_prob": None, # Signal to Brain to use AI estimation
-                    "value_gap": 0, # Placeholder
+                    "vegas_prob": None,  # Signal to Brain to use AI estimation
                     "volume": volume,
                     "market_data": market,
                     "source": "Volume-Algo",
@@ -234,31 +243,10 @@ class SensesAgent(BaseAgent):
         return self.opportunity_queue.pop(0) if self.opportunity_queue else None
 
     async def run_scout(self, opp_queue: asyncio.Queue):
-        """Continuous scanning and queueing opportunities (called by Engine)."""
-        while True:
-            try:
-                if self.is_scanning:
-                     # Reuse surveillance loop logic
-                    markets = await self.fetch_kalshi_markets()
-                    if markets:
-                        opportunities = await self.select_top_opportunities(markets)
-                        for opp in opportunities:
-                            # We push to internal queue for Brain (who calls pop_opportunity)
-                             await self.queue_opportunity(opp)
-                             
-                             # We also put to the Engine's async queue if it's used elsewhere?
-                             # Engine passes opp_queue but Brain doesn't use it in `run_brain`.
-                             # Brain calls `self.senses.pop_opportunity()`.
-                             # So opp_queue is largely redundant in this architecture, but I'll write to it just in case.
-                             await opp_queue.put(opp)
-                    
-                    if not markets:
-                         await self.log("No markets found.", level="WARN")
-
-            except Exception as e:
-                await self.log(f"Surveillance error: {str(e)[:100]}", level="ERROR")
-
-            await asyncio.sleep(10)  # Scan every 10 seconds
+        """DEPRECATED: Continuous scanning disabled - now scans only on cycle start."""
+        # This method is deprecated and no longer called
+        await self.log("WARNING: run_scout called but is deprecated. Scans now happen on cycle start only.", level="WARN")
+        pass
 
     async def on_tick(self, payload: dict[str, Any]):
         pass

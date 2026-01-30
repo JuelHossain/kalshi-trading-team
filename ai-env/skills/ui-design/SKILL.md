@@ -1,6 +1,7 @@
 ---
 name: ui-design
 description: UI design system and visual patterns for the Sentient Alpha cockpit
+last_modified: 2026-01-29
 ---
 
 # UI Design System for Sentient Alpha
@@ -40,3 +41,27 @@ All new UI components must follow these standards to maintain the "Cinematic Ter
 - Verify responsive layout on mobile/desktop.
 - Ensure log streaming doesn't freeze the main thread.
 - Confirm `/api` proxy works without CORS errors.
+
+## Evolution Context
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `frontend/src/components/ErrorBoundary.tsx`, `frontend/src/components/Login.test.tsx`, `frontend/src/components/Login.tsx`
+- **Additional**: 14 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `frontend/src/components/ErrorBoundary.tsx`, `frontend/src/components/Login.test.tsx`, `frontend/src/components/Login.tsx`
+- **Additional**: 14 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `frontend/src/components/ErrorBoundary.tsx`, `frontend/src/components/Login.test.tsx`, `frontend/src/components/Login.tsx`
+- **Additional**: 14 more files
+
+
+### Evolution Entry [2026-01-29 20:34]
+- **Trigger**: Code changes detected
+- **Files**: `frontend/src/components/ErrorBoundary.tsx`, `frontend/src/components/Login.test.tsx`, `frontend/src/components/Login.tsx`
+- **Additional**: 14 more files

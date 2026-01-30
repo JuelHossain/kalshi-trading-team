@@ -61,7 +61,7 @@ class KalshiClient:
         full_path = f"/trade-api/v2{path}"
         timestamp = str(int(time.time() * 1000))
         msg = f"{timestamp}{method}{full_path}{body}"
-        print(f"[NETWORK] Signing message: {msg}")
+        # Note: Signing message logged only in debug mode (removed for security)
 
         # Fix: Use salt_length=32 (SHA256 digest length) to match Node's RSA_PSS_SALTLEN_DIGEST
         signature_bytes = self.private_key.sign(
@@ -145,6 +145,36 @@ class KalshiClient:
     async def get_orderbook(self, ticker: str) -> dict | None:
         path = f"/markets/{ticker}/orderbook"
         return await self.request("GET", path)
+
+    async def place_order(
+        self,
+        ticker: str,
+        side: str,
+        type: str,
+        price: int,
+        count: int,
+    ) -> dict | None:
+        """Place an order on Kalshi.
+
+        Args:
+            ticker: Market ticker symbol
+            side: 'yes' or 'no'
+            type: 'limit' or 'market'
+            price: Price in cents (1-99)
+            count: Number of contracts
+
+        Returns:
+            Order response dict or None on failure
+        """
+        path = "/portfolio/orders"
+        json_data = {
+            "market_id": ticker,
+            "side": side.lower(),
+            "type": type.lower(),
+            "price": price,
+            "count": count,
+        }
+        return await self.request("POST", path, json_data=json_data)
 
     async def close(self):
         if self._session and not self._session.closed:
