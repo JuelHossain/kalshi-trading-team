@@ -1,4 +1,4 @@
-# Task Board | Last Updated: 2026-01-29T16:01:00Z
+# Task Board | Last Updated: 2026-01-29T22:30:00Z
 
 ## 🔴 PENDING
 *No pending tasks.*
@@ -6,11 +6,9 @@
 ## 🟡 IN_PROGRESS
 *No tasks in progress.*
 
-## 🟢 COMPLETED (Awaiting Verification)
+## ✅ COMPLETED
+- [AUTO-01](./active/AUTO-01.md): Implement Claude Code Automation Recommendations (MCP, Skills, Hooks, Subagents)
 - [TASK-001](./completed/TASK-001.md): Consolidate ai-env workflows with Claude Code built-ins
 
-## ✅ VERIFIED
-*(Archived)*
-
 ---
-*This board is manually updated for Claude Code.*
+*Tasks move to COMPLETED when agents finish and verify their own work.*

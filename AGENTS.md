@@ -16,7 +16,6 @@
 3. **DELEGATE complex work**: 3+ files, features, architectural changes → use Task tool.
 4. **Task Board Commands**:
    - `/status` - Show current BOARD.md state
-   - `/verify` - Review completed tasks
 
 This file provides structured context for AI agents working on the Sentient Alpha Trading Bot. Adherence to these standards is mandatory for autonomous safety and system integrity.
 
