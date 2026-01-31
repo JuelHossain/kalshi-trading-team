@@ -13,6 +13,7 @@ import asyncio
 import json
 import os
 import signal
+import uuid
 from datetime import datetime
 
 from aiohttp import web
@@ -55,6 +56,7 @@ class GhostEngine:
         self.agents: list[BaseAgent] = []
         self.cycle_count: int = 0
         self.is_processing: bool = False
+        self.last_cycle_time: datetime = None  # Rate limit tracking
         self.manual_kill_switch: bool = False
         self.sse_clients: set[asyncio.Queue] = set()
 
@@ -73,7 +75,11 @@ class GhostEngine:
         # await self.bus.subscribe("SYSTEM_LOG", self.handle_log)
 
         # Autopilot / Request Cycle Support
+        # Autopilot / Request Cycle Support
         await self.bus.subscribe("REQUEST_CYCLE", self._handle_cycle_request)
+        
+        # Fail-Fast Protocol
+        await self.bus.subscribe("SYSTEM_FATAL", self._handle_system_fatal)
 
         # Initialize 4 Mega-Agents
         print(f"{Fore.CYAN}[GHOST] Initializing 4 Mega-Agent Pillars...{Style.RESET_ALL}")
@@ -91,15 +97,14 @@ class GhostEngine:
             self.agents.append(self.senses)
 
             # 3. BRAIN - Intelligence (needs reference to Senses for opportunity queue)
-            # 3. BRAIN - Intelligence (needs reference to Senses for opportunity queue)
-            self.brain = BrainAgent(3, self.bus, senses_agent=self.senses, synapse=self.synapse)
+            # 3. BRAIN - Intelligence (Strict Decoupling via Synapse)
+            self.brain = BrainAgent(3, self.bus, synapse=self.synapse)
             await self.brain.start()
             self.agents.append(self.brain)
 
-            # 4. HAND - Execution (needs reference to Brain and Vault)
-            # 4. HAND - Execution (needs reference to Brain and Vault)
+            # 4. HAND - Execution (Strict Decoupling via Synapse)
             self.hand = HandAgent(
-                4, self.bus, vault=self.vault, brain_agent=self.brain, kalshi_client=kalshi_client, synapse=self.synapse
+                4, self.bus, vault=self.vault, kalshi_client=kalshi_client, synapse=self.synapse
             )
             await self.hand.start()
             self.agents.append(self.hand)
@@ -125,12 +130,18 @@ class GhostEngine:
 
 
 
-    def authorize_cycle(self) -> bool:
+    async def authorize_cycle(self) -> bool:
         """
         SOUL: Strategic Authorization
         Checks Kill Switch and safety conditions.
         """
         # Temporarily disabled for manual testing
+        if self.last_cycle_time:
+            elapsed = (datetime.now() - self.last_cycle_time).total_seconds()
+            if elapsed < 30:
+                print(f"{Fore.YELLOW}[GHOST] Rate limit: Wait {30 - elapsed:.0f}s before next cycle.{Style.RESET_ALL}")
+                return False
+
         if self.manual_kill_switch:
             print(f"{Fore.RED}[GHOST] 💀 MANUAL KILL SWITCH ACTIVE. HALTING.{Style.RESET_ALL}")
             return False
@@ -143,12 +154,33 @@ class GhostEngine:
             print(f"{Fore.RED}[GHOST] VAULT KILL SWITCH ACTIVE. HALTING.{Style.RESET_ALL}")
             return False
 
-        # Hard floor check ($255)
-        if self.vault.current_balance < 25500:
-            print(
-                f"{Fore.RED}[GHOST] HARD FLOOR BREACH ($255). EMERGENCY LOCKDOWN.{Style.RESET_ALL}"
-            )
+        # Soul Lockdown Check (API Failure / Hard Floor)
+        if hasattr(self, "soul") and self.soul.is_locked_down:
+            print(f"{Fore.RED}[GHOST] SOUL LOCKDOWN ACTIVE. HALTING.{Style.RESET_ALL}")
             return False
+
+        # Synapse Error Box Check (Strict Decoupling)
+        if hasattr(self, "synapse") and self.synapse:
+            error_count = await self.synapse.errors.size()
+            if error_count > 0:
+                print(f"{Fore.RED}[GHOST] 🚨 ERROR BOX ACTIVE ({error_count} errors). HALTING.{Style.RESET_ALL}")
+                # Optional: log a system message
+                return False
+
+        # 1. Hard floor check ($255) - ATOMIC with vault update
+        try:
+            real_balance = await kalshi_client.get_balance()
+
+            # UPDATE VAULT FIRST, then check - ensures atomic read-check
+            self.vault.current_balance = real_balance
+
+            if real_balance < self.vault.HARD_FLOOR_CENTS:
+                print(f"{Fore.RED}[GHOST] 🚨 HARD FLOOR BREACH (${real_balance/100:.2f} < ${self.vault.HARD_FLOOR_CENTS/100:.2f}). EMERGENCY LOCKDOWN.{Style.RESET_ALL}")
+                return False
+        except Exception:
+            # Fallback to vault cache if API fails
+            if self.vault.current_balance < self.vault.HARD_FLOOR_CENTS:
+                return False
 
         # Maintenance window
         # now = datetime.now()
@@ -156,6 +188,7 @@ class GhostEngine:
         #     print(f"{Fore.YELLOW}[GHOST] MAINTENANCE WINDOW. STANDING DOWN.{Style.RESET_ALL}")
         #     return False
 
+        self.last_cycle_time = datetime.now()
         return True
 
     async def execute_single_cycle(self, is_paper_trading: bool = True):
@@ -167,7 +200,7 @@ class GhostEngine:
         self.is_processing = True
         try:
             # SOUL: Authorization Check
-            if not self.authorize_cycle():
+            if not await self.authorize_cycle():
                 msg = f"Cycle {self.cycle_count + 1} not authorized."
                 print(f"{Fore.YELLOW}[GHOST] {msg}{Style.RESET_ALL}")
                 await self.bus.publish(
@@ -246,6 +279,24 @@ class GhostEngine:
              # Use ensure_future or call directly (it's already guarded by is_processing)
              asyncio.create_task(self.execute_single_cycle(is_paper_trading=is_paper))
 
+    async def _handle_system_fatal(self, message):
+        """Handle fatal errors by shutting down the entire engine immediately."""
+        error_msg = message.payload.get("message", "Unknown Fatal Error")
+        agent_id = message.sender
+        
+        print(f"\n{Fore.RED}[GHOST] 💀 FATAL ERROR reported by {agent_id}: {error_msg}{Style.RESET_ALL}")
+        print(f"{Fore.RED}[GHOST] INITIATING EMERGENCY SHUTDOWN...{Style.RESET_ALL}")
+        
+        # Stop processing immediately
+        self.is_processing = False
+        self.running = False
+        
+        # Broadcast shutdown to all agents (if they listen)
+        await self.bus.publish("SYSTEM_SHUTDOWN", {"reason": error_msg}, "GHOST")
+        
+        # Execute shutdown
+        await self.shutdown()
+
     async def shutdown(self):
         print(f"\n{Fore.RED}[GHOST] SHUTDOWN PROTOCOL INITIATED.{Style.RESET_ALL}")
         self.running = False
@@ -303,18 +354,24 @@ class GhostEngine:
 
         async def activate_kill_switch(request):
             self.manual_kill_switch = True
+            # FIX: Immediate Halt (Atomicity)
+            self.is_processing = False
+            self.cycle_count = 0
+            self.last_cycle_time = None  # Rate limit tracking
+            self.running = False
+            
             await self.bus.publish(
                 "SYSTEM_LOG",
                 {
                     "level": "ERROR",
-                    "message": "[GHOST] 💀 MANUAL KILL SWITCH ACTIVATED",
+                    "message": "[GHOST] 💀 MANUAL KILL SWITCH ACTIVATED - Engine Halted",
                     "agent_id": 1,
                     "timestamp": datetime.now().isoformat(),
                 },
                 "GHOST",
             )
             return web.json_response(
-                {"status": "killed", "message": "Manual Kill Switch Activated."}
+                {"status": "killed", "message": "Manual Kill Switch Activated. Engine Halted."}
             )
 
         async def deactivate_kill_switch(request):
@@ -336,25 +393,41 @@ class GhostEngine:
         async def reset_system(request):
             self.manual_kill_switch = False
             self.is_processing = False
+            self.running = False
             return web.json_response({"status": "reset"})
 
         async def cancel_cycle(request):
-            """Gracefully cancel the current cycle without emergency procedures."""
-            if not self.is_processing:
-                return web.json_response({"status": "no_cycle", "message": "No cycle in progress."})
-            
+            """Gracefully cancel the current cycle and disable autopilot."""
+            # Always allow cancellation to ensure we can stop runaway loops
             self.is_processing = False
+            
+            # 1. Stop Autopilot (Critical fix for "runaway train")
+            await self.bus.publish("SYSTEM_CONTROL", {"action": "STOP_AUTOPILOT"}, "HTTP")
+            self.running = False
+            
+            # --- HARDENING: Emergency Rollback on Cancellation ---
+            self.vault.release_all_reservations()
+            
+            # 2. Reset System State
+            await self.bus.publish(
+                "SYSTEM_STATE",
+                {"isProcessing": False, "activeAgentId": None},
+                "GHOST",
+            )
+            
+            # 3. Log Cancellation
             await self.bus.publish(
                 "SYSTEM_LOG",
                 {
                     "level": "WARN",
-                    "message": "[GHOST] Cycle cancelled by user request.",
+                    "message": "[GHOST] 🛑 Cycle cancelled by user. Autopilot DISABLED.",
                     "agent_id": 1,
                     "timestamp": datetime.now().isoformat(),
                 },
                 "GHOST",
             )
-            return web.json_response({"status": "cancelled", "message": "Cycle cancelled gracefully."})
+
+            return web.json_response({"status": "cancelled", "message": "Cycle cancelled and Autopilot disabled."})
 
         async def health_check(request):
             return web.json_response(
@@ -381,9 +454,9 @@ class GhostEngine:
         async def autopilot_status(request):
             """Get current autopilot status."""
             return web.json_response({
-                "autopilot_enabled": self.soul.autopilot_enabled if hasattr(self, 'soul') else False,
-                "is_paper_trading": self.soul.is_paper_trading if hasattr(self, 'soul') else True,
-                "is_locked_down": self.soul.is_locked_down if hasattr(self, 'soul') else False,
+                "autopilot_enabled": self.soul.autopilot_enabled if hasattr(self, "soul") else False,
+                "is_paper_trading": self.soul.is_paper_trading if hasattr(self, "soul") else True,
+                "is_locked_down": self.soul.is_locked_down if hasattr(self, "soul") else False,
                 "is_processing": self.is_processing,
                 "cycle_count": self.cycle_count,
             })
@@ -416,8 +489,9 @@ class GhostEngine:
                     data = json.dumps(event)
                     try:
                         await response.write(f"data: {data}\n\n".encode())
-                    except (ConnectionResetError, asyncio.CancelledError, OSError) as e:
-                        print(f"[GHOST] SSE write error: {e}")
+                    except (ConnectionResetError, asyncio.CancelledError, OSError):
+                        # Client disconnected - benign error
+                        # print(f"[GHOST] SSE client disconnected")
                         break
             except asyncio.CancelledError:
                 pass
@@ -444,13 +518,12 @@ class GhostEngine:
                     "mode": auth_manager.mode,
                     "is_production": auth_manager.is_production
                 })
-            else:
-                return web.json_response({
-                    "isAuthenticated": False,
-                    "user": None,
-                    "mode": "demo",
-                    "is_production": False
-                })
+            return web.json_response({
+                "isAuthenticated": False,
+                "user": None,
+                "mode": "demo",
+                "is_production": False
+            })
 
         async def get_pnl(request):
             """Get PnL history (simulated for now)."""
@@ -504,7 +577,7 @@ class GhostEngine:
             
             if soul_exists:
                 try:
-                    with open(soul_path, "r") as f:
+                    with open(soul_path) as f:
                         lines = f.readlines()
                         # Find the last snapshot (lines starting with **Snapshot**)
                         snapshots = [l for l in lines if l.startswith("**Snapshot**")]
@@ -559,7 +632,7 @@ class GhostEngine:
         app.router.add_get("/stream", stream_logs)
 
         # Authentication endpoints
-        from core.auth import login_handler, verify_handler, logout_handler
+        from core.auth import login_handler, logout_handler, verify_handler
         app.router.add_post("/auth/login", login_handler)
         app.router.add_get("/auth/verify", verify_handler)
         app.router.add_post("/auth/logout", logout_handler)
@@ -621,7 +694,7 @@ class GhostEngine:
             formatted_event = {
                 "type": "LOG",
                 "log": {
-                    "id": f"log-{datetime.now().timestamp()}",
+                    "id": f"log-{datetime.now().timestamp()}-{uuid.uuid4().hex[:8]}",
                     "timestamp": payload.get("timestamp", datetime.now().isoformat()),
                     "agentId": agent_id,
                     "cycleId": self.cycle_count,
@@ -652,7 +725,7 @@ class GhostEngine:
             formatted_event = {
                 "type": "ERROR",
                 "error": {
-                    "id": f"error-{datetime.now().timestamp()}",
+                    "id": f"error-{datetime.now().timestamp()}-{uuid.uuid4().hex[:8]}",
                     "timestamp": payload.get("timestamp", datetime.now().isoformat()),
                     "agentId": agent_id,
                     "cycleId": self.cycle_count,

@@ -1,7 +1,9 @@
 import asyncio
 import sqlite3
+import time
 import uuid
 from datetime import datetime
+from functools import wraps
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field
@@ -43,11 +45,47 @@ class ExecutionSignal(BaseModel):
     monte_carlo_ev: float
     reasoning: str
     suggested_count: int
-    timestamp: datetime = Field(default_factory=datetime.now)
     status: str = "PENDING"  # PENDING, EXECUTED, FAILED, CANCELLED
+
+class SynapseError(BaseModel):
+    """A persistent error entry for debugging and monitoring"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime = Field(default_factory=datetime.now)
+    agent_name: str
+    code: str
+    message: str
+    severity: str
+    domain: str
+    hint: str | None = None
+    context: dict = {}
+    stack_trace: str | None = None
 
 # Generic Type for Queues
 T = TypeVar("T", bound=BaseModel)
+
+# -------------------------------------------------------------------------
+# Retry Decorator for SQLite Operations
+# -------------------------------------------------------------------------
+
+def _retry_sqlite(max_retries=3, base_delay=0.05):
+    """Retry decorator for SQLite operations that may encounter locked database."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except sqlite3.OperationalError as e:
+                    if "locked" in str(e).lower() and attempt < max_retries - 1:
+                        # Exponential backoff
+                        delay = base_delay * (2 ** attempt)
+                        time.sleep(delay)
+                        continue
+                    # Re-raise if not locked error or retries exhausted
+                    raise
+            return None
+        return wrapper
+    return decorator
 
 # -------------------------------------------------------------------------
 # 2. Persistent Queue (SQLite Backed)
@@ -59,7 +97,7 @@ class PersistentQueue(Generic[T]):
     Ensures data survival across crashes/restarts.
     """
     # Whitelist of allowed table names to prevent SQL injection
-    ALLOWED_TABLES = {"queue_opportunities", "queue_executions"}
+    ALLOWED_TABLES = {"queue_opportunities", "queue_executions", "queue_errors"}
 
     def __init__(self, db_path: str, table_name: str, model_cls: type[T]):
         if table_name not in self.ALLOWED_TABLES:
@@ -96,13 +134,14 @@ class PersistentQueue(Generic[T]):
         async with self._lock:
             # We use runs_in_executor for DB ops to keep the loop non-blocking
             await asyncio.get_event_loop().run_in_executor(
-                None, 
-                self._push_sync, 
-                item, 
+                None,
+                self._push_sync,
+                item,
                 priority
             )
             # Notify potential listeners (if implementing wait logic later)
 
+    @_retry_sqlite(max_retries=3, base_delay=0.05)
     def _push_sync(self, item: T, priority: int):
         conn = sqlite3.connect(self.db_path)
         try:
@@ -124,10 +163,11 @@ class PersistentQueue(Generic[T]):
         """Get and REMOVE the next item from the queue"""
         async with self._lock:
             return await asyncio.get_event_loop().run_in_executor(
-                None, 
+                None,
                 self._pop_sync
             )
 
+    @_retry_sqlite(max_retries=3, base_delay=0.05)
     def _pop_sync(self) -> T | None:
         conn = sqlite3.connect(self.db_path)
         try:
@@ -146,6 +186,11 @@ class PersistentQueue(Generic[T]):
                 # Delete immediately (or mark processing if we want ACK logic later)
                 # For now, simple queue semantics: Pop = Consume
                 cursor.execute(f"DELETE FROM {self.table_name} WHERE id = ?", (item_id,))
+                
+                if cursor.rowcount == 0:
+                    # This should rarely happen in single-reader scneario, but good for safety
+                    print(f"[SYNAPSE] WARN: Failed to delete popped item {item_id} (rowcount=0)")
+                    
                 conn.commit()
                 
                 # Reconstruct Pydantic model
@@ -184,9 +229,13 @@ class Synapse:
             db_path, "queue_opportunities", Opportunity
         )
         
-        # 2. Execution Queue (Brain -> Hand)
         self.executions = PersistentQueue[ExecutionSignal](
             db_path, "queue_executions", ExecutionSignal
+        )
+
+        # 3. Error Box (All Agents -> Engine Monitoring)
+        self.errors = PersistentQueue[SynapseError](
+            db_path, "queue_errors", SynapseError
         )
 
     async def clear_all(self):

@@ -14,8 +14,10 @@ import asyncio
 import os
 from typing import Any
 
+import aiohttp
 from agents.base import BaseAgent
 from core.bus import EventBus
+from core.error_dispatcher import ErrorSeverity
 from core.vault import RecursiveVault
 
 try:
@@ -25,13 +27,14 @@ except ImportError:
     GEMINI_AVAILABLE = False
 
 
+from core.db import check_connection as check_supabase_connection
+from core.network import kalshi_client
 from core.synapse import Synapse
 
 
 class SoulAgent(BaseAgent):
     """The Executive Director - System, Memory & Evolution"""
 
-    HARD_FLOOR_CENTS = 25500  # $255 (15% of $300 principal = $255 floor)
 
     def __init__(self, agent_id: int, bus: EventBus, vault: RecursiveVault, synapse: Synapse = None):
         super().__init__("SOUL", agent_id, bus, synapse)
@@ -55,19 +58,35 @@ class SoulAgent(BaseAgent):
         else:
             self.client = None
 
+        self.openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+        self._first_run = True
+
     async def setup(self):
         await self.log("Soul awakening. Executive Director online.")
+
+        # API Health Check deferred to first cycle start (lazy load)
+
         await self.bus.subscribe("CYCLE_START", self.on_cycle_start)
         await self.bus.subscribe("TRADE_RESULT", self.on_trade_result)
         await self.bus.subscribe("CYCLE_COMPLETE", self.on_cycle_complete)
         await self.bus.subscribe("SYSTEM_CONTROL", self.on_system_control)
+        await self.bus.subscribe("SYSTEM_LOCKDOWN", self.on_system_lockdown)
+        await self.bus.subscribe("SYSTEM_SHUTDOWN", self.on_system_shutdown)
+        await self.bus.subscribe("SYSTEM_FATAL", self.on_system_fatal)
 
     async def on_cycle_start(self, message):
         """Pre-flight sequence"""
         await self.log("Initiating pre-flight sequence...")
 
+        # 0. Lazy Load API Check (First Run Only)
+        if self._first_run:
+            await self.check_api_health()
+            if self.is_locked_down:
+                return # Stop here if checks failed
+            self._first_run = False
+
         # 1. Safety Check - Hard Floor
-        if self.vault.current_balance < self.HARD_FLOOR_CENTS:
+        if self.vault.current_balance < self.vault.HARD_FLOOR_CENTS:
             await self.log(
                 f"🛑 EMERGENCY: Balance ${self.vault.current_balance/100:.2f} below $255 floor. LOCKDOWN.",
                 level="ERROR",
@@ -107,6 +126,74 @@ class SoulAgent(BaseAgent):
             self.mistakes_log.append(details)
             await self.log(f"Loss recorded. Lesson: {details[:50]}...")
 
+    async def _generate_with_fallback(self, prompt: str) -> str | None:
+        """Try generating content with fallback models."""
+        # Priority: 3.0 Pro -> 1.5 Flash (Skipping Image Preview as requested)
+        models = ["gemini-3-pro-preview", "gemini-1.5-flash"]
+        
+        for model in models:
+            try:
+                # await self.log(f"Attempting generation with {model}...")
+                response = await asyncio.get_event_loop().run_in_executor(
+                    None, 
+                    lambda: self.client.models.generate_content(
+                        model=model, 
+                        contents=prompt
+                    )
+                )
+                if response and response.text:
+                    return response.text
+            except Exception as e:
+                await self.log(f"Model {model} failed: {e}", level="WARN")
+                continue
+        
+        await self.log("All Gemini models failed. Attempting OpenRouter Fallback...", level="WARN")
+        return await self._call_openrouter(prompt)
+
+    async def _call_openrouter(self, prompt: str) -> str | None:
+        """Fallback to OpenRouter if primary Google API fails"""
+        if not self.openrouter_key:
+            await self.log("OpenRouter Fallback Skipped: No API Key found.", level="WARN")
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {self.openrouter_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://kalshi-trading.com", 
+            "X-Title": "Kalshi Trading Engine"
+        }
+        
+        # High-end free OpenRouter models (verified from openrouter.ai/collections/free-models)
+        # Priority order: 671B params -> 117B -> 70B -> 27B
+        openrouter_models = [
+            "tngtech/deepseek-r1t2-chimera:free",      # 671B - WORKS!
+            "deepseek/deepseek-r1-0528:free",          # 671B
+            "openai/gpt-oss-120b:free",                # 117B - OpenAI's latest
+            "meta-llama/llama-3.3-70b-instruct:free",  # 70B - Meta's best
+            "google/gemma-3-27b:free",                 # 27B - Google open model
+        ]
+
+        async with aiohttp.ClientSession() as session:
+            for model in openrouter_models:
+                data = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+                try:
+                    async with session.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data) as resp:
+                        if resp.status == 200:
+                            result = await resp.json()
+                            content = result["choices"][0]["message"]["content"]
+                            await self.log(f"OpenRouter Fallback ({model}) SUCCESS.")
+                            return content
+                        error_text = await resp.text()
+                        await self.log(f"OpenRouter Fallback ({model}) Failed ({resp.status}): {error_text[:100]}", level="WARN")
+                except Exception as e:
+                    await self.log(f"OpenRouter Connection Error ({model}): {e}", level="WARN")
+
+        await self.log("ALL AI SERVICES FAILED (Gemini + OpenRouter).", level="ERROR")
+        return None
+
     async def evolve_instructions(self):
         """Use Gemini to rewrite trading instructions based on history (Self-Optimization)"""
         if not self.client:
@@ -121,11 +208,12 @@ LOSSES: {self.mistakes_log[-5:] if self.mistakes_log else 'None yet'}
 Write a concise set of 5 trading rules to maximize wins and avoid losses. Be specific."""
 
         try:
-            response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.client.models.generate_content(model="gemini-1.5-pro", contents=prompt)
-            )
-            self.trading_instructions = response.text
-            await self.log("Trading instructions evolved via Gemini.")
+            response_text = await self._generate_with_fallback(prompt)
+            if response_text:
+                self.trading_instructions = response_text
+                await self.log("Trading instructions evolved via Gemini.")
+            else:
+                 await self.log("Evolution failed: All models failed.", level="ERROR")
         except Exception as e:
             await self.log(f"Evolution failed: {str(e)[:50]}", level="ERROR")
 
@@ -138,18 +226,42 @@ Write a concise set of 5 trading rules to maximize wins and avoid losses. Be spe
             await self.log(f"🚀 AUTOPILOT ENABLED (Paper: {self.is_paper_trading}). Starting autonomous loop...")
             await self.bus.publish("REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name)
         elif action == "STOP_AUTOPILOT":
-            self.autopilot_enabled = False
-            await self.log("🛑 AUTOPILOT DISABLED. (System will pause after current cycle)")
+            if self.autopilot_enabled:
+                self.autopilot_enabled = False
+                await self.log("🛑 AUTOPILOT DISABLED. (System will pause after current cycle)")
 
     async def on_cycle_complete(self, message):
         """Trigger next cycle if in Autopilot mode"""
         if self.autopilot_enabled and not self.is_locked_down:
             await self.log(f"Cycle complete. Waiting {self.autopilot_delay}s for next pulse...")
             await asyncio.sleep(self.autopilot_delay)
-            
+
             # Re-check in case it was disabled during sleep
-            if self.autopilot_enabled:
+            if self.autopilot_enabled and not self.is_locked_down:
                 await self.bus.publish("REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name)
+
+    async def on_system_lockdown(self, message):
+        """Handle system lockdown by disabling autopilot immediately"""
+        reason = message.payload.get("reason", "Unknown")
+        await self.log(f"🔒 SYSTEM LOCKDOWN: {reason}", level="WARN")
+        self.is_locked_down = True
+        self.autopilot_enabled = False  # Disable autopilot immediately
+        await self.log("🛑 AUTOPILOT DISABLED due to lockdown")
+
+    async def on_system_shutdown(self, message):
+        """Handle system shutdown by disabling autopilot immediately"""
+        reason = message.payload.get("reason", "Unknown")
+        await self.log(f"🔴 SYSTEM SHUTDOWN: {reason}", level="WARN")
+        self.autopilot_enabled = False  # Disable autopilot immediately
+        await self.log("🛑 AUTOPILOT DISABLED due to shutdown")
+
+    async def on_system_fatal(self, message):
+        """Handle fatal errors by disabling autopilot immediately"""
+        error_msg = message.payload.get("message", "Unknown Fatal Error")
+        await self.log(f"💀 FATAL ERROR: {error_msg}", level="ERROR")
+        self.is_locked_down = True
+        self.autopilot_enabled = False  # Disable autopilot immediately
+        await self.log("🛑 AUTOPILOT DISABLED due to fatal error")
 
     async def on_tick(self, payload: dict[str, Any]):
         """Periodic self-check"""
@@ -166,3 +278,55 @@ Write a concise set of 5 trading rules to maximize wins and avoid losses. Be spe
             },
             self.name,
         )
+
+    async def check_api_health(self):
+        """Verify all critical APIs are reachable and functional."""
+        await self.log("Requesting Pre-flight API Status Check...", level="INFO")
+        
+        errors = []
+        
+        # 1. Kalshi API Check
+        try:
+            balance = await kalshi_client.get_balance()
+            if balance == 0:
+                   # Try one more check
+                   if not await kalshi_client.get_active_markets(limit=1):
+                       errors.append("Kalshi API unreachable or 0 balance/markets.")
+        except Exception as e:
+            errors.append(f"Kalshi API Error: {e}")
+
+        # 2. Supabase Check
+        if not await check_supabase_connection():
+            errors.append("Supabase (Database) unreachable.")
+
+        # 3. Gemini Check (if available)
+        if GEMINI_AVAILABLE and self.client:
+            try:
+                # Lightweight check: simple generation
+                resp = await self._generate_with_fallback("ping")
+                if not resp:
+                    errors.append("Gemini API (All models) failed.")
+            except Exception as e:
+                errors.append(f"Gemini API Error: {e}")
+        elif GEMINI_AVAILABLE and not self.client:
+             errors.append("Gemini library found but API Key missing.")
+
+        if errors:
+            error_msg = " | ".join(errors)
+            await self.log(f"OPENING PRE-FLIGHT CHECK FAILED: {error_msg}", level="ERROR")
+            
+            # Unified Error Dispatch (Logs to Synapse + Broadcasts)
+            await self.log_error(
+                code="SYSTEM_INIT_FAILED",
+                message=f"Pre-flight API Failures: {error_msg}",
+                severity=ErrorSeverity.CRITICAL,
+                hint="Check API keys for Kalshi/Gemini/OpenRouter and DB connection"
+            )
+            
+            # LOCKDOWN
+            self.is_locked_down = True
+            await self.bus.publish("SYSTEM_LOCKDOWN", {"reason": f"API Check Failed: {error_msg}"}, self.name)
+            # Signal Fatal to stop engine
+            await self.bus.publish("SYSTEM_FATAL", {"message": f"Pre-flight Check Failed: {error_msg}"}, self.name)
+        else:
+            await self.log("✅ PRE-FLIGHT API CHECK PASSED (Kalshi, Supabase, Gemini)", level="SUCCESS")
