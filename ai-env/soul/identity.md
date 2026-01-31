@@ -58,5 +58,5 @@ A good snapshot saves **time and tokens**. Before you hand off, answer:
 ### [2026-01-29] by chore
 **Snapshot**: Engine configuration cleanup, brain agent updates, test improvements
 
-### [2026-01-29] by docs(evolution)
-**Snapshot**: Created detailed plan for Phase 1 Mistake Tracking System with architecture blueprint, implementation map, and success metrics
+### [2026-01-30] by feat(architecture)
+**Snapshot**: Established **Strict Decoupling** between all Mega-Agents via Synapse persistent queues. Direct agent-to-agent data flow is now forbidden. Implemented the **Persistent Synapse Error Box**—a global health monitor that forces an engine-wide halt if unhandled exceptions are persisted, ensuring total safety and self-explanatory debugging.

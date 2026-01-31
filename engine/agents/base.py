@@ -1,12 +1,10 @@
-import json
-import os
 from abc import ABC
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from core.bus import EventBus
+from core.error_dispatcher import ErrorDispatcher, ErrorDomain, ErrorSeverity
 from core.synapse import Synapse
-from core.error_dispatcher import ErrorDispatcher, ErrorSeverity, ErrorDomain
 
 
 class BaseAgent(ABC):
@@ -43,41 +41,44 @@ class BaseAgent(ABC):
         """Handler for periodic ticks."""
 
     async def log(self, message: str, level: str = "INFO"):
-        # Filter emojis for Windows console compatibility
-        import re
-        emoji_pattern = re.compile("["
-            u"\U0001F600-\U0001F64F"  # emoticons
-            u"\U0001F300-\U0001F5FF"  # symbols & pictographs
-            u"\U0001F680-\U0001F6FF"  # transport & map symbols
-            u"\U0001F1E0-\U0001F1FF"  # flags
-            u"\U00002702-\U000027B0"
-            u"\U000024C2-\U0001F251"
-            "]+", flags=re.UNICODE)
-        clean_message = emoji_pattern.sub(r'', message)
-
+        """Log a message to both the bus (for frontend) and console."""
+        from core.logger import get_logger
+        
+        # Publish to bus for Frontend
         payload = {
             "level": level,
-            "message": message,  # Keep original message for frontend
+            "message": message,
             "agent_id": self.agent_id,
             "agent_name": self.name,
             "timestamp": datetime.now().isoformat(),
         }
         await self.bus.publish("SYSTEM_LOG", payload, self.name)
 
-        if os.getenv("JSON_LOGS") == "true":
-            print(json.dumps({"type": "LOG", "data": payload}))
-        else:
-            print(f"[{self.name}] {clean_message}")
+        # Log to Console via Centralized Logger
+        logger = get_logger(self.name)
+        
+        # Map log levels to logger methods
+        log_methods = {
+            "INFO": logger.info,
+            "WARN": logger.warning,
+            "WARNING": logger.warning,
+            "ERROR": logger.error,
+            "DEBUG": logger.debug,
+            "SUCCESS": lambda msg: logger.info(f"SUCCESS: {msg}"),
+        }
+        
+        log_func = log_methods.get(level, logger.info)
+        log_func(message)
 
     async def log_error(
         self,
         code: str,
-        message: Optional[str] = None,
+        message: str | None = None,
         severity: ErrorSeverity = ErrorSeverity.MEDIUM,
-        domain: Optional[ErrorDomain] = None,
-        context: Optional[dict] = None,
-        exception: Optional[Exception] = None,
-        hint: Optional[str] = None
+        domain: ErrorDomain | None = None,
+        context: dict | None = None,
+        exception: Exception | None = None,
+        hint: str | None = None
     ):
         """
         Log an error using the centralized error dispatcher

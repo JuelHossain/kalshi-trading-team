@@ -1,20 +1,20 @@
 import asyncio
-import sys
 import os
-import uuid
-from colorama import init, Fore, Style
+import sys
+
+from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
 # Ensure engine path is in sys.path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 # Load environment
-load_dotenv(os.path.join(os.path.dirname(__file__), '../../.env'))
+load_dotenv(os.path.join(os.path.dirname(__file__), "../../.env"))
 
-from core.bus import EventBus
-from core.synapse import Synapse, ExecutionSignal, Opportunity, MarketData
-from core.vault import RecursiveVault
 from agents.hand import HandAgent
+from core.bus import EventBus
+from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
+from core.vault import RecursiveVault
 
 # Initialize Colorama
 init()
@@ -23,7 +23,7 @@ async def main():
     print(f"{Fore.GREEN}=========================================={Style.RESET_ALL}")
     print(f"{Fore.GREEN}     HAND AGENT - LIVE DIAGNOSTIC TAP      {Style.RESET_ALL}")
     print(f"{Fore.GREEN}=========================================={Style.RESET_ALL}")
-    print(f"Goal: Inject signal into Synapse and watch Hand strike\n")
+    print("Goal: Inject signal into Synapse and watch Hand strike\n")
 
     # 1. Setup Infrastructure
     bus = EventBus()
@@ -46,7 +46,7 @@ async def main():
     await bus.subscribe("TRADE_RESULT", monitor_bus)
 
     # 3. Inject Mock Signal
-    print(f"Injecting mock ExecutionSignal into Synapse...")
+    print("Injecting mock ExecutionSignal into Synapse...")
     m_data = MarketData(
         ticker="DIAG-TEST-TICKER",
         title="Diagnostic Test",
@@ -68,12 +68,12 @@ async def main():
     print(f"Signal injected. Synapse Pending Executions: {await synapse.executions.size()}\n")
 
     # 4. Initialize Hand
-    print(f"Initializing HandAgent...")
+    print("Initializing HandAgent...")
     hand = HandAgent(4, bus, vault, synapse=synapse)
     await hand.setup()
 
     # 5. Trigger Loop
-    print(f"Triggering EXECUTION_READY signal...")
+    print("Triggering EXECUTION_READY signal...")
     await bus.publish("EXECUTION_READY", {"ticker": "DIAG-TEST-TICKER"}, "DIAGNOSTIC")
 
     # Wait for processing

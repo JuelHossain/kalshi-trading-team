@@ -1,59 +1,18 @@
 {
-  "mcpServers": {
-    "github": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "github-mcp"
-      ],
-      "env": {
-        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
-      }
-    }
-  },
   "permissions": {
     "allow": [
-      "Read(//c/Users/jrrah/.vscode/extensions/**)",
-      "Read(//c/Users/jrrah/.vscode/**)",
-      "Read(//c/Users/jrrah/.serena/**)",
-      "mcp__plugin_serena_serena__get_current_config",
-      "mcp__plugin_playwright_playwright__browser_console_messages",
-      "Read(//c/Users/jrrah/.claude/**)",
-      "mcp__plugin_playwright_playwright__browser_click",
+      "Bash(if:*)",
+      "Bash(then tail -100 sentient_alpha.log)",
+      "Bash(elif:*)",
+      "Bash(then tail -100 ../logs/engine.log)",
+      "Bash(else echo \"No log file found, checking console output...\")",
+      "Bash(fi)",
       "Bash(timeout:*)",
-      "Bash(npm install:*)",
-      "Bash(dir \"C:\\\\Users\\\\jrrah\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\e--Projects-kalshi-trading-team\\\\tasks\")",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(gh:*)",
-      "Bash(./scripts/handoff.sh:*)",
-      "Bash(pip install:*)",
-      "Bash(find:*)"
-    ],
-    "additionalDirectories": [
-      "C:\\Users\\jrrah\\.serena"
-    ],
-    "allow_all": true,
-    "read": true,
-    "write": true,
-    "bash": true,
-    "web": true,
-    "mcp": true
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "pattern": "engine/**/*.py",
-        "command": "npx kill-port 3002 && cd engine && python main.py",
-        "description": "Restart engine after Python changes"
-      }
-    ],
-    "PreToolUse": [
-      {
-        "pattern": "**/.env*",
-        "block": true,
-        "message": "SECURITY: Direct modification of .env files is blocked. Use environment variable management or contact system administrator."
-      }
+      "Bash(ping:*)",
+      "Bash(for:*)",
+      "Bash(do:*)",
+      "Bash(echo:*)",
+      "Bash(1 done)"
     ]
   }
 }

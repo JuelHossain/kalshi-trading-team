@@ -1,39 +1,33 @@
-# Multi-Agent Project Constitution
 
-Strict standards for all Human and AI collaborators to ensure project stability, autonomous safety, and efficient scaling.
+## 🤖 Antigravity Delegation Protocol (Claude Code)
+When a task is complex (3+ files or high-level feature), Antigravity acts as the **Architect**:
+1.  **Analyze**: Break the request into logical, discrete chunks. **Conflict Prevention (Mutex)**: Assign specific files to specific chunks in `task.md`. No two active chunks can own the same file.
+2.  **Plan**: Draft a `task.md` and `implementation_plan.md` in the brain directory.
+3.  **Delegate**: Use `run_command` to invoke `claude` (Claude Code) in the terminal. **Operational Rule**: Use `--dangerously-skip-permissions` for headless execution to avoid blocking prompts.
+4.  **Instruct**: Provide Claude with precise prompts. **Mandatory TDD**: Instruct Claude to write a reproduction script or test case *before* attempting the fix/feature.
+5.  **Audit**: Review Claude's output and verify the sub-tasks are completed.
+6.  **Evolution**: Actively manage the `.claude/` folder. **Skill Pruning**: Remove unused skills to maintain context hygiene. Generate new **skills**, **subagents**, and **hooks** based on project needs.
+7.  **Lessons Learned**:
+    *   **Mutex is Law**: Parallel agents MUST modify distinct files. Never allow two agents to touch `main.py` simultaneously.
+    *   **Config Hygiene**: Verify `.claude/hooks.json` is valid before spawning agents to prevent "Settings Error" blocks.
 
-## 🛡️ PILLAR 1: Safety & Operational Security (The Anchor)
+## 🧱 The 4 Mega-Agents (Core Pillars)
+*   **SOUL**: Executive Leader. Manages Autopilot Pulse and Evolution. **Mandatory AI Fallback**: Native Gemini -> OpenRouter.
+*   **SENSES**: Market Observer. Real-time context retrieval via DuckDuckGo.
+*   **BRAIN**: Cognitive Analyst. Multi-persona debate and Monte Carlo simulation. **Decoupled**: No direct Senses link.
+*   **HAND**: Tactical Executioner. Ragnarok protocol and capital protection. **Decoupled**: No direct Brain link.
 
-- **Veto Supremacy**: If ANY security check emits `veto: true`, the trade cycle must terminate immediately. No buy orders allowed.
-- **Vault Lock**: Zero trade execution if `VaultState.isLocked` is true.
-- **Paper-First**: All experimental workflows must default to `IS_PAPER_TRADING: true`.
-- **Ragnarok Protocol**: Manual and automated kill-switches must trigger an immediate liquidation of all open orders.
+## 🛡️ Operational Laws (From Constitution)
+*   **Git Protocol**: Always operate on the `opencode` branch. `git pull --rebase origin opencode` first.
+*   **Safety**: If `veto: true` or `VaultState.isLocked`, terminate trade cycles.
+*   **Persistence**: All handoffs must go through **Synapse** (SQLite). **Strict Decoupling**: Direct agent-to-agent references are forbidden.
+*   **Safety (Error Box)**: GhostEngine monitors `Synapse.errors`. If entries exist, all cycles are halted until cleared.
+*   **Communication**: Use `./scripts/handoff.sh "message"` for atomic document/git sync.
 
-## 🔗 PILLAR 2: Agent Contract & Service Boundaries
-
-- **Synapse Persistence**: High-value data handoff (Opportunities -> Signals -> Executions) must go through the **Synapse Persistent Queue** (SQLite).
-- **Decoupled I/O**: Agents communicate via the `EventBus` for triggers, but rely on Synapse for state persistence.
-- **Latency Budget**: Market-critical tasks must use `asyncio` to prevent blocking the event loop.
-
-## 🛠️ PILLAR 3: Engineering & Git Workflow (The Shield)
-
-- **Git Protocol**: Never commit directly to `main`. Always work on the `opencode` branch.
-- **Atomic Refactoring**: Commits must be testable units with conventional titles (`feat:`, `fix:`, `refactor:`).
-- **Verification**: Test every change thoroughly (Build -> Deploy -> UI Check) before considering a task complete.
-- **Proof of Work**: Every significant task must result in a `.md` walkthrough in the `walkthroughs/` folder.
-
-## 📈 PILLAR 4: Resilience & Scalability (The Layer)
-
-- **2-Tier Architecture**: React Frontend connects directly to the Python Engine (Port 3002). No intermediate Node.js layer.
-- **AI Stack**: Use the `google-genai` SDK with Gemini 1.5 Pro.
-- **Process Management**: Follow the `ecosystem.config.cjs` architecture. Services must be managed via PM2.
-- **Environment**: Use `.env` for secrets; never commit keys to the repository.
-
-## 🤖 PILLAR 5: Cross-Agent Technical Handoff
-
-- **Technical Toolbox**: All agents must consult the specialized skills and diagnostic scripts in `.opencode/skills/` before refactoring core architecture.
-- **Protocol**: Refer to [CROSS_AGENT_PROTOCOL.md](./CROSS_AGENT_PROTOCOL.md) for multi-environment synchronization rules.
-- **Universal IDs**: Standardize Agent IDs and Phase IDs across all platforms using `shared/constants.ts`.
+## 🖥️ Monitoring & Skills
+*   **Sentient HUD**: [localhost:3000](http://localhost:3000)
+*   **Specialized Skills**: Consult [ai-env/skills/](./ai-env/skills/) before refactoring core logic.
+*   **Verification**: Run `python3 .opencode/skills/core-ops/scripts/health_check.py` to confirm port/service alignment.
 
 ---
-_Constitution Ratified - Sentient Alpha Core_
+_Constitution Ratified - Sentient Alpha Core (Antigravity Edition)_

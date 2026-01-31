@@ -2,8 +2,9 @@
 Centralized Error Handling System for Ghost Engine
 
 This module provides the ErrorDispatcher class that standardizes error handling
-across all agents and components. It provides:
+across all agents and components.
 
+Features:
 - Error categorization by domain and severity
 - Structured error logging to terminal
 - Non-blocking SSE error broadcasting to frontend
@@ -11,88 +12,18 @@ across all agents and components. It provides:
 - Actionable error hints for users
 - Error code tracking for analytics
 """
-
 import asyncio
 import hashlib
-import os
 import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
-from typing import Any, Optional
 
-# Windows-safe terminal colors
-class Colors:
-    """Terminal color codes (Windows-safe)"""
-    RED = "\033[91m"      # CRITICAL
-    YELLOW = "\033[93m"    # HIGH
-    ORANGE = "\033[38;5;208m"  # MEDIUM
-    BLUE = "\033[94m"      # LOW
-    GRAY = "\033[90m"      # INFO
-    GREEN = "\033[92m"     # SUCCESS
-    RESET = "\033[0m"
-    BOLD = "\033[1m"
-
-
-class ErrorSeverity(Enum):
-    """Error severity levels"""
-    CRITICAL = 5  # System-wide failure, requires immediate intervention
-    HIGH = 4      # Component failure, degrades service
-    MEDIUM = 3    # Feature failure, workarounds available
-    LOW = 2       # Minor issue, no impact on operations
-    INFO = 1      # Informational, no error
-
-
-class ErrorDomain(Enum):
-    """Error domains by component"""
-    NETWORK = "NETWORK"         # API connections, timeouts
-    TRADING = "TRADING"         # Order execution, vault
-    INTELLIGENCE = "INTELLIGENCE"  # AI services, Gemini
-    DATA = "DATA"               # Queues, database, validation
-    AUTH = "AUTH"               # Authentication, credentials
-    CONFIG = "CONFIG"           # Environment, setup
-    SYSTEM = "SYSTEM"           # General system errors
-
-
-# Error Code Definitions
-class ErrorCodes:
-    """Standardized error codes with messages and hints"""
-
-    # Network Errors (NETWORK_xxx)
-    NETWORK_TIMEOUT = ("NETWORK_TIMEOUT", "API request timeout", "Check network connection")
-    NETWORK_RATE_LIMIT = ("NETWORK_RATE_LIMIT", "API rate limit exceeded", "Wait before retrying")
-    NETWORK_CONNECTION_FAILED = ("NETWORK_CONNECTION_FAILED", "Failed to connect to API", "Verify API credentials")
-    NETWORK_SERVER_ERROR = ("NETWORK_SERVER_ERROR", "API server error", "Try again later")
-
-    # Trading Errors (TRADING_xxx)
-    TRADE_INSUFFICIENT_FUNDS = ("TRADE_INSUFFICIENT_FUNDS", "Insufficient vault balance", "Wait for order settlements")
-    TRADE_KILL_SWITCH = ("TRADE_KILL_SWITCH", "Kill switch activated", "Manual intervention required")
-    TRADE_INVALID_TICKER = ("TRADE_INVALID_TICKER", "Invalid market ticker", "Verify ticker symbol")
-    TRADE_ORDER_FAILED = ("TRADE_ORDER_FAILED", "Order placement failed", "Check order parameters")
-    TRADE_HARD_FLOOR = ("TRADE_HARD_FLOOR", "Balance below hard floor", "Emergency lockdown active")
-
-    # Intelligence Errors (INTELLIGENCE_xxx)
-    INTELLIGENCE_AI_UNAVAILABLE = ("INTELLIGENCE_AI_UNAVAILABLE", "AI service unavailable", "Check API key configuration")
-    INTELLIGENCE_DEBATE_FAILED = ("INTELLIGENCE_DEBATE_FAILED", "AI debate failed", "System will veto trade")
-    INTELLIGENCE_PARSE_ERROR = ("INTELLIGENCE_PARSE_ERROR", "Failed to parse AI response", "Response format invalid")
-    INTELLIGENCE_TIMEOUT = ("INTELLIGENCE_TIMEOUT", "AI request timeout", "Service may be overloaded")
-
-    # Data Errors (DATA_xxx)
-    DATA_QUEUE_EMPTY = ("DATA_QUEUE_EMPTY", "No data in queue", "Waiting for new opportunities")
-    DATA_VALIDATION_FAILED = ("DATA_VALIDATION_FAILED", "Data validation failed", "Check data format")
-    DATA_PUSH_FAILED = ("DATA_PUSH_FAILED", "Failed to queue data", "Queue may be full")
-
-    # Auth Errors (AUTH_xxx)
-    AUTH_INVALID_KEY = ("AUTH_INVALID_KEY", "Invalid API credentials", "Check .env configuration")
-    AUTH_MISSING_KEY = ("AUTH_MISSING_KEY", "API key not configured", "Set GEMINI_API_KEY in .env")
-
-    # Config Errors (CONFIG_xxx)
-    CONFIG_MISSING_ENV = ("CONFIG_MISSING_ENV", "Environment variable missing", "Check .env file")
-    CONFIG_INVALID_VALUE = ("CONFIG_INVALID_VALUE", "Invalid configuration value", "Check config file")
-
-    # System Errors (SYSTEM_xxx)
-    SYSTEM_INIT_FAILED = ("SYSTEM_INIT_FAILED", "System initialization failed", "Check agent dependencies")
-    SYSTEM_EVENT_BUS_FAILED = ("SYSTEM_EVENT_BUS_FAILED", "Event bus error", "Check agent subscriptions")
+from core.error_codes import (
+    ErrorCodes,
+    ErrorDomain,
+    ErrorSeverity,
+    Colors
+)
 
 
 @dataclass
@@ -104,10 +35,10 @@ class ErrorEvent:
     domain: ErrorDomain                  # Error domain
     agent_name: str                      # Agent that raised the error
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-    correlation_id: Optional[str] = None  # For distributed tracing
+    correlation_id: str | None = None  # For distributed tracing
     context: dict = field(default_factory=dict)  # Additional context
-    hint: Optional[str] = None           # Actionable hint for user
-    stack_trace: Optional[str] = None    # Stack trace (only for exceptions)
+    hint: str | None = None           # Actionable hint for user
+    stack_trace: str | None = None    # Stack trace (only for exceptions)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for SSE broadcasting"""
@@ -199,14 +130,13 @@ class ErrorDispatcher:
         """Get terminal color for severity"""
         if severity == ErrorSeverity.CRITICAL:
             return Colors.RED
-        elif severity == ErrorSeverity.HIGH:
+        if severity == ErrorSeverity.HIGH:
             return Colors.YELLOW
-        elif severity == ErrorSeverity.MEDIUM:
+        if severity == ErrorSeverity.MEDIUM:
             return Colors.ORANGE
-        elif severity == ErrorSeverity.LOW:
+        if severity == ErrorSeverity.LOW:
             return Colors.BLUE
-        else:
-            return Colors.GRAY
+        return Colors.GRAY
 
     def _format_terminal_output(self, error: ErrorEvent) -> str:
         """Format error for terminal output"""
@@ -231,12 +161,12 @@ class ErrorDispatcher:
     async def dispatch(
         self,
         code: str,
-        message: Optional[str] = None,
+        message: str | None = None,
         severity: ErrorSeverity = ErrorSeverity.MEDIUM,
-        domain: Optional[ErrorDomain] = None,
-        context: Optional[dict] = None,
-        exception: Optional[Exception] = None,
-        hint: Optional[str] = None
+        domain: ErrorDomain | None = None,
+        context: dict | None = None,
+        exception: Exception | None = None,
+        hint: str | None = None
     ) -> ErrorEvent:
         """
         Dispatch an error to terminal and frontend
@@ -292,9 +222,14 @@ class ErrorDispatcher:
         if self.event_bus:
             asyncio.create_task(self._broadcast_error(error))
 
-        # Log to Synapse if available (non-blocking)
+        # Log to Synapse if available
         if self.synapse:
-            asyncio.create_task(self._log_to_synapse(error))
+            if error.severity.value >= ErrorSeverity.HIGH.value:
+                # CRITICAL: Await for High/Critical errors to ensure "Error Box" halts the engine
+                await self._log_to_synapse(error)
+            else:
+                # Non-critical: Fire-and-forget
+                asyncio.create_task(self._log_to_synapse(error))
 
         return error
 
@@ -314,8 +249,20 @@ class ErrorDispatcher:
     async def _log_to_synapse(self, error: ErrorEvent):
         """Log error to Synapse for persistent storage"""
         try:
-            # TODO: Implement error logging to Synapse when error tables are added
-            pass
+            from core.synapse import SynapseError
+            if self.synapse:
+                # Map ErrorEvent to SynapseError Pydantic model
+                synapse_error = SynapseError(
+                    agent_name=error.agent_name,
+                    code=error.code,
+                    message=error.message,
+                    severity=error.severity.name,
+                    domain=error.domain.value,
+                    hint=error.hint,
+                    context=error.context,
+                    stack_trace=error.stack_trace
+                )
+                await self.synapse.errors.push(synapse_error)
         except Exception as e:
             print(f"{Colors.RED}[ERROR_DISPATCHER] Failed to log to Synapse: {e}{Colors.RESET}")
 
@@ -323,40 +270,3 @@ class ErrorDispatcher:
         """Clear error history (useful for testing)"""
         self._error_hashes.clear()
         self._error_timestamps.clear()
-
-
-# Convenience functions for common error patterns
-async def handle_ai_unavailable(dispatcher: ErrorDispatcher, agent_name: str, context: dict = None):
-    """Handle AI service unavailable error"""
-    return await dispatcher.dispatch(
-        code="INTELLIGENCE_AI_UNAVAILABLE",
-        severity=ErrorSeverity.HIGH,
-        domain=ErrorDomain.INTELLIGENCE,
-        context=context or {},
-        hint="Check GEMINI_API_KEY in .env file"
-    )
-
-
-async def handle_api_error(dispatcher: ErrorDispatcher, status_code: int, context: dict = None):
-    """Handle API error with status code"""
-    if status_code == 429:
-        return await dispatcher.dispatch(
-            code="NETWORK_RATE_LIMIT",
-            severity=ErrorSeverity.HIGH,
-            domain=ErrorDomain.NETWORK,
-            context=context or {}
-        )
-    elif 500 <= status_code <= 504:
-        return await dispatcher.dispatch(
-            code="NETWORK_SERVER_ERROR",
-            severity=ErrorSeverity.MEDIUM,
-            domain=ErrorDomain.NETWORK,
-            context=context or {}
-        )
-    else:
-        return await dispatcher.dispatch(
-            code="NETWORK_CONNECTION_FAILED",
-            severity=ErrorSeverity.HIGH,
-            domain=ErrorDomain.NETWORK,
-            context=context or {}
-        )

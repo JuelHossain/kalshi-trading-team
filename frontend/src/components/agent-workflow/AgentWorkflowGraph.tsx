@@ -18,7 +18,6 @@ import AgentNode from './AgentNode';
 import SynapseNode from './SynapseNode';
 import DataFlowEdge from './DataFlowEdge';
 import { useStore } from '@/store/useStore';
-import { AgentSlice, AgentState, DataFlowTransition } from '@/store/slices/agentSlice';
 
 // Node types for React Flow
 const nodeTypes = {

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { BaseEdge, EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
 import { motion } from 'framer-motion';
 
@@ -33,13 +33,6 @@ const DataFlowEdge = ({
   const isActive = data?.active ?? false;
   const color = data?.color ?? '#666';
   const flowType = data?.flowType ?? 'authorization';
-
-  // Calculate path length for animations
-  const pathLength = useMemo(() => {
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', edgePath);
-    return path.getTotalLength();
-  }, [edgePath]);
 
   // Particle animation variants
   const particleCount = isActive ? 3 : 0;

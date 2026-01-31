@@ -122,12 +122,18 @@ const NeuralTraceEvents: React.FC<NeuralTraceEventsProps> = ({ events }) => {
     <div className="space-y-1 max-h-48 overflow-y-auto no-scrollbar">
       {events.map((event) => {
         if (event.type === 'LOG') return <LogLine key={event.id} log={event.data as LogEntry} />;
-        if (event.type === 'SIMULATION') return <SimulationCard key={event.id} data={event.data as SimulationState} />;
-        if (event.type === 'VAULT') return <VaultCard key={event.id} data={event.data as VaultState} />;
-        if (event.type === 'ERROR') return <ErrorCard key={event.id} error={event.data as ErrorEvent} />;
+        if (event.type === 'SIMULATION')
+          return <SimulationCard key={event.id} data={event.data as SimulationState} />;
+        if (event.type === 'VAULT')
+          return <VaultCard key={event.id} data={event.data as VaultState} />;
+        if (event.type === 'ERROR')
+          return <ErrorCard key={event.id} error={event.data as ErrorEvent} />;
         if (event.type === 'FIXER') {
           return (
-            <div key={event.id} className="text-[9px] text-yellow-400 font-mono py-1 px-2 bg-yellow-900/10 rounded">
+            <div
+              key={event.id}
+              className="text-[9px] text-yellow-400 font-mono py-1 px-2 bg-yellow-900/10 rounded"
+            >
               🔧 {(event.data as any).action}
             </div>
           );
@@ -209,10 +215,7 @@ const AgentPipelineCard: React.FC<AgentPipelineCardProps> = ({
       )}
 
       {/* Clickable Header */}
-      <div
-        onClick={onToggle}
-        className="p-3 cursor-pointer hover:bg-white/5 transition-colors"
-      >
+      <div onClick={onToggle} className="p-3 cursor-pointer hover:bg-white/5 transition-colors">
         <div className="flex items-center gap-3">
           {/* Icon */}
           <div
@@ -228,7 +231,9 @@ const AgentPipelineCard: React.FC<AgentPipelineCardProps> = ({
               <span className="text-[9px] text-gray-500">P{phase}</span>
               {/* Event Count Badge */}
               {events.length > 0 && (
-                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${isActive ? 'bg-white/10' : 'bg-white/5'} text-gray-400`}>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${isActive ? 'bg-white/10' : 'bg-white/5'} text-gray-400`}
+                >
                   {events.length}
                 </span>
               )}
@@ -249,7 +254,9 @@ const AgentPipelineCard: React.FC<AgentPipelineCardProps> = ({
               <div className="w-1.5 h-1.5 bg-gray-600 rounded-full" />
             )}
             {/* Expand/Collapse Icon */}
-            <div className={`text-gray-500 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
+            <div
+              className={`text-gray-500 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+            >
               ▼
             </div>
           </div>
@@ -280,9 +287,35 @@ const LogisticsCenter: React.FC = () => {
   const isProcessing = useStore((state) => state.isProcessing);
   const activeTransitions = useStore((state) => state.activeTransitions);
 
+  // Real-time Synapse queue data
+  const [queueData, setQueueData] = useState<{
+    opportunities: { size: number; items: any[] };
+    executions: { size: number; items: any[] };
+    flowControl: { execution_queue_at_limit: boolean; limit: number };
+  } | null>(null);
+
   // Track expanded agents
   const [expandedAgents, setExpandedAgents] = useState<Record<number, boolean>>({});
   const [activeAgentId, setActiveAgentId] = useState<number | null>(null);
+
+  // Fetch Synapse queue data every 2 seconds
+  useEffect(() => {
+    const fetchQueueData = async () => {
+      try {
+        const res = await fetch('/api/synapse/queues');
+        if (res.ok) {
+          const data = await res.json();
+          setQueueData(data);
+        }
+      } catch (e) {
+        console.error('Failed to fetch queue data:', e);
+      }
+    };
+
+    fetchQueueData();
+    const interval = setInterval(fetchQueueData, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto-expand active agent
   useEffect(() => {
@@ -293,7 +326,7 @@ const LogisticsCenter: React.FC = () => {
 
     if (agentId && agentId !== activeAgentId) {
       setActiveAgentId(agentId);
-      setExpandedAgents((prev) => ({
+      setExpandedAgents((_prev) => ({
         // Collapse others, expand active
         1: agentId === 1,
         2: agentId === 2,
@@ -303,27 +336,18 @@ const LogisticsCenter: React.FC = () => {
     }
   }, [agentStates, activeAgentId]);
 
-  // Calculate flow metrics
+  // Calculate flow metrics - Use real queue data from Synapse API
   const flowMetrics = useMemo<FlowMetrics>(() => {
-    const opportunityEvents = timelineEvents.filter(
-      (e) => e.type === 'MARKET' || e.phaseId === 1
-    );
-    const executionEvents = timelineEvents.filter(
-      (e) => e.type === 'TRADE' || e.phaseId === 3
-    );
-
-    const recentEvents = timelineEvents.filter(
-      (e) => e.cycleId === cycleCount
-    ).length;
+    const recentEvents = timelineEvents.filter((e) => e.cycleId === cycleCount).length;
     const processingRate = cycleCount > 0 ? Math.round(recentEvents / 5) : 0;
 
     return {
-      totalOpportunities: opportunityEvents.length,
-      totalExecutions: executionEvents.length,
+      totalOpportunities: queueData?.opportunities?.size || 0,
+      totalExecutions: queueData?.executions?.size || 0,
       activeCycle: cycleCount,
       processingRate,
     };
-  }, [timelineEvents, cycleCount]);
+  }, [queueData, cycleCount, timelineEvents]);
 
   // Agent definitions
   const agents = useMemo(() => {
@@ -368,9 +392,8 @@ const LogisticsCenter: React.FC = () => {
   }, [agentStates]);
 
   // Get latest cycle events for each phase
-  const latestCycleId = timelineEvents.length > 0
-    ? timelineEvents[timelineEvents.length - 1].cycleId
-    : 0;
+  const latestCycleId =
+    timelineEvents.length > 0 ? timelineEvents[timelineEvents.length - 1].cycleId : 0;
 
   const eventsByPhase = useMemo(() => {
     const cycleEvents = timelineEvents.filter((e) => e.cycleId === latestCycleId);
@@ -383,32 +406,38 @@ const LogisticsCenter: React.FC = () => {
     return groups;
   }, [timelineEvents, latestCycleId, agents]);
 
-  // Recent opportunities and executions
+  // Recent opportunities - Use real Synapse queue data
   const recentOpportunities = useMemo(() => {
-    return timelineEvents
-      .filter((e) => e.type === 'MARKET' || (e.type === 'LOG' && e.data?.market))
-      .slice(-5)
-      .reverse()
-      .map((e) => ({
-        id: e.id,
-        market: e.data?.market || 'Unknown',
-        timestamp: e.timestamp,
-        phase: e.phaseId,
-      }));
-  }, [timelineEvents]);
+    if (!queueData?.opportunities?.items) return [];
+
+    return queueData.opportunities.items.map((item: any) => ({
+      id: item.id,
+      ticker: item.ticker,
+      title: item.title,
+      subtitle: item.subtitle,
+      yes_price: item.yes_price,
+      no_price: item.no_price,
+      volume: item.volume,
+      expiration: item.expiration,
+      timestamp: item.timestamp,
+    }));
+  }, [queueData]);
 
   const recentExecutions = useMemo(() => {
-    return timelineEvents
-      .filter((e) => e.type === 'TRADE' || (e.type === 'LOG' && e.data?.action))
-      .slice(-5)
-      .reverse()
-      .map((e) => ({
-        id: e.id,
-        action: e.data?.action || e.data?.message || 'Trade',
-        timestamp: e.timestamp,
-        phase: e.phaseId,
-      }));
-  }, [timelineEvents]);
+    if (!queueData?.executions?.items) return [];
+
+    return queueData.executions.items.map((item: any) => ({
+      id: item.id,
+      ticker: item.ticker,
+      title: item.title,
+      action: item.action,
+      side: item.side,
+      confidence: item.confidence,
+      suggested_count: item.suggested_count,
+      reasoning: item.reasoning,
+      timestamp: item.timestamp,
+    }));
+  }, [queueData]);
 
   const toggleAgent = (id: number) => {
     setExpandedAgents((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -431,28 +460,30 @@ const LogisticsCenter: React.FC = () => {
             <h3 className="text-lg font-tech font-bold text-white uppercase tracking-wider">
               Logistics Center
             </h3>
-            <p className="text-[10px] text-gray-500 font-mono">
-              Neural Trace + Agent Pipeline
-            </p>
+            <p className="text-[10px] text-gray-500 font-mono">Neural Trace + Agent Pipeline</p>
           </div>
         </div>
 
         {/* Flow Metrics */}
         <div className="flex items-center gap-3">
           <div className="px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
-            <div className="text-[9px] text-gray-500 uppercase tracking-wider font-mono">
-              Cycle
-            </div>
+            <div className="text-[9px] text-gray-500 uppercase tracking-wider font-mono">Cycle</div>
             <div className="text-sm font-bold text-white">#{flowMetrics.activeCycle}</div>
           </div>
           <div className="px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
             <div className="text-[9px] text-gray-500 uppercase tracking-wider font-mono">
-              Rate
+              Pending
             </div>
-            <div className="text-sm font-bold text-emerald-400">
-              {flowMetrics.processingRate}/min
-            </div>
+            <div className="text-sm font-bold text-blue-400">{recentOpportunities.length}</div>
           </div>
+          {queueData?.flowControl?.execution_queue_at_limit && (
+            <div className="px-3 py-1.5 bg-red-500/20 rounded-lg border border-red-500/50 animate-pulse">
+              <div className="text-[9px] text-red-400 uppercase tracking-wider font-mono">
+                Flow Control
+              </div>
+              <div className="text-sm font-bold text-red-300">PAUSED</div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -506,33 +537,42 @@ const LogisticsCenter: React.FC = () => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className="text-green-400">↓</span>
-                <span className="text-xs font-bold text-green-400">
-                  Opportunities In
-                </span>
+                <span className="text-xs font-bold text-green-400">Opportunities In</span>
               </div>
               <div className="px-2 py-0.5 bg-green-500/20 rounded text-[10px] font-bold text-green-300 border border-green-500/30">
                 {flowMetrics.totalOpportunities}
               </div>
             </div>
 
-            <div className="space-y-1.5 max-h-24 overflow-y-auto">
+            <div className="space-y-1.5 max-h-32 overflow-y-auto no-scrollbar">
               {recentOpportunities.length === 0 ? (
-                <div className="text-[10px] text-gray-600 font-mono italic py-2">
-                  Queue empty...
+                <div className="text-[10px] text-gray-600 font-mono py-2 text-center">
+                  Awaiting market data...
                 </div>
               ) : (
                 recentOpportunities.map((opp) => (
                   <div
                     key={opp.id}
-                    className="flex items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/5"
+                    className="p-2 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors"
                   >
-                    <div className="w-1 h-1 bg-green-400 rounded-full" />
-                    <span className="text-[10px] text-gray-300 font-mono flex-1 truncate">
-                      {opp.market}
-                    </span>
-                    <span className="text-[9px] text-gray-600 font-mono">
-                      P{opp.phase}
-                    </span>
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-1 h-1 bg-green-400 rounded-full shrink-0" />
+                      <span className="text-[10px] text-green-300 font-mono font-bold">
+                        {opp.ticker}
+                      </span>
+                    </div>
+                    <div className="text-[9px] text-gray-400 line-clamp-2 mb-1.5">{opp.title}</div>
+                    <div className="flex items-center gap-3 text-[9px] font-mono">
+                      <div className="flex items-center gap-1">
+                        <span className="text-green-400">YES</span>
+                        <span className="text-gray-300">{opp.yes_price}¢</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-red-400">NO</span>
+                        <span className="text-gray-300">{opp.no_price}¢</span>
+                      </div>
+                      <div className="text-gray-500">Vol: {opp.volume.toLocaleString()}</div>
+                    </div>
                   </div>
                 ))
               )}
@@ -540,37 +580,79 @@ const LogisticsCenter: React.FC = () => {
           </div>
 
           {/* Executions Out */}
-          <div className="flex-1 bg-gradient-to-br from-orange-500/5 to-transparent rounded-xl p-4 border border-orange-500/20">
+          <div
+            className={`flex-1 rounded-xl p-4 border transition-all ${
+              queueData?.flowControl?.execution_queue_at_limit
+                ? 'bg-gradient-to-br from-red-500/10 to-transparent border-red-500/30'
+                : 'bg-gradient-to-br from-orange-500/5 to-transparent border-orange-500/20'
+            }`}
+          >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className="text-orange-400">↑</span>
-                <span className="text-xs font-bold text-orange-400">
+                <span
+                  className={
+                    queueData?.flowControl?.execution_queue_at_limit
+                      ? 'text-red-400'
+                      : 'text-orange-400'
+                  }
+                >
+                  ↑
+                </span>
+                <span
+                  className={`text-xs font-bold ${
+                    queueData?.flowControl?.execution_queue_at_limit
+                      ? 'text-red-400'
+                      : 'text-orange-400'
+                  }`}
+                >
                   Executions Out
                 </span>
               </div>
-              <div className="px-2 py-0.5 bg-orange-500/20 rounded text-[10px] font-bold text-orange-300 border border-orange-500/30">
-                {flowMetrics.totalExecutions}
+              <div
+                className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                  queueData?.flowControl?.execution_queue_at_limit
+                    ? 'bg-red-500/30 text-red-300 border-red-500/50'
+                    : 'bg-orange-500/20 text-orange-300 border-orange-500/30'
+                }`}
+              >
+                {flowMetrics.totalExecutions}/10
               </div>
             </div>
 
-            <div className="space-y-1.5 max-h-24 overflow-y-auto">
+            <div className="space-y-1.5 max-h-32 overflow-y-auto no-scrollbar">
               {recentExecutions.length === 0 ? (
-                <div className="text-[10px] text-gray-600 font-mono italic py-2">
-                  Queue empty...
+                <div className="text-[10px] text-gray-600 font-mono py-2 text-center">
+                  No trades yet...
                 </div>
               ) : (
                 recentExecutions.map((exec) => (
                   <div
                     key={exec.id}
-                    className="flex items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/5"
+                    className="p-2 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors"
                   >
-                    <div className="w-1 h-1 bg-orange-400 rounded-full" />
-                    <span className="text-[10px] text-gray-300 font-mono flex-1 truncate">
-                      {exec.action}
-                    </span>
-                    <span className="text-[9px] text-gray-600 font-mono">
-                      P{exec.phase}
-                    </span>
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-1 h-1 bg-orange-400 rounded-full shrink-0" />
+                      <span className="text-[10px] text-orange-300 font-mono font-bold">
+                        {exec.ticker}
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                          exec.side === 'YES'
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-red-500/20 text-red-400'
+                        }`}
+                      >
+                        {exec.side}
+                      </span>
+                    </div>
+                    <div className="text-[9px] text-gray-400 line-clamp-2 mb-1.5">{exec.title}</div>
+                    <div className="flex items-center gap-3 text-[9px] font-mono">
+                      <div className="flex items-center gap-1">
+                        <span className="text-blue-400">{Math.round(exec.confidence * 100)}%</span>
+                        <span className="text-gray-500">conf</span>
+                      </div>
+                      <div className="text-gray-500">Qty: {exec.suggested_count}</div>
+                    </div>
                   </div>
                 ))
               )}
@@ -581,84 +663,106 @@ const LogisticsCenter: React.FC = () => {
         {/* Synapse Stats (Right) */}
         <div className="col-span-12 lg:col-span-3 flex flex-col gap-3">
           <div className="text-[10px] text-gray-500 uppercase tracking-wider font-mono">
-            Synapse Stats
+            System Stats
           </div>
 
           <div className="bg-white/5 rounded-xl p-4 border border-white/10 flex-1">
             <div className="space-y-4">
+              {/* Cycle Count */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-gray-400 font-mono">Throughput</span>
-                  <span className="text-xs font-bold text-emerald-400">
-                    {Math.round((flowMetrics.totalExecutions / (flowMetrics.totalOpportunities || 1)) * 100)}%
+                  <span className="text-[10px] text-gray-400 font-mono">Total Cycles</span>
+                  <span className="text-xs font-bold text-blue-400">#{cycleCount}</span>
+                </div>
+                <div className="text-[8px] text-gray-600">Trading cycles completed</div>
+              </div>
+
+              {/* Total Trades */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-gray-400 font-mono">Total Trades</span>
+                  <span className="text-xs font-bold text-orange-400">
+                    {flowMetrics.totalExecutions}
                   </span>
                 </div>
-                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div className="text-[8px] text-gray-600">Executed trades</div>
+              </div>
+
+              {/* Success Rate */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-gray-400 font-mono">Conversion Rate</span>
+                  <span className="text-xs font-bold text-emerald-400">
+                    {flowMetrics.totalOpportunities > 0
+                      ? Math.round(
+                          (flowMetrics.totalExecutions / flowMetrics.totalOpportunities) * 100
+                        )
+                      : 0}
+                    %
+                  </span>
+                </div>
+                <div className="text-[8px] text-gray-600">Executions / Opportunities</div>
+                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mt-1">
                   <div
                     className="h-full bg-gradient-to-r from-emerald-500 to-green-400 rounded-full transition-all duration-500"
                     style={{
-                      width: `${Math.min((flowMetrics.totalExecutions / (flowMetrics.totalOpportunities || 1)) * 100, 100)}%`,
+                      width: `${Math.min(
+                        flowMetrics.totalOpportunities > 0
+                          ? (flowMetrics.totalExecutions / flowMetrics.totalOpportunities) * 100
+                          : 0,
+                        100
+                      )}%`,
                     }}
                   />
                 </div>
               </div>
 
+              {/* Active Agents */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-gray-400 font-mono">Pipeline Load</span>
-                  <span className="text-xs font-bold text-blue-400">
+                  <span className="text-[10px] text-gray-400 font-mono">Active Agents</span>
+                  <span className="text-xs font-bold text-purple-400">
                     {agents.filter((a) => a.state?.status === 'active').length}/4
                   </span>
                 </div>
-                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-purple-400 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${(agents.filter((a) => a.state?.status === 'active').length / 4) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[10px] text-gray-400 font-mono">Queue Depth</span>
-                  <span className="text-xs font-bold text-orange-400">
-                    {recentOpportunities.length + recentExecutions.length}
-                  </span>
-                </div>
-                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-orange-500 to-red-400 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${Math.min(((recentOpportunities.length + recentExecutions.length) / 10) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
+                <div className="text-[8px] text-gray-600">Currently processing</div>
               </div>
             </div>
 
-            {/* Active Transitions */}
-            {activeTransitions.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-white/10">
-                <div className="text-[10px] text-gray-400 font-mono mb-2">
-                  Active Flows
-                </div>
-                <div className="space-y-1.5">
-                  {activeTransitions.slice(0, 3).map((trans) => (
+            {/* Current Phase Indicator */}
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <div className="text-[10px] text-gray-400 font-mono mb-2">Current Phase</div>
+              <div className="space-y-1.5">
+                {agents.map((agent) => {
+                  const isActive = agent.state?.status === 'active';
+                  return (
                     <div
-                      key={trans.id}
-                      className="flex items-center gap-2 p-2 bg-white/5 rounded-lg border border-white/5 animate-pulse"
+                      key={agent.id}
+                      className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${
+                        isActive ? 'bg-white/10 border-white/20' : 'bg-white/5 border-white/5'
+                      }`}
                     >
-                      <div className="w-1 h-1 bg-blue-400 rounded-full" />
-                      <span className="text-[10px] text-gray-300 font-mono">
-                        {trans.flowType}
+                      <div
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          isActive ? 'bg-emerald-400 animate-pulse' : 'bg-gray-600'
+                        }`}
+                      />
+                      <span
+                        className={`text-[10px] font-mono ${isActive ? 'text-white' : 'text-gray-600'}`}
+                      >
+                        {isActive ? `→ ${agent.name}` : agent.name}
                       </span>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            )}
+              {isProcessing && (
+                <div className="mt-3 text-[9px] text-emerald-400 font-mono flex items-center gap-1.5">
+                  <div className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
+                  Cycle in progress...
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

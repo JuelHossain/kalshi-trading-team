@@ -28,7 +28,7 @@ async def test_brain_real_gemini_analysis(bus, synapse):
     await synapse.opportunities.push(opp)
 
     # 2. Run Brain's consumption logic once
-    await brain.process_opportunities(None)
+    await brain.process_single_item_from_queue()
 
     # 3. Verify execution queue
     size = await synapse.executions.size()

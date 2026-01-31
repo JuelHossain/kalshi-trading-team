@@ -23,7 +23,8 @@ Because the USER switches between environments, the **walkthrough** is the prima
 - **Claude/General**: Use `CLAUDE.md` and `README.md` for environmental setup.
 
 ## 4. Signal Standardization
-- **Synapse**: All persistent signals must be verified via `python3 .opencode/skills/market-intel/scripts/inspect_signals.py`.
+- **Synapse**: All persistent signals must be verified via `python3 .opencode/skills/market-intel/scripts/inspect_signals.py`. **Direct agent-to-agent data passing is strictly forbidden.**
+- **Persistent Safety**: GhostEngine monitors the `Synapse.errors` persistent queue. Any entry in this "Error Box" blocks further trading cycles until cleared.
 - **Logic**: No hardcoding of personas. Load them from `.opencode/skills/agent-logic/resources/personas/`.
 
 ## 4. The Evolution Loop (MANDATORY)

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import Login, { AuthMode } from './Login';
+import { render, screen, fireEvent } from '@testing-library/react';
+import Login from './Login';
 import React from 'react';
 
 describe('Login Component', () => {

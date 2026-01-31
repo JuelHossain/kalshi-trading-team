@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import Sidebar from './components/Sidebar';
 
-import Terminal from './components/Terminal';
 import AgentsPage from './components/AgentsPage';
 import MarketAnalysis from './components/MarketAnalysis';
 import AboutPage from './components/AboutPage';
@@ -15,25 +14,17 @@ import LogisticsCenter from './components/LogisticsCenter';
 import SensesMetrics from './components/SensesMetrics';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { AgentWorkflowGraph, WorkflowControls, WorkflowTimeline } from './components/agent-workflow';
+import {
+  AgentWorkflowGraph,
+  WorkflowControls,
+  WorkflowTimeline,
+} from './components/agent-workflow';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  const addLogToOrchestrator = (msg: string, _id: number, _level: string) => {
-    // This will be handled by the backend broadcast,
-    // but for local UI feedback before SSE is established:
-    console.log(`[UI LOG] ${msg}`);
-  };
-
   // New auth system - Demo/Production mode
-  const {
-    isAuthenticated: isLoggedIn,
-    authMode,
-    isAuthenticating,
-    authError,
-    login,
-  } = useAuth();
+  const { isAuthenticated: isLoggedIn, authMode, isAuthenticating, authError, login } = useAuth();
 
   const orchestratorProps = useOrchestrator(isLoggedIn, authMode === 'demo');
 
@@ -105,13 +96,7 @@ const App: React.FC = () => {
 
   // Show login screen when not authenticated
   if (!isLoggedIn) {
-    return (
-      <Login
-        onLogin={login}
-        authError={authError}
-        isAuthenticating={isAuthenticating}
-      />
-    );
+    return <Login onLogin={login} authError={authError} isAuthenticating={isAuthenticating} />;
   }
 
   return (
@@ -229,14 +214,6 @@ const App: React.FC = () => {
           <div className="max-w-[1600px] mx-auto h-full">
             {activeTab === 'dashboard' && (
               <div className="flex flex-col gap-6 h-full animate-scale-in">
-                {/* Top: Compact Terminal */}
-                <div className="h-[280px] shrink-0">
-                  <Terminal
-                    timelineEvents={orchestratorProps.timelineEvents}
-                    activeAgentId={orchestratorProps.activeAgentId}
-                  />
-                </div>
-
                 {/* Bottom: Visualizer & Charts */}
                 <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
                   <div className="col-span-12 xl:col-span-8 flex flex-col gap-6">
@@ -285,7 +262,9 @@ const App: React.FC = () => {
                       isLoggedIn={isLoggedIn}
                       onInitiateCycle={orchestratorProps.runOrchestrator}
                       onCancelCycle={orchestratorProps.handleCancelCycle}
-                      onToggleAutopilot={() => orchestratorProps.setAutoPilot(!orchestratorProps.autoPilot)}
+                      onToggleAutopilot={() =>
+                        orchestratorProps.setAutoPilot(!orchestratorProps.autoPilot)
+                      }
                       onReset={() => {
                         // Clear transitions and reset view
                         useStore.getState().clearTransitions?.();
@@ -351,10 +330,9 @@ const App: React.FC = () => {
 
             {activeTab === 'logs' && (
               <div className="animate-scale-in h-full">
-                <Terminal
-                  timelineEvents={orchestratorProps.timelineEvents}
-                  activeAgentId={orchestratorProps.activeAgentId}
-                />
+                <div className="text-center text-gray-500 text-sm mt-10">
+                  Logs view disabled - Terminal component removed
+                </div>
               </div>
             )}
 

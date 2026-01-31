@@ -14,8 +14,8 @@ import asyncio
 import os
 from typing import Any
 
-import aiohttp
 from agents.base import BaseAgent
+from core.ai_client import AIClient
 from core.bus import EventBus
 from core.error_dispatcher import ErrorSeverity
 from core.vault import RecursiveVault
@@ -53,12 +53,22 @@ class SoulAgent(BaseAgent):
             api_key = os.environ.get("GEMINI_API_KEY")
             if api_key:
                 self.client = genai.Client(api_key=api_key)
+                self.openrouter_key = os.environ.get("OPENROUTER_API_KEY")
+                # Initialize AI client with OpenRouter fallback
+                self.ai_client = AIClient(
+                    openrouter_key=self.openrouter_key,
+                    log_callback=lambda msg, level="INFO": asyncio.create_task(
+                        self.log(msg, level=level)
+                    ),
+                    bus=self.bus
+                )
             else:
                 self.client = None
+                self.ai_client = None
         else:
             self.client = None
+            self.ai_client = None
 
-        self.openrouter_key = os.environ.get("OPENROUTER_API_KEY")
         self._first_run = True
 
     async def setup(self):
@@ -130,14 +140,14 @@ class SoulAgent(BaseAgent):
         """Try generating content with fallback models."""
         # Priority: 3.0 Pro -> 1.5 Flash (Skipping Image Preview as requested)
         models = ["gemini-3-pro-preview", "gemini-1.5-flash"]
-        
+
         for model in models:
             try:
                 # await self.log(f"Attempting generation with {model}...")
                 response = await asyncio.get_event_loop().run_in_executor(
-                    None, 
+                    None,
                     lambda: self.client.models.generate_content(
-                        model=model, 
+                        model=model,
                         contents=prompt
                     )
                 )
@@ -146,53 +156,9 @@ class SoulAgent(BaseAgent):
             except Exception as e:
                 await self.log(f"Model {model} failed: {e}", level="WARN")
                 continue
-        
+
         await self.log("All Gemini models failed. Attempting OpenRouter Fallback...", level="WARN")
-        return await self._call_openrouter(prompt)
-
-    async def _call_openrouter(self, prompt: str) -> str | None:
-        """Fallback to OpenRouter if primary Google API fails"""
-        if not self.openrouter_key:
-            await self.log("OpenRouter Fallback Skipped: No API Key found.", level="WARN")
-            return None
-
-        headers = {
-            "Authorization": f"Bearer {self.openrouter_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://kalshi-trading.com", 
-            "X-Title": "Kalshi Trading Engine"
-        }
-        
-        # High-end free OpenRouter models (verified from openrouter.ai/collections/free-models)
-        # Priority order: 671B params -> 117B -> 70B -> 27B
-        openrouter_models = [
-            "tngtech/deepseek-r1t2-chimera:free",      # 671B - WORKS!
-            "deepseek/deepseek-r1-0528:free",          # 671B
-            "openai/gpt-oss-120b:free",                # 117B - OpenAI's latest
-            "meta-llama/llama-3.3-70b-instruct:free",  # 70B - Meta's best
-            "google/gemma-3-27b:free",                 # 27B - Google open model
-        ]
-
-        async with aiohttp.ClientSession() as session:
-            for model in openrouter_models:
-                data = {
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-                try:
-                    async with session.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data) as resp:
-                        if resp.status == 200:
-                            result = await resp.json()
-                            content = result["choices"][0]["message"]["content"]
-                            await self.log(f"OpenRouter Fallback ({model}) SUCCESS.")
-                            return content
-                        error_text = await resp.text()
-                        await self.log(f"OpenRouter Fallback ({model}) Failed ({resp.status}): {error_text[:100]}", level="WARN")
-                except Exception as e:
-                    await self.log(f"OpenRouter Connection Error ({model}): {e}", level="WARN")
-
-        await self.log("ALL AI SERVICES FAILED (Gemini + OpenRouter).", level="ERROR")
-        return None
+        return await self.ai_client._call_openrouter(prompt) if self.ai_client else None
 
     async def evolve_instructions(self):
         """Use Gemini to rewrite trading instructions based on history (Self-Optimization)"""

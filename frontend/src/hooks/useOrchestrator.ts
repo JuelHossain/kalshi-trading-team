@@ -27,6 +27,11 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
   const store = useStore();
   const eventBuffer = useRef<any[]>([]);
   const hasInitialized = useRef(false);
+  const lastLogRef = useRef<{ signature: string; timestamp: number; count: number }>({
+    signature: '',
+    timestamp: 0,
+    count: 0,
+  });
 
   // Fetch autopilot status from backend on mount to sync state
   useEffect(() => {
@@ -67,6 +72,27 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
+
+      // LOG THROTTLING: Prevent console spam
+      if (data.type === 'LOG' || data.type === 'ERROR') {
+        const signature = `${data.type}:${JSON.stringify(data.log || data.error)}`;
+        const now = Date.now();
+
+        // Check if we've seen this exact log in the last 2 seconds
+        if (
+          lastLogRef.current.signature === signature &&
+          now - lastLogRef.current.timestamp < 2000
+        ) {
+          lastLogRef.current.count++;
+          if (lastLogRef.current.count === 10) {
+            console.warn('[Orchestrator] Suppressing duplicate logs...');
+          }
+          return; // Skip processing duplicate
+        }
+
+        lastLogRef.current = { signature, timestamp: now, count: 1 };
+      }
+
       console.log('[Orchestrator] SSE Event received:', data.type, data);
       eventBuffer.current.push(data);
     };
@@ -115,6 +141,7 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
               11: 'VAULT',
               14: 'GATEWAY',
             };
+
             const agentName = agentMap[log.agentId] || log.agentName;
             if (agentName && ['SOUL', 'SENSES', 'BRAIN', 'HAND'].includes(agentName)) {
               store.setAgentState(log.agentId, {
@@ -122,7 +149,31 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
                 lastAction: log.message,
                 lastUpdated: timestamp,
               });
+            }
 
+            // AUTO-FIX: Convert "Synapse Input" logs to MARKET events for UI
+            if (
+              log.message.toLowerCase().includes('synapse input:') ||
+              log.message.toLowerCase().startsWith('analyzing:')
+            ) {
+              const ticker = log.message.split(':').pop()?.trim() || 'Unknown';
+              // Create synthetic MARKET event for Logistics Center
+              const marketEvent: TimelineEvent = {
+                id: `market-${log.id}`,
+                type: 'MARKET',
+                timestamp: log.timestamp,
+                cycleId: log.cycleId,
+                phaseId: 1, // Surveillance Phase
+                data: {
+                  market: ticker,
+                  ...log,
+                },
+              };
+              // Add to store immediately
+              store.addTimelineEvent(marketEvent);
+            }
+
+            if (log.agentId) {
               // Add transition for workflow visualization
               const flowTypes: Record<
                 number,
@@ -240,21 +291,25 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
     [isPaperTrading, store]
   );
 
-  // Autopilot Logic
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-    if (store.autoPilot && !store.isProcessing && store.cycleCount > 0) {
-      timeoutId = setTimeout(() => {
-        console.log('[Autopilot] Starting next cycle...');
-        runOrchestrator();
-      }, 2000);
-    }
-    return () => clearTimeout(timeoutId);
-  }, [store.autoPilot, store.isProcessing, store.cycleCount, runOrchestrator]);
+  // Autopilot Logic - REMOVED (Backend handles loop now)
+  // The frontend should ONLY reflect state, not drive the loop.
+  // This prevents the "bullet train" issue where frontend and backend both drive cycles.
 
   const handleCancelCycle = async () => {
     try {
+      // 1. Explicitly stop autopilot on backend
+      await fetch(`${ENGINE_URL}/autopilot/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPaperTrading }),
+      });
+
+      // 2. Cancel current cycle
       await fetch(`${ENGINE_URL}/cancel`, { method: 'POST' });
+
+      // 3. Update local state immediately
+      store.setAutoPilot(false);
+      store.setIsProcessing(false);
     } catch (e) {
       console.error('Cancel cycle failed', e);
     }

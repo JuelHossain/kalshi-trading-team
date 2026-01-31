@@ -16,6 +16,7 @@ from typing import Any
 import aiohttp
 from agents.base import BaseAgent
 from core.bus import EventBus
+from core.constants import HAND_MAX_STAKE_CENTS, HAND_PROFIT_LOCK_THRESHOLD
 from core.synapse import Synapse
 from core.vault import RecursiveVault
 
@@ -23,8 +24,8 @@ from core.vault import RecursiveVault
 class HandAgent(BaseAgent):
     """The Tactical Executioner - Precision Strike & Budget Sentinel"""
 
-    MAX_STAKE_CENTS = 7500  # $75 max per trade
-    PROFIT_LOCK_THRESHOLD = 5000  # $50 profit triggers principal lock
+    MAX_STAKE_CENTS = HAND_MAX_STAKE_CENTS  # $75 max per trade
+    PROFIT_LOCK_THRESHOLD = HAND_PROFIT_LOCK_THRESHOLD  # $50 profit triggers principal lock
     NTFY_TOPIC = os.environ.get("NTFY_TOPIC", "kalshi-alerts")
 
     def __init__(
@@ -70,13 +71,14 @@ class HandAgent(BaseAgent):
                     }
             except Exception as e:
                 await self.log(f"Synapse Pop (Execution) Error: {e}", level="ERROR")
+                await self.bus.publish("SYSTEM_FATAL", {"message": f"Hand Agent Failed: {e!s}"}, self.name)
 
-        # 2. Legacy Fallback (Direct Reference)
-        if not target and self.brain:
-            target = self.brain.pop_execution_target()
+        # 2. Legacy Fallback (Direct Reference) - REMOVED
+        # if not target and self.brain:
+        #     target = self.brain.pop_execution_target()
 
         if not target:
-            await self.log("No execution target available.")
+            # await self.log("No execution target available.")
             return
 
         ticker = target.get("ticker", "UNKNOWN")
@@ -148,6 +150,30 @@ class HandAgent(BaseAgent):
                     "entry_price": best_ask,
                 }
 
+            # --- HARDENING: Liquidity Depth Validation ---
+            # Requirement: At least 2x the target stake in available volume at the best price (or within the spread)
+            target_stake = self.MAX_STAKE_CENTS
+            available_volume_cents = 0
+
+            # Aggregate volume within the actual spread (best_bid to best_ask)
+            # This ensures zero slippage by only counting orders that can be filled immediately
+            for ask in orderbook.get("asks", []):
+                price = ask.get("price", 100)
+                count = ask.get("count", 0)
+
+                # Only count liquidity within the spread (price must be <= best_ask)
+                if price <= best_ask:
+                    available_volume_cents += (price * count)
+                else:
+                    break
+
+            if available_volume_cents < (target_stake * 2):
+                return {
+                    "valid": False,
+                    "reason": "insufficient liquidity depth",
+                    "entry_price": best_ask,
+                }
+
             return {"valid": True, "entry_price": best_ask, "slippage": 0, "spread": spread}
         except Exception as e:
             return {"valid": False, "reason": str(e)[:50]}
@@ -203,7 +229,7 @@ class HandAgent(BaseAgent):
             }
 
         # 6. Check hard floor (emergency stop if balance drops too low)
-        if self.vault.current_balance < 25500:  # $255 hard floor
+        if self.vault.current_balance < self.vault.HARD_FLOOR_CENTS:
             return {"success": False, "error": "Hard floor breach - emergency lockdown active"}
 
         # === SIMULATION MODE ===

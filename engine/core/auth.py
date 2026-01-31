@@ -5,7 +5,29 @@ Implements API key-based authentication for all trading endpoints.
 
 import os
 from functools import wraps
+
 from aiohttp import web
+
+from core.http_utils import (
+    unauthorized_response,
+    error_response,
+    auth_response,
+    success_response,
+)
+
+
+# API Path Constants
+_DIRECT_PATHS = {
+    "/health", "/auth", "/pnl", "/pnl/heatmap", "/stream",
+    "/trigger", "/cancel", "/kill-switch", "/deactivate-kill-switch",
+    "/reset", "/autopilot/start", "/autopilot/stop", "/autopilot/status",
+    "/synapse/queues",
+}
+_API_PREFIX = "/api"
+
+# Auth status constants
+MODE_DEMO = "demo"
+MODE_PRODUCTION = "production"
 
 
 class AuthManager:
@@ -26,44 +48,13 @@ class AuthManager:
         # Session state
         self.authenticated = False
         self.is_production = False
-        self.mode = "demo"  # 'demo' or 'production'
+        self.mode = MODE_DEMO
 
-        # List of paths that don't require authentication
-        # In 2-tier local architecture, these endpoints are trusted
-        # Note: Vite proxy now preserves /api prefix
-        self.public_paths = {
-            # Direct access (port 3002)
-            "/health",
-            "/auth",
-            "/pnl",
-            "/pnl/heatmap",
-            "/stream",
-            "/trigger",
-            "/cancel",
-            "/kill-switch",
-            "/deactivate-kill-switch",
-            "/reset",
-            "/autopilot/start",
-            "/autopilot/stop",
-            "/autopilot/status",
-            # Proxied access (port 3000 via Vite)
-            "/api/health",
-            "/api/auth",
-            "/api/auth/login",
-            "/api/auth/verify",
-            "/api/auth/logout",
-            "/api/pnl",
-            "/api/pnl/heatmap",
-            "/api/stream",
-            "/api/trigger",
-            "/api/cancel",
-            "/api/kill-switch",
-            "/api/deactivate-kill-switch",
-            "/api/reset",
-            "/api/autopilot/start",
-            "/api/autopilot/stop",
-            "/api/autopilot/status",
-        }
+        # Build public paths set (direct + proxied)
+        self.public_paths = _DIRECT_PATHS | {_API_PREFIX + p for p in _DIRECT_PATHS}
+        self.public_paths.add("/api/auth/login")
+        self.public_paths.add("/api/auth/verify")
+        self.public_paths.add("/api/auth/logout")
 
     def is_public_path(self, path: str) -> bool:
         """Check if a path is public (no auth required)."""
@@ -89,10 +80,7 @@ class AuthManager:
 
             # Validate API key
             if not self.validate_api_key(request):
-                return web.json_response(
-                    {"error": "Unauthorized", "message": "Valid API key required"},
-                    status=401
-                )
+                return unauthorized_response()
 
             return await handler(request)
 
@@ -103,10 +91,7 @@ class AuthManager:
         @wraps(handler)
         async def wrapper(request):
             if not self.validate_api_key(request):
-                return web.json_response(
-                    {"error": "Unauthorized", "message": "Valid API key required"},
-                    status=401
-                )
+                return unauthorized_response()
             return await handler(request)
         return wrapper
 
@@ -128,48 +113,31 @@ async def login_handler(request: web.Request) -> web.Response:
     try:
         data = await request.json()
         password = data.get("password", "")
-        mode = data.get("mode", "demo")
+        mode = data.get("mode", MODE_DEMO)
 
         # Empty password = demo mode
         if not password:
             auth_manager.authenticated = True
-            auth_manager.mode = "demo"
+            auth_manager.mode = MODE_DEMO
             auth_manager.is_production = False
-            print(f"[AUTH] Demo mode login successful")
-            return web.json_response({
-                "isAuthenticated": True,
-                "mode": "demo",
-                "is_production": False,
-                "message": "Logged in to demo mode"
-            })
+            print("[AUTH] Demo mode login successful")
+            return auth_response(True, MODE_DEMO, False, "Logged in to demo mode")
 
         # Validate password for production mode
         if password != AuthManager.AUTH_PASSWORD:
-            return web.json_response(
-                {"error": "Invalid password", "message": "Authentication failed"},
-                status=401
-            )
+            return error_response("Invalid password", "Authentication failed", 401)
 
         # Update session state
         auth_manager.authenticated = True
         auth_manager.mode = mode
-        auth_manager.is_production = (mode == "production")
+        auth_manager.is_production = (mode == MODE_PRODUCTION)
 
         print(f"[AUTH] Login successful - Mode: {mode}")
-
-        return web.json_response({
-            "isAuthenticated": True,
-            "mode": mode,
-            "is_production": auth_manager.is_production,
-            "message": f"Logged in to {mode} mode"
-        })
+        return auth_response(True, mode, auth_manager.is_production, f"Logged in to {mode} mode")
 
     except Exception as e:
         print(f"[AUTH] Login error: {e}")
-        return web.json_response(
-            {"error": "Login failed", "message": str(e)},
-            status=500
-        )
+        return error_response("Login failed", str(e))
 
 
 async def verify_handler(request: web.Request) -> web.Response:
@@ -177,11 +145,12 @@ async def verify_handler(request: web.Request) -> web.Response:
     Verify authentication status.
     Returns current session state.
     """
-    return web.json_response({
-        "isAuthenticated": auth_manager.authenticated,
-        "mode": auth_manager.mode,
-        "is_production": auth_manager.is_production
-    })
+    return auth_response(
+        auth_manager.authenticated,
+        auth_manager.mode,
+        auth_manager.is_production,
+        ""
+    )
 
 
 async def logout_handler(request: web.Request) -> web.Response:
@@ -191,11 +160,7 @@ async def logout_handler(request: web.Request) -> web.Response:
     """
     auth_manager.authenticated = False
     auth_manager.is_production = False
-    auth_manager.mode = "demo"
+    auth_manager.mode = MODE_DEMO
 
     print("[AUTH] Logout successful")
-
-    return web.json_response({
-        "success": True,
-        "message": "Logged out successfully"
-    })
+    return success_response("Logged out successfully")

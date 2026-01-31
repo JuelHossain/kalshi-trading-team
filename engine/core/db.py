@@ -63,3 +63,18 @@ async def set_system_status(status: str, reason: str = ""):
         supabase.table("system_status").upsert(data).execute()
     except Exception as e:
         print(f"[DB] Failed to set system status: {e}")
+
+
+async def check_connection() -> bool:
+    """Simple health check for Supabase connection."""
+    if not supabase:
+        print("[DB] Supabase client not initialized (check .env)")
+        return False
+    try:
+        # Using a lightweight query (fetch 1 header row from agent_heartbeats or similar)
+        # We use count operation which is usually cheap
+        supabase.table("agent_heartbeats").select("agent_id", count="exact").limit(1).execute()
+        return True
+    except Exception as e:
+        print(f"[DB] Connection probe failed: {e}")
+        return False

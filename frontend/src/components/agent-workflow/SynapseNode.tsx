@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { motion } from 'framer-motion';
 
@@ -15,10 +15,9 @@ interface SynapseNodeData {
 }
 
 const SynapseNode = memo(({ data, selected }: NodeProps<SynapseNodeData>) => {
-  const { name, status, color, queueMetrics, lastAction } = data;
+  const { name, status, color, queueMetrics } = data;
 
   const isActive = status === 'active' || status === 'processing';
-  const totalQueued = queueMetrics.opportunities + queueMetrics.executions;
 
   // Pulse animation for active state
   const pulseVariants = {

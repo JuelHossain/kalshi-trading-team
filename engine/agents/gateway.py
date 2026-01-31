@@ -4,6 +4,8 @@ from typing import Any
 
 from agents.base import BaseAgent
 from core.bus import EventBus
+from core.constants import FULL_AGENT_TO_PHASE, AGENT_NAME_TO_ID
+from core.event_formatter import format_gateway_log_event
 from core.vault import RecursiveVault
 
 
@@ -26,23 +28,6 @@ class GatewayAgent(BaseAgent):
         await self.bus.subscribe("SYSTEM_HEALTH", self.handle_health)
         await self.bus.subscribe("SYSTEM_ERROR", self.handle_error)  # Add error handler
 
-    # Agent to Phase mapping (mirrors shared/constants.ts)
-    AGENT_TO_PHASE = {
-        1: 0,
-        11: 0,  # Phase 0: System Init
-        2: 1,
-        3: 1,
-        7: 1,  # Phase 1: Surveillance
-        4: 2,
-        5: 2,
-        6: 2,  # Phase 2: Intelligence
-        8: 3,  # Phase 3: Execution
-        9: 4,
-        10: 4,  # Phase 4: Accounting
-        12: 5,
-        14: 5,  # Phase 5: Protection
-        13: 13,  # Intervention
-    }
 
     async def handle_system_log(self, message):
         from datetime import datetime
@@ -50,21 +35,10 @@ class GatewayAgent(BaseAgent):
         payload = message.payload
         sender = payload.get("agent_name")
         agent_id = payload.get("agent_id", 0)
-        phase_id = self.AGENT_TO_PHASE.get(agent_id, 0)
 
         # Pass logs to frontend with proper structure including phaseId and cycleId
-        await self.emit(
-            "LOG",
-            {
-                "id": f"log-{datetime.now().timestamp()}",
-                "timestamp": payload.get("timestamp", datetime.now().isoformat()),
-                "agentId": agent_id,
-                "cycleId": 1,  # Will be updated by main.py cycle_count
-                "phaseId": phase_id,
-                "level": payload.get("level", "INFO"),
-                "message": payload.get("message", ""),
-            },
-        )
+        log_event = format_gateway_log_event(payload, 1, FULL_AGENT_TO_PHASE)
+        await self.emit("LOG", log_event)
 
         # Update active agent in visualizer
         if sender not in ["GHOST", "GATEWAY", "HISTORIAN", "MECHANIC"]:
@@ -102,35 +76,17 @@ class GatewayAgent(BaseAgent):
     async def handle_error(self, message):
         """Handle SYSTEM_ERROR events from ErrorDispatcher"""
         from datetime import datetime
+        from core.event_formatter import format_error_event
 
         error_data = message.payload
 
-        # Get agent_id for phase mapping
-        agent_name = error_data.get("agent_name", "")
-        agent_id_map = {
-            "SOUL": 1,
-            "SENSES": 2,
-            "BRAIN": 4,
-            "HAND": 8,
-            "GATEWAY": 14
-        }
-        agent_id = agent_id_map.get(agent_name, 0)
-        phase_id = self.AGENT_TO_PHASE.get(agent_id, 0)
-
-        # Format error for frontend
-        error_event = {
-            "id": f"error-{datetime.now().timestamp()}",
-            "timestamp": error_data.get("timestamp", datetime.now().isoformat()),
-            "agentId": agent_id,
-            "cycleId": 1,  # Will be updated by main.py cycle_count
-            "phaseId": phase_id,
-            "code": error_data.get("code", "UNKNOWN_ERROR"),
-            "message": error_data.get("message", "An error occurred"),
-            "severity": error_data.get("severity", "MEDIUM"),
-            "domain": error_data.get("domain", "SYSTEM"),
-            "hint": error_data.get("hint", ""),
-            "context": error_data.get("context", {}),
-        }
+        # Format error for frontend using centralized formatter
+        error_event = format_error_event(
+            error_data,
+            1,  # cycleId - will be updated by main.py
+            FULL_AGENT_TO_PHASE,
+            AGENT_NAME_TO_ID
+        )
 
         await self.emit("ERROR", error_event)
 

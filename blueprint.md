@@ -31,7 +31,7 @@ graph TD
 2.  **Engine (`/engine`)**:
     - **Tech**: Python 3.12, Asyncio, Aiohttp (Web Server), SQLite (Synapse).
     - **Role**: The "Executive Collective". Orchestrates the full lifecycle via decoupled agents.
-    - **Core**: **Synapse** (Persistent Queues) ensures zero data loss during restarts/crashes.
+    - **Core**: **Synapse** (Persistent Queues) enforces **strict decoupling** between agents and contains the **Global Error Box** for automated engine-wide safety halts.
     - **Control**: **SoulAgent** manages the autonomous trade pulse (Autopilot) via the `/autopilot` endpoints.
     - **API**: Serves `/auth`, `/trigger`, `/cancel`, `/pnl`, `/autopilot/*`, and `/stream`.
 3.  **Shared (`/shared`)**:

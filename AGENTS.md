@@ -58,16 +58,21 @@ Sentient Alpha is an autonomous 2-tier trading system on Kalshi.
 
 ### Architecture (2-Tier Guardrails)
 - **Direct Communication**: Frontend connects directly to port 3002.
-- **Persistence**: Inter-agent signals (Opps -> Signals -> Execs) MUST go through **Synapse (SQLite)**.
-- **State**: Use **Zustand** for global Frontend state. Avoid prop-drilling.
+- **Persistence**: Inter-agent signals (Opps -> Signals -> Execs) MUST go through **Synapse (SQLite)**. **Direct agent-to-agent data flow is strictly forbidden.**
+- **Error States**: All critical failures must be logged to the **Synapse Error Box**.
 
 ### Style Prefs
 - **JavaScript/TS**: ESM, Async/Await, PascalCase for components.
 - **Python**: PEP 8, Asyncio for I/O, snake_case for functions.
-- **Logging**: Include `agent_id` or `phase_id` in all high-priority log events.
+- **Logging**: 
+  - **Do NOT use `print()`**. Use `core.logger.get_logger("NAME")`.
+  - **Sensitive Data**: Use `core.bus.mask_sensitives` (or relying on logger's sensitivity mask if implemented) for external logs.
+  - **Colors**: Do not manually color strings (e.g. `Fore.RED`). The logger handles this.
+  - **Structure**: Include `agent_id` or `phase_id` in all high-priority log events.
 
 ## 🛡️ Security & Safety
 - **Veto Supremacy**: Any security veto terminates the cycle immediately.
+- **Persistent Error Box**: GhostEngine halts all cycles if errors exist in `Synapse.errors`. Use `ErrorDispatcher.log_error()` to trigger.
 - **Ragnarok Protocol**: Hand agent must execute liquidation on fatal errors.
 - **Credentials**: NEVER commit `.env` or RSA keys.
 
