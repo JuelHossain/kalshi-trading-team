@@ -170,7 +170,7 @@ async def handle_restock_trigger(
                 await log_callback(f"Dumped {dumped_count} opportunities. Requesting restock from Senses...")
                 await bus.publish("REQUEST_RESTOCK", {}, "BRAIN")
                 return (True, now)  # Reset counter and update time
-            elif exec_size >= 10:
+            if exec_size >= 10:
                 await log_callback(f"Flow Control: Execution queue at limit ({exec_size}/10). NOT requesting restock.", level="WARN")
             else:
                 cooldown = 60  # 60 seconds cooldown

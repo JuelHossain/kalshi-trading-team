@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//e/Projects/kalshi-trading-team/engine/**)",
+      "Read(//e/Projects/kalshi-trading-team/**)",
+      "Bash(dir:*)",
+      "Bash(bash /e/Projects/kalshi-trading-team/scripts/handoff.sh:*)"
+    ],
+    "additionalDirectories": [
+      "e:\\Projects\\kalshi-trading-team\\ai-env\\tasks"
+    ]
+  },
+  "bypassPermissions": true
+}

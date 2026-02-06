@@ -11,14 +11,14 @@ from agents.base import BaseAgent
 from core.bus import EventBus
 from core.constants import (
     SENSES_MIN_LIQUIDITY,
-    SENSES_STOCK_BUFFER_SIZE,
     SENSES_QUEUE_BATCH_SIZE,
+    SENSES_STOCK_BUFFER_SIZE,
 )
 from core.db import log_to_db
 from core.flow_control import check_execution_queue_limit, check_opportunity_queue_limit
 from core.synapse import MarketData, Opportunity, Synapse
 
-from .scanner import surveillance_loop, fetch_kalshi_markets, queue_from_stock
+from .scanner import fetch_kalshi_markets, queue_from_stock, surveillance_loop
 
 
 class SensesAgent(BaseAgent):
@@ -133,24 +133,24 @@ class SensesAgent(BaseAgent):
                 await self.log(f"[FAIL] Synapse Push Failed for {ticker}: {e}", level="ERROR")
                 synapse_success = False
 
-        # Legacy Flow (Fallback)
-        if not synapse_success or not self.synapse:
-            signal_package = {
-                "market_id": ticker,
-                "source": opportunity.get("source", "Kalshi"),
-                "gap_delta": 0,
-                "pinnacle_odds": 0,
-                "kalshi_price": opportunity.get("kalshi_price", 0),
-                "status": "QUEUED",
-                "market_data": opportunity.get("market_data", {})
-            }
-            self.opportunity_queue.append(opportunity)
-            await log_to_db("opportunity_queue", signal_package)
-            await self.log(f"[WARN] Fallback to Legacy Queue: {ticker} | Volume: {volume}", level="WARN")
+    #     # Legacy Flow (Fallback)
+    #     if not synapse_success or not self.synapse:
+    #         signal_package = {
+    #             "market_id": ticker,
+    #             "source": opportunity.get("source", "Kalshi"),
+    #             "gap_delta": 0,
+    #             "pinnacle_odds": 0,
+    #             "kalshi_price": opportunity.get("kalshi_price", 0),
+    #             "status": "QUEUED",
+    #             "market_data": opportunity.get("market_data", {})
+    #         }
+    #         self.opportunity_queue.append(opportunity)
+    #         await log_to_db("opportunity_queue", signal_package)
+    #         await self.log(f"[WARN] Fallback to Legacy Queue: {ticker} | Volume: {volume}", level="WARN")
 
-    def pop_opportunity(self) -> dict | None:
-        """Get next opportunity for Brain"""
-        return self.opportunity_queue.pop(0) if self.opportunity_queue else None
+    # def pop_opportunity(self) -> dict | None:
+    #     """Get next opportunity for Brain"""
+    #     return self.opportunity_queue.pop(0) if self.opportunity_queue else None
 
     async def on_restock_request(self, message):
         """Handle restock request from Brain"""
@@ -203,6 +203,19 @@ class SensesAgent(BaseAgent):
     async def run_scout(self, opp_queue: asyncio.Queue):
         """DEPRECATED: Continuous scanning disabled"""
         await self.log("WARNING: run_scout called but is deprecated.", level="WARN")
+
+    async def surveillance_loop(self):
+        """Main surveillance loop - wrapper for scanner.surveillance_loop"""
+        from .scanner import surveillance_loop as scanner_surveillance_loop
+
+        await scanner_surveillance_loop(
+            senses_agent=self,
+            stock_buffer_size=self.STOCK_BUFFER_SIZE,
+            queue_batch_size=self.QUEUE_BATCH_SIZE,
+            log_callback=self.log,
+            log_error_callback=self.log,
+            bus=self.bus
+        )
 
     async def on_tick(self, payload: dict[str, Any]):
         pass

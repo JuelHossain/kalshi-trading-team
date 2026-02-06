@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
+from core.display import log_error, AgentType
 
 # Sensitive patterns to mask in logs
 SENSITIVE_KEYS = {"api_key", "secret", "private_key", "password", "token", "signature"}
@@ -59,7 +60,7 @@ class EventBus:
         try:
             msg = Message(topic=topic, payload=payload, sender=sender)
         except Exception as e:
-            print(f"[BUS][ERROR] Failed to validate message for {topic}: {e}")
+            log_error(f"Failed to validate message for {topic}: {e}", AgentType.SOUL)
             return
 
         async with self._lock:
@@ -82,7 +83,7 @@ class EventBus:
             else:
                 callback(msg)
         except Exception as e:
-            print(f"[BUS][ERROR] Callback failed for topic {msg.topic}: {e}")
+            log_error(f"Callback failed for topic {msg.topic}: {e}", AgentType.SOUL)
 
     def get_history(self) -> list[Message]:
         return self.history

@@ -7,14 +7,13 @@ import os
 from functools import wraps
 
 from aiohttp import web
-
 from core.http_utils import (
-    unauthorized_response,
-    error_response,
     auth_response,
+    error_response,
     success_response,
+    unauthorized_response,
 )
-
+from core.display import log_info, log_error, log_success, AgentType
 
 # API Path Constants
 _DIRECT_PATHS = {
@@ -26,7 +25,6 @@ _DIRECT_PATHS = {
 _API_PREFIX = "/api"
 
 # Auth status constants
-MODE_DEMO = "demo"
 MODE_PRODUCTION = "production"
 
 
@@ -40,15 +38,15 @@ class AuthManager:
         # Load API key from environment
         self.api_key = os.getenv("GHOST_API_KEY")
         if not self.api_key:
-            # Generate a random key for development if not set
-            import secrets
-            self.api_key = secrets.token_urlsafe(32)
-            print(f"[AUTH] Warning: GHOST_API_KEY not set. Using generated dev key: {self.api_key}")
+            raise ValueError(
+                "GHOST_API_KEY not configured. Set GHOST_API_KEY in environment variables. "
+                "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+            )
 
         # Session state
         self.authenticated = False
         self.is_production = False
-        self.mode = MODE_DEMO
+        self.mode = MODE_PRODUCTION
 
         # Build public paths set (direct + proxied)
         self.public_paths = _DIRECT_PATHS | {_API_PREFIX + p for p in _DIRECT_PATHS}
@@ -106,22 +104,22 @@ async def login_handler(request: web.Request) -> web.Response:
 
     Expected JSON body:
     {
-        "password": "993728",
-        "mode": "demo" | "production"
+        "password": "993728"
     }
+
+    Note: Demo mode has been removed for production security.
     """
     try:
         data = await request.json()
         password = data.get("password", "")
-        mode = data.get("mode", MODE_DEMO)
 
-        # Empty password = demo mode
+        # Password is required for all access
         if not password:
-            auth_manager.authenticated = True
-            auth_manager.mode = MODE_DEMO
-            auth_manager.is_production = False
-            print("[AUTH] Demo mode login successful")
-            return auth_response(True, MODE_DEMO, False, "Logged in to demo mode")
+            return error_response(
+                "Password required",
+                "Empty password not allowed. Demo mode has been removed.",
+                401
+            )
 
         # Validate password for production mode
         if password != AuthManager.AUTH_PASSWORD:
@@ -129,14 +127,14 @@ async def login_handler(request: web.Request) -> web.Response:
 
         # Update session state
         auth_manager.authenticated = True
-        auth_manager.mode = mode
-        auth_manager.is_production = (mode == MODE_PRODUCTION)
+        auth_manager.mode = MODE_PRODUCTION
+        auth_manager.is_production = True
 
-        print(f"[AUTH] Login successful - Mode: {mode}")
-        return auth_response(True, mode, auth_manager.is_production, f"Logged in to {mode} mode")
+        log_success(f"Login successful - Mode: {MODE_PRODUCTION}", AgentType.GATEWAY)
+        return auth_response(True, MODE_PRODUCTION, True, f"Logged in to {MODE_PRODUCTION} mode")
 
     except Exception as e:
-        print(f"[AUTH] Login error: {e}")
+        log_error(f"Login error: {e}", AgentType.GATEWAY)
         return error_response("Login failed", str(e))
 
 
@@ -145,11 +143,14 @@ async def verify_handler(request: web.Request) -> web.Response:
     Verify authentication status.
     Returns current session state.
     """
+    if not auth_manager.authenticated:
+        return auth_response(False, MODE_PRODUCTION, False, "Not authenticated")
+
     return auth_response(
         auth_manager.authenticated,
         auth_manager.mode,
         auth_manager.is_production,
-        ""
+        "Authenticated"
     )
 
 
@@ -160,7 +161,7 @@ async def logout_handler(request: web.Request) -> web.Response:
     """
     auth_manager.authenticated = False
     auth_manager.is_production = False
-    auth_manager.mode = MODE_DEMO
+    auth_manager.mode = MODE_PRODUCTION
 
-    print("[AUTH] Logout successful")
+    log_success("Logout successful", AgentType.GATEWAY)
     return success_response("Logged out successfully")

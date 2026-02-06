@@ -3,7 +3,6 @@ Shared AI client with OpenRouter fallback logic.
 Eliminates 84+ lines of duplicate code from brain.py and soul.py.
 """
 
-import asyncio
 from typing import Any
 
 import aiohttp
@@ -50,11 +49,15 @@ class AIClient:
             prompt: The prompt to send to OpenRouter
 
         Returns:
-            Generated text or None if all models fail
+            Generated text or raises exception if all models fail
+
+        Raises:
+            ValueError: If OpenRouter API key is not configured
+            RuntimeError: If all OpenRouter models fail
         """
         if not self.openrouter_key:
-            await self._log("OpenRouter Fallback Skipped: No API Key found.", "WARN")
-            return None
+            await self._log("OpenRouter API key not configured", "ERROR")
+            raise ValueError("OpenRouter API key not configured. Set OPENROUTER_API_KEY in environment.")
 
         headers = {
             "Authorization": f"Bearer {self.openrouter_key}",
@@ -63,6 +66,7 @@ class AIClient:
             "X-Title": "Kalshi Trading Engine"
         }
 
+        errors = []
         async with aiohttp.ClientSession() as session:
             for model in self.OPENROUTER_MODELS:
                 data = {
@@ -78,21 +82,18 @@ class AIClient:
                         if resp.status == 200:
                             result = await resp.json()
                             content = result["choices"][0]["message"]["content"]
-                            await self._log(f"OpenRouter Fallback ({model}) SUCCESS.")
+                            await self._log(f"OpenRouter ({model}) SUCCESS")
                             return content
                         error_text = await resp.text()
-                        await self._log(
-                            f"OpenRouter Fallback ({model}) Failed ({resp.status}): {error_text[:100]}",
-                            "WARN"
-                        )
+                        error_msg = f"Model {model} failed with status {resp.status}: {error_text[:100]}"
+                        errors.append(error_msg)
+                        await self._log(error_msg, "WARN")
                 except Exception as e:
-                    await self._log(f"OpenRouter Connection Error ({model}): {e}", "WARN")
+                    error_msg = f"OpenRouter connection error for {model}: {e}"
+                    errors.append(error_msg)
+                    await self._log(error_msg, "WARN")
 
-        # All models failed - publish fatal error
-        await self._log("ALL AI SERVICES FAILED (Gemini + OpenRouter).", "ERROR")
-        if self._bus:
-            from agents.base import BaseAgent
-            # Publish fatal error
-            pass  # Bus publishing handled by caller
-
-        return None
+        # All models failed - raise error instead of returning None
+        error_summary = "; ".join(errors)
+        await self._log(f"ALL AI SERVICES FAILED: {error_summary}", "ERROR")
+        raise RuntimeError(f"All OpenRouter models failed: {error_summary}")

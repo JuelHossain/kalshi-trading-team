@@ -12,3 +12,4 @@ ddgs>=4.1.0  # DuckDuckGo search (replaces duckduckgo-search)
 numpy
 ruff
 black
+rich>=13.0.0  # Modern CLI display system

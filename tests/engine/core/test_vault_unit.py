@@ -11,7 +11,7 @@ from core.vault import RecursiveVault
 @pytest.fixture
 def vault():
     """Create a fresh vault instance for each test."""
-    return RecursiveVault()
+    return RecursiveVault(test_mode=True)  # Use test mode to skip persistence
 
 
 @pytest.fixture

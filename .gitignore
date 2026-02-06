@@ -6,11 +6,16 @@ dist-ssr
 .env
 .env.*
 !.env.example
+engine/.env
 
 # Logs
 logs
 *.log
 npm-debug.log*
+
+# Databases (keep evolution.db, ghost_memory.db is ignored)
+*.db
+!ai-env/evolution.db
 
 # Editor directories and files
 .vscode/*
@@ -26,3 +31,11 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 nul
+.venv/
+venv/
+engine/venv/
+
+# Debug
+brain_debug.txt
+test_report*.txt
+*_audit_report.md

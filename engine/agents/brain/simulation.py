@@ -2,8 +2,6 @@
 Monte Carlo Simulation for Brain Agent
 Calculates variance, EV, and win rates for trading opportunities.
 """
-import os
-
 import numpy as np
 
 
@@ -32,11 +30,7 @@ def run_simulation(opportunity: dict, override_prob: float = None, simulation_it
 
     kalshi_price = opportunity.get("kalshi_price", 0.5)
 
-    # Simulate outcomes
-    # Only use fixed seed for debugging/testing (set SIMULATION_USE_FIXED_SEED=true in .env)
-    # Production simulations should be truly random for accurate variance estimation
-    if os.getenv("SIMULATION_USE_FIXED_SEED") == "true":
-        np.random.seed(42)
+    # Simulate outcomes - truly random for accurate variance estimation
     outcomes = np.random.binomial(1, vegas_prob, simulation_iterations)
 
     # Calculate returns per simulation

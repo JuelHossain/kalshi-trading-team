@@ -6,7 +6,6 @@ Consolidates formatting logic from main.py and gateway.py.
 import uuid
 from datetime import datetime
 
-
 # ==============================================================================
 # EVENT FORMATTING
 # ==============================================================================

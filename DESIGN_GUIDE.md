@@ -1,1 +1,0 @@
-ai-env/core-docs/DESIGN_GUIDE.md

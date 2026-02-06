@@ -4,9 +4,10 @@ from typing import Any
 
 from agents.base import BaseAgent
 from core.bus import EventBus
-from core.constants import FULL_AGENT_TO_PHASE, AGENT_NAME_TO_ID
+from core.constants import AGENT_NAME_TO_ID, FULL_AGENT_TO_PHASE
 from core.event_formatter import format_gateway_log_event
 from core.vault import RecursiveVault
+from core.vault_utils import publish_vault_state
 
 
 class GatewayAgent(BaseAgent):
@@ -30,7 +31,6 @@ class GatewayAgent(BaseAgent):
 
 
     async def handle_system_log(self, message):
-        from datetime import datetime
 
         payload = message.payload
         sender = payload.get("agent_name")
@@ -46,14 +46,7 @@ class GatewayAgent(BaseAgent):
 
     async def on_tick(self, payload: dict[str, Any]):
         # Every cycle, we push a VAULT update and a STATE heartbeat
-        vault_state = {
-            "principal": self.vault.PRINCIPAL_CAPITAL_CENTS / 100,
-            "currentProfit": (self.vault.current_balance - self.vault.start_of_day_balance) / 100,
-            "lockThreshold": self.vault.DAILY_PROFIT_THRESHOLD_CENTS / 100,
-            "isLocked": self.vault.is_locked,
-            "total": self.vault.current_balance / 100,
-        }
-        await self.emit("VAULT", vault_state)
+        await publish_vault_state(self.bus, self.vault, self.name)
 
         # Heartbeat
         await self.emit("STATE", {"cycleCount": payload.get("cycle"), "isProcessing": True})
@@ -75,7 +68,6 @@ class GatewayAgent(BaseAgent):
 
     async def handle_error(self, message):
         """Handle SYSTEM_ERROR events from ErrorDispatcher"""
-        from datetime import datetime
         from core.event_formatter import format_error_event
 
         error_data = message.payload

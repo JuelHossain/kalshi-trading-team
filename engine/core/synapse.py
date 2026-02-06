@@ -1,12 +1,12 @@
 import asyncio
 import sqlite3
-import time
 import uuid
 from datetime import datetime
-from functools import wraps
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field
+
+from core.shared_utils import retry_sqlite
 
 # -------------------------------------------------------------------------
 # 1. Type Definitions (Schemas)
@@ -64,30 +64,6 @@ class SynapseError(BaseModel):
 T = TypeVar("T", bound=BaseModel)
 
 # -------------------------------------------------------------------------
-# Retry Decorator for SQLite Operations
-# -------------------------------------------------------------------------
-
-def _retry_sqlite(max_retries=3, base_delay=0.05):
-    """Retry decorator for SQLite operations that may encounter locked database."""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            for attempt in range(max_retries):
-                try:
-                    return func(*args, **kwargs)
-                except sqlite3.OperationalError as e:
-                    if "locked" in str(e).lower() and attempt < max_retries - 1:
-                        # Exponential backoff
-                        delay = base_delay * (2 ** attempt)
-                        time.sleep(delay)
-                        continue
-                    # Re-raise if not locked error or retries exhausted
-                    raise
-            return None
-        return wrapper
-    return decorator
-
-# -------------------------------------------------------------------------
 # 2. Persistent Queue (SQLite Backed)
 # -------------------------------------------------------------------------
 
@@ -141,7 +117,7 @@ class PersistentQueue(Generic[T]):
             )
             # Notify potential listeners (if implementing wait logic later)
 
-    @_retry_sqlite(max_retries=3, base_delay=0.05)
+    @retry_sqlite(max_retries=3, base_delay=0.05)
     def _push_sync(self, item: T, priority: int):
         conn = sqlite3.connect(self.db_path)
         try:
@@ -167,7 +143,7 @@ class PersistentQueue(Generic[T]):
                 self._pop_sync
             )
 
-    @_retry_sqlite(max_retries=3, base_delay=0.05)
+    @retry_sqlite(max_retries=3, base_delay=0.05)
     def _pop_sync(self) -> T | None:
         conn = sqlite3.connect(self.db_path)
         try:

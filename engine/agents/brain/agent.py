@@ -5,41 +5,30 @@ Role: High-Level Decision Maker
 Core BrainAgent class with debate, simulation, and monitoring capabilities.
 """
 import asyncio
-import json
 import os
 import uuid
-from datetime import datetime
 from typing import Any
 
-import aiohttp
 from agents.base import BaseAgent
 from core.ai_client import AIClient
+from core.ai_utils import GEMINI_AVAILABLE, get_default_models, initialize_gemini_client
 from core.bus import EventBus
 from core.constants import (
     BRAIN_CONFIDENCE_THRESHOLD,
+    BRAIN_MAX_VARIANCE,
     BRAIN_SIMULATION_ITERATIONS,
-    BRAIN_MAX_VARIANCE
 )
 from core.db import log_to_db
-from core.error_dispatcher import ErrorSeverity
-from core.flow_control import check_execution_queue_limit, should_restock
-from core.logger import get_logger
 from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
 
 from .debate import load_personas, run_debate
-from .simulation import run_simulation
 from .monitor import (
+    check_opportunity_freshness,
+    handle_restock_trigger,
     monitor_queue,
     process_single_item_from_queue,
-    handle_restock_trigger,
-    check_opportunity_freshness
 )
-
-try:
-    from google import genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
+from .simulation import run_simulation
 
 
 class BrainAgent(BaseAgent):
@@ -50,15 +39,7 @@ class BrainAgent(BaseAgent):
     MAX_VARIANCE = BRAIN_MAX_VARIANCE
 
     # Gemini model names to try (in order of preference)
-    DEFAULT_MODELS = [
-        "gemini-3-flash-preview",
-        "gemini-3-pro-preview",
-        "gemini-2.0-flash-thinking-exp-01-21",
-        "gemini-2.0-pro-exp-02-05",
-        "gemini-2.0-flash-exp",
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
-    ]
+    DEFAULT_MODELS = get_default_models()
 
     def __init__(self, agent_id: int, bus: EventBus, synapse: Synapse = None):
         super().__init__("BRAIN", agent_id, bus, synapse)
@@ -74,34 +55,23 @@ class BrainAgent(BaseAgent):
 
         # Initialize Gemini
         self.gemini_model = None
-        if GEMINI_AVAILABLE:
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if api_key:
-                self.client = genai.Client(api_key=api_key)
-                self.openrouter_key = os.environ.get("OPENROUTER_API_KEY")
-                # Initialize AI client with OpenRouter fallback
-                self.ai_client = AIClient(
-                    openrouter_key=self.openrouter_key,
-                    log_callback=lambda msg, level="INFO": asyncio.create_task(
-                        self.log(msg, level=level)
-                    ),
-                    bus=self.bus
-                )
-                # Try user-specified model first, then default list
-                user_model = os.environ.get("GEMINI_MODEL")
-                if user_model:
-                    # Defensive fix: 2.5 is deprecated/missing, downgrade to 2.0
-                    if "gemini-2.5" in user_model:
-                        get_logger("BRAIN").warning(f"[BRAIN] WARN: Downgrading requested model {user_model} to gemini-2.0-flash-exp")
-                        self.gemini_model = "gemini-2.0-flash-exp"
-                    else:
-                        self.gemini_model = user_model
-                else:
-                    self.gemini_model = self.DEFAULT_MODELS[0]
+        self._model_downgrade_warning = None  # Store for logging in async context
+        self.client, self.ai_client, default_model, self._gemini_available = initialize_gemini_client(
+            log_callback=self.log,
+            bus=self.bus
+        )
+
+        # Try user-specified model first, then default list
+        user_model = os.environ.get("GEMINI_MODEL")
+        if user_model:
+            # Defensive fix: 2.5 is deprecated/missing, downgrade to 2.0
+            if "gemini-2.5" in user_model:
+                self._model_downgrade_warning = f"Downgrading requested model {user_model} to gemini-2.0-flash-exp"
+                self.gemini_model = "gemini-2.0-flash-exp"
             else:
-                self.client = None
-                self.gemini_model = None
-                self.ai_client = None
+                self.gemini_model = user_model
+        else:
+            self.gemini_model = default_model or self.DEFAULT_MODELS[0]
 
         # Load personas
         self.personas = load_personas()
@@ -109,6 +79,11 @@ class BrainAgent(BaseAgent):
     async def setup(self):
         ai_status = f"AI Model: {self.gemini_model}" if self.client else "AI: UNAVAILABLE (No API key)"
         await self.log(f"Brain online. Intelligence & Decision engine ready. {ai_status}")
+
+        # Log any model downgrade warnings
+        if self._model_downgrade_warning:
+            await self.log(f"WARN: {self._model_downgrade_warning}", level="WARN")
+
         # Subscribe to control events only
         await self.bus.subscribe("INSTRUCTIONS_UPDATE", self.update_instructions)
         await self.bus.subscribe("SYSTEM_CONTROL", self.on_system_control)

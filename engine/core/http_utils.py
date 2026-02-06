@@ -5,7 +5,6 @@ Provides standardized response formatting across all HTTP endpoints.
 
 from aiohttp import web
 
-
 # ==============================================================================
 # RESPONSE BUILDERS
 # ==============================================================================

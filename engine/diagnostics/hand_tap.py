@@ -2,7 +2,6 @@ import asyncio
 import os
 import sys
 
-from colorama import Fore, Style, init
 from dotenv import load_dotenv
 
 # Ensure engine path is in sys.path
@@ -13,17 +12,18 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "../../.env"))
 
 from agents.hand import HandAgent
 from core.bus import EventBus
+from core.display import AgentType, get_display, log_info, log_success, log_error
 from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
 from core.vault import RecursiveVault
 
-# Initialize Colorama
-init()
-
 async def main():
-    print(f"{Fore.GREEN}=========================================={Style.RESET_ALL}")
-    print(f"{Fore.GREEN}     HAND AGENT - LIVE DIAGNOSTIC TAP      {Style.RESET_ALL}")
-    print(f"{Fore.GREEN}=========================================={Style.RESET_ALL}")
-    print("Goal: Inject signal into Synapse and watch Hand strike\n")
+    display = get_display()
+    console = display.console
+
+    console.print("[green]==========================================[/]")
+    console.print("[green]     HAND AGENT - LIVE DIAGNOSTIC TAP      [/]")
+    console.print("[green]==========================================[/]")
+    console.print("Goal: Inject signal into Synapse and watch Hand strike\n")
 
     # 1. Setup Infrastructure
     bus = EventBus()
@@ -36,17 +36,17 @@ async def main():
         if msg.topic == "SYSTEM_LOG":
             message = msg.payload.get("message", "")
             if "Target acquired" in message:
-                print(f"{Fore.CYAN}--- {message} ---{Style.RESET_ALL}")
+                console.print(f"[cyan]--- {message} ---[/]")
             else:
-                print(f"{Fore.WHITE}[HAND] {message}{Style.RESET_ALL}")
+                log_info(message, AgentType.HAND)
         elif msg.topic == "TRADE_RESULT":
-             print(f"\n{Fore.GREEN}✅ TRADE_RESULT EVENT EMITTED for {msg.payload.get('ticker')}{Style.RESET_ALL}")
+             console.print(f"\n[green]✅ TRADE_RESULT EVENT EMITTED for {msg.payload.get('ticker')}[/]")
 
     await bus.subscribe("SYSTEM_LOG", monitor_bus)
     await bus.subscribe("TRADE_RESULT", monitor_bus)
 
     # 3. Inject Mock Signal
-    print("Injecting mock ExecutionSignal into Synapse...")
+    log_info("Injecting mock ExecutionSignal into Synapse...", AgentType.HAND)
     m_data = MarketData(
         ticker="DIAG-TEST-TICKER",
         title="Diagnostic Test",
@@ -65,27 +65,27 @@ async def main():
         suggested_count=20
     )
     await synapse.executions.push(signal)
-    print(f"Signal injected. Synapse Pending Executions: {await synapse.executions.size()}\n")
+    console.print(f"Signal injected. Synapse Pending Executions: {await synapse.executions.size()}\n")
 
     # 4. Initialize Hand
-    print("Initializing HandAgent...")
+    log_info("Initializing HandAgent...", AgentType.HAND)
     hand = HandAgent(4, bus, vault, synapse=synapse)
     await hand.setup()
 
     # 5. Trigger Loop
-    print("Triggering EXECUTION_READY signal...")
+    log_info("Triggering EXECUTION_READY signal...", AgentType.HAND)
     await bus.publish("EXECUTION_READY", {"ticker": "DIAG-TEST-TICKER"}, "DIAGNOSTIC")
 
     # Wait for processing
     await asyncio.sleep(5)
-    
+
     # Check if signal was popped
     remaining = await synapse.executions.size()
-    print(f"\nRemaining signals in Synapse: {remaining}")
+    console.print(f"\nRemaining signals in Synapse: {remaining}")
     if remaining == 0:
-        print(f"{Fore.GREEN}PASSED: HandAgent consumed the signal from Synapse.{Style.RESET_ALL}")
+        log_success("PASSED: HandAgent consumed the signal from Synapse.", AgentType.HAND)
     else:
-        print(f"{Fore.RED}FAILED: Signal still in queue.{Style.RESET_ALL}")
+        log_error("FAILED: Signal still in queue.", AgentType.HAND)
 
 if __name__ == "__main__":
     asyncio.run(main())

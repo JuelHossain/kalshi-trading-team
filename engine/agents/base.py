@@ -4,20 +4,24 @@ from typing import Any
 
 from core.bus import EventBus
 from core.error_dispatcher import ErrorDispatcher, ErrorDomain, ErrorSeverity
+from core.error_manager import ErrorManager, get_error_manager
 from core.synapse import Synapse
 
 
 class BaseAgent(ABC):
-    def __init__(self, name: str, agent_id: int, bus: EventBus, synapse: Synapse = None):
+    def __init__(self, name: str, agent_id: int, bus: EventBus, synapse: Synapse = None, error_manager: ErrorManager = None):
         self.name = name
         self.agent_id = agent_id
         self.bus = bus
         self.synapse = synapse
-        # Initialize centralized error dispatcher
+        # Use provided error_manager or get global instance
+        self.error_manager = error_manager or get_error_manager()
+        # Initialize centralized error dispatcher with error_manager
         self.error_dispatcher = ErrorDispatcher(
             agent_name=name,
             event_bus=bus,
-            synapse=synapse
+            synapse=synapse,
+            error_manager=self.error_manager
         )
 
     async def start(self):

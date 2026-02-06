@@ -67,9 +67,8 @@ Write a concise set of 5 trading rules to maximize wins and avoid losses. Be spe
         if response_text:
             await log_callback("Trading instructions evolved via Gemini.")
             return response_text
-        else:
-            await log_callback("Evolution failed: All models failed.", level="ERROR")
-            return None
+        await log_callback("Evolution failed: All models failed.", level="ERROR")
+        return None
     except Exception as e:
         await log_callback(f"Evolution failed: {str(e)[:50]}", level="ERROR")
         return None

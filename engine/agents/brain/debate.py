@@ -7,14 +7,9 @@ import json
 import os
 from typing import Any
 
+from core.ai_utils import GEMINI_AVAILABLE
 from core.error_dispatcher import ErrorSeverity
 from core.logger import get_logger
-
-try:
-    from google import genai
-    GEMINI_AVAILABLE = True
-except ImportError:
-    GEMINI_AVAILABLE = False
 
 
 def load_personas(base_path: str = "ai-env/personas") -> dict[str, str]:

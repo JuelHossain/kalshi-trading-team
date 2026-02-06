@@ -47,11 +47,12 @@ async def synapse(test_db):
     return Synapse(db_path=test_db)
 
 @pytest_asyncio.fixture(scope="function")
-async def vault():
-    v = RecursiveVault()
+async def vault(test_db):
+    """Create a vault in test mode (no persistence)."""
+    v = RecursiveVault(test_mode=True)  # Enable test mode
     # Initialize with a safe test amount (in cents)
-    await v.initialize(100000) # $1000
-    return v
+    await v.initialize(100000)  # $1000
+    yield v
 
 @pytest_asyncio.fixture(scope="function")
 async def k_client():

@@ -2,6 +2,7 @@
 HTTP server setup with CORS middleware for Ghost Engine.
 """
 import os
+
 from aiohttp import web
 
 

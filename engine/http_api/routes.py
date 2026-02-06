@@ -8,14 +8,13 @@ import sqlite3
 from datetime import datetime
 
 from aiohttp import web
-
-from core.constants import MAX_EXECUTION_QUEUE_SIZE, AGENT_TO_PHASE, AGENT_NAME_TO_ID
+from core.constants import AGENT_NAME_TO_ID, AGENT_TO_PHASE, MAX_EXECUTION_QUEUE_SIZE
 from core.event_formatter import (
+    format_error_event,
     format_log_event,
-    format_vault_event,
     format_simulation_event,
     format_state_event,
-    format_error_event,
+    format_vault_event,
 )
 
 

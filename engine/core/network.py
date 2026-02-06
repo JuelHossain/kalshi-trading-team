@@ -5,9 +5,10 @@ import os
 import time
 
 import aiohttp
-from colorama import Fore, Style
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+
+from core.display import AgentType, log_warning, log_error, get_display
 
 
 class KalshiClient:
@@ -20,18 +21,20 @@ class KalshiClient:
         self._session: aiohttp.ClientSession | None = None
         self.private_key = None
 
-        # Use Demo API by default (paper trading)
-        is_prod = os.getenv("IS_PRODUCTION") == "true"
+        # Production configuration (demo mode removed for production security)
+        self.key_id = os.getenv("KALSHI_PROD_KEY_ID")
+        if not self.key_id:
+            raise ValueError(
+                "KALSHI_PROD_KEY_ID not configured. Set KALSHI_PROD_KEY_ID in environment variables. "
+                "Demo mode has been removed for production security."
+            )
         
-        if is_prod:
-            self.key_id = os.getenv("KALSHI_PROD_KEY_ID")
-            self.base_url = "https://api.kalshi.co/trade-api/v2"
-            pk_pem = os.getenv("KALSHI_PROD_PRIVATE_KEY")
-        else:
-            # Demo/Sandbox mode (default)
-            self.key_id = os.getenv("KALSHI_DEMO_KEY_ID")
-            self.base_url = "https://demo-api.kalshi.co/trade-api/v2"
-            pk_pem = os.getenv("KALSHI_DEMO_PRIVATE_KEY")
+        self.base_url = "https://api.kalshi.co/trade-api/v2"
+        pk_pem = os.getenv("KALSHI_PROD_PRIVATE_KEY")
+        if not pk_pem:
+            raise ValueError(
+                "KALSHI_PROD_PRIVATE_KEY not configured. Set KALSHI_PROD_PRIVATE_KEY in environment variables."
+            )
         
         if pk_pem:
             try:
@@ -44,7 +47,7 @@ class KalshiClient:
                     pk_pem.encode(), password=None
                 )
             except Exception as e:
-                print(f"{Fore.RED}[NETWORK] Crypto Init Failed: {e}{Style.RESET_ALL}")
+                log_error(f"Crypto Init Failed: {e}", AgentType.GATEWAY)
 
     async def get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -107,32 +110,35 @@ class KalshiClient:
 
                     if resp.status == 429 or 500 <= resp.status <= 504:
                         wait = (2**attempt) + (time.time() % 1)
-                        print(
-                            f"{Fore.YELLOW}[NETWORK] Attempt {attempt+1} failed ({resp.status}). Retrying in {wait:.2f}s...{Style.RESET_ALL}"
+                        log_warning(
+                            f"Attempt {attempt+1} failed ({resp.status}). Retrying in {wait:.2f}s...",
+                            AgentType.GATEWAY
                         )
                         await asyncio.sleep(wait)
                         continue
 
                     error_text = await resp.text()
-                    print(
-                        f"{Fore.RED}[NETWORK] API Error {resp.status} ({method} {path}): {error_text}{Style.RESET_ALL}"
-                    )
-                    return None
+                    error_msg = f"API Error {resp.status} ({method} {path}): {error_text}"
+                    log_error(error_msg, AgentType.GATEWAY)
+                    raise RuntimeError(error_msg)
 
             except Exception as e:
-                print(f"{Fore.RED}[NETWORK] Connection Error: {e}{Style.RESET_ALL}")
+                error_msg = f"Connection Error after {attempt + 1} attempts: {e}"
+                log_error(error_msg, AgentType.GATEWAY)
                 if attempt < retries - 1:
                     await asyncio.sleep(1)
                     continue
-                return None
+                raise RuntimeError(error_msg)
 
-        return None
+        raise RuntimeError(f"Request failed after {retries} retries: {method} {path}")
 
     async def get_active_markets(self, limit: int = 100, status: str = "open") -> list[dict]:
         path = "/markets"
         params = {"limit": limit, "status": status}
         res = await self.request("GET", path, params=params)
-        return res.get("markets", []) if res else []
+        if res and "markets" in res:
+            return res["markets"]
+        raise RuntimeError(f"Failed to get active markets: invalid response format")
 
     async def get_balance(self) -> int:
         """Fetch current balance. Returns cents."""
@@ -140,7 +146,7 @@ class KalshiClient:
         res = await self.request("GET", path)
         if res and "balance" in res:
             return int(res["balance"])
-        return 0
+        raise RuntimeError(f"Failed to get balance: invalid response format")
 
     async def get_orderbook(self, ticker: str) -> dict | None:
         path = f"/markets/{ticker}/orderbook"

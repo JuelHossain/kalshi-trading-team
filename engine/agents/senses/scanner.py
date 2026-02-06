@@ -3,11 +3,9 @@ Market Scanning Logic for Senses Agent
 Handles Kalshi market fetching, filtering, and stock management.
 """
 import re
-from typing import Any
 
 from core.error_dispatcher import ErrorSeverity
 from core.flow_control import check_execution_queue_limit
-
 
 # Compiled regex for ticker date parsing
 TICKER_DATE_PATTERN = re.compile(r"(\d{2}[A-Z]{3}\d{2})")
