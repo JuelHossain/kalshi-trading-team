@@ -14,6 +14,6 @@ npx pm2 start ecosystem.config.cjs
 npx pm2 save
 
 echo "✅ Bot is Online!"
-echo "📡 Backend: http://localhost:3001"
+echo "📡 Engine API: http://localhost:3002"
 echo "📊 HUD (Frontend): http://localhost:3000"
 echo "⚠️  REMINDER: Open the HUD in your browser to start the autonomous cycle."

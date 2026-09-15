@@ -57,6 +57,7 @@ from core.error_codes import ErrorDomain, ErrorSeverity
 from core.error_manager import ErrorManager, get_error_manager, set_error_manager
 from core.logger import get_logger
 from core.network import kalshi_client
+from core.shared_utils import get_env_bool
 from core.synapse import Synapse
 from core.vault import RecursiveVault
 from http_api.routes import register_all_routes, register_sse_subscriptions
@@ -237,10 +238,26 @@ class GhostEngine:
         return True
 
     async def execute_single_cycle(self, is_paper_trading: bool = True):
-        """Execute a single trading cycle with 4 Mega-Agents."""
+        """Execute a single trading cycle with 4 Mega-Agents.
+
+        Whether a cycle trades for real arrives in the request body from the
+        browser. IS_PAPER_TRADING=true pins it to paper on the server, so going
+        live takes a deliberate change on the machine running the engine rather
+        than a different JSON field from a client.
+
+        ecosystem.config.cjs has always set IS_PAPER_TRADING=true with the
+        comment "Default to paper trading". Nothing read it until now.
+        """
         if self.is_processing:
             log_warning("Cycle already in progress. Ignoring.")
             return
+
+        if get_env_bool("IS_PAPER_TRADING", default=False) and not is_paper_trading:
+            log_warning(
+                "IS_PAPER_TRADING is set: forcing this cycle to paper. "
+                "Unset it on the server to allow live trading."
+            )
+            is_paper_trading = True
 
         self.is_processing = True
 
