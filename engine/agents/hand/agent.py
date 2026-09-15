@@ -35,8 +35,9 @@ class HandAgent(BaseAgent):
         brain_agent=None,
         kalshi_client=None,
         synapse: Synapse = None,
+        error_manager=None,
     ):
-        super().__init__("HAND", agent_id, bus, synapse)
+        super().__init__("HAND", agent_id, bus, synapse, error_manager)
         self.vault = vault
         self.brain = brain_agent
         self.kalshi_client = kalshi_client

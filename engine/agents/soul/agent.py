@@ -23,8 +23,8 @@ from .evolution import evolve_instructions, generate_with_fallback
 class SoulAgent(BaseAgent):
     """The Executive Director - System, Memory & Evolution"""
 
-    def __init__(self, agent_id: int, bus: EventBus, vault: RecursiveVault, synapse: Synapse = None):
-        super().__init__("SOUL", agent_id, bus, synapse)
+    def __init__(self, agent_id: int, bus: EventBus, vault: RecursiveVault, synapse: Synapse = None, error_manager=None):
+        super().__init__("SOUL", agent_id, bus, synapse, error_manager)
         self.vault = vault
         self.trading_instructions = ""
         self.mistakes_log = []

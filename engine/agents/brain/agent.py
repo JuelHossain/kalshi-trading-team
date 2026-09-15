@@ -41,8 +41,8 @@ class BrainAgent(BaseAgent):
     # Gemini model names to try (in order of preference)
     DEFAULT_MODELS = get_default_models()
 
-    def __init__(self, agent_id: int, bus: EventBus, synapse: Synapse = None):
-        super().__init__("BRAIN", agent_id, bus, synapse)
+    def __init__(self, agent_id: int, bus: EventBus, synapse: Synapse = None, error_manager=None):
+        super().__init__("BRAIN", agent_id, bus, synapse, error_manager)
         self.execution_queue: list[dict] = []
         self.trading_instructions = ""
 
