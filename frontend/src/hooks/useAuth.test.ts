@@ -254,6 +254,9 @@ describe('useAuth Hook', () => {
       const mockFetch = vi.fn().mockReturnValue({
         ok: true,
         json: () => jsonPromise,
+        // Stays pending until resolveJson fires, so login is still in flight
+        // when isAuthenticating is checked -- which is the point of this test.
+        clone: () => ({ text: () => jsonPromise.then((v) => JSON.stringify(v)) }),
       });
       global.fetch = mockFetch;
 
