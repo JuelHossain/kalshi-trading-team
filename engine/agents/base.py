@@ -16,12 +16,11 @@ class BaseAgent(ABC):
         self.synapse = synapse
         # Use provided error_manager or get global instance
         self.error_manager = error_manager or get_error_manager()
-        # Initialize centralized error dispatcher with error_manager
+        # Initialize centralized error dispatcher
         self.error_dispatcher = ErrorDispatcher(
             agent_name=name,
             event_bus=bus,
             synapse=synapse,
-            error_manager=self.error_manager
         )
 
     async def start(self):

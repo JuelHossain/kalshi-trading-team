@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from core.display import AgentType, log_warning, log_error, get_display
+from core.lazy import lazy
 
 
 class KalshiClient:
@@ -187,5 +188,5 @@ class KalshiClient:
             await self._session.close()
 
 
-# Singleton instance
-kalshi_client = KalshiClient()
+# Singleton instance (constructed on first attribute access, not on import)
+kalshi_client = lazy(KalshiClient)

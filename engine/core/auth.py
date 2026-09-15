@@ -14,6 +14,7 @@ from core.http_utils import (
     unauthorized_response,
 )
 from core.display import log_info, log_error, log_success, AgentType
+from core.lazy import lazy
 
 # API Path Constants
 _DIRECT_PATHS = {
@@ -95,7 +96,7 @@ class AuthManager:
 
 
 # Global auth manager instance
-auth_manager = AuthManager()
+auth_manager = lazy(AuthManager)
 
 
 async def login_handler(request: web.Request) -> web.Response:
