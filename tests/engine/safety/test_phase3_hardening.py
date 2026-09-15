@@ -10,15 +10,14 @@ import time
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import sys
-sys.path.insert(0, 'e:/Projects/kalshi-trading-team')
-
 from engine.main import GhostEngine
 from engine.core.vault import RecursiveVault
 
 @pytest.fixture
 def clean_db():
-    db_path = "engine/ghost_memory.db"
+    # Read the isolated path set by the autouse isolate_databases fixture;
+    # this previously hardcoded -- and deleted -- the real engine database.
+    db_path = os.environ["GHOST_VAULT_DB"]
     if os.path.exists(db_path):
         os.remove(db_path)
     yield db_path

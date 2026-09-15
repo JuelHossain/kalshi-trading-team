@@ -35,7 +35,7 @@ async def test_senses_guard():
     print("TEST 1: Senses Initial Scan Guard")
     print("="*60)
 
-    clear_database("ghost_memory.db")
+    clear_database(os.environ["GHOST_SYNAPSE_DB"])
 
     bus = EventBus()
     synapse = Synapse()
@@ -80,7 +80,7 @@ async def test_brain_no_self_trigger():
     print("TEST 2: Brain No Self-Trigger")
     print("="*60)
 
-    clear_database("ghost_memory.db")
+    clear_database(os.environ["GHOST_SYNAPSE_DB"])
 
     bus = EventBus()
     synapse = Synapse()
@@ -151,7 +151,7 @@ async def test_restock_cooldown():
     print("TEST 3: Restock Cooldown")
     print("="*60)
 
-    clear_database("ghost_memory.db")
+    clear_database(os.environ["GHOST_SYNAPSE_DB"])
 
     bus = EventBus()
     synapse = Synapse()

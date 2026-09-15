@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sqlite3
 import uuid
 from datetime import datetime
@@ -197,7 +198,9 @@ class Synapse:
     Central Message Broker using Persistent Queues.
     Passed to all agents to replace direct references.
     """
-    def __init__(self, db_path: str = "ghost_memory.db"):
+    def __init__(self, db_path: str | None = None):
+        # Explicit arg wins, then GHOST_SYNAPSE_DB, then the production default.
+        db_path = db_path or os.getenv("GHOST_SYNAPSE_DB", "ghost_memory.db")
         self.db_path = db_path
         
         # 1. Opportunity Queue (Senses -> Brain)

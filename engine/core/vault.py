@@ -18,13 +18,16 @@ class RecursiveVault:
     Hard-coded capital preservation lock.
     """
 
-    def __init__(self, test_mode: bool = False):
+    def __init__(self, test_mode: bool = False, db_path: str | None = None):
         # Configuration from Env
         self.PRINCIPAL_CAPITAL_CENTS = int(os.getenv("VAULT_PRINCIPAL_CENTS", "30000"))
         self.DAILY_PROFIT_THRESHOLD_CENTS = int(os.getenv("VAULT_PROFIT_THRESHOLD_CENTS", "5000"))
         self.HARD_FLOOR_CENTS = 25500  # $255.00 Hard Floor
         self.KILL_SWITCH_THRESHOLD_PCT = 0.85
-        self.DB_PATH = "engine/ghost_memory.db"
+        # Explicit arg wins, then GHOST_VAULT_DB, then the production default.
+        # Without this the path is unredirectable, so tests persist reservations
+        # into the real database and leak them into each other.
+        self.DB_PATH = db_path or os.getenv("GHOST_VAULT_DB", "engine/ghost_memory.db")
         self.test_mode = test_mode  # Skip persistence in test mode
         
         self.start_of_day_balance = 0

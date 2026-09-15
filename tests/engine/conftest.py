@@ -16,6 +16,21 @@ from engine.core.synapse import Synapse
 from engine.core.network import kalshi_client
 from engine.core.vault import RecursiveVault
 
+@pytest.fixture(autouse=True)
+def isolate_databases(tmp_path, monkeypatch):
+    """Point every test at throwaway databases.
+
+    Vault and Synapse otherwise write to the real engine/ghost_memory.db and
+    ghost_memory.db. Vault.initialize() reloads persisted reservations from
+    there, so one test's reserved funds leaked into the next and some tests
+    passed or failed purely on run order.
+
+    Autouse so no test can opt out by forgetting a fixture.
+    """
+    monkeypatch.setenv("GHOST_VAULT_DB", str(tmp_path / "vault.db"))
+    monkeypatch.setenv("GHOST_SYNAPSE_DB", str(tmp_path / "synapse.db"))
+
+
 @pytest.fixture(scope="session")
 def event_loop():
     """Create a session-scoped event loop."""
