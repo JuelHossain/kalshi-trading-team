@@ -2,6 +2,7 @@ import pytest
 import time
 from engine.core.network import kalshi_client
 
+@pytest.mark.live
 @pytest.mark.asyncio
 async def test_network_ping_latency():
     """Verify market data fetch latency stays within reasonable bounds."""

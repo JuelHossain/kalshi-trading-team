@@ -11,10 +11,76 @@ engine_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../eng
 sys.path.append(engine_path)
 load_dotenv(os.path.join(engine_path, ".env"))
 
+# ---------------------------------------------------------------------------
+# Credentials
+# ---------------------------------------------------------------------------
+# Unit tests must never require real secrets. Several constructors only check
+# that a credential is *present*, so a placeholder lets them run -- previously
+# these tests failed rather than skipped, and CI could never be green.
+#
+# Record whether genuine credentials were supplied BEFORE filling placeholders
+# in. Tests that actually reach the Kalshi API are marked `live` and skipped
+# unless real credentials exist, so placeholders never cause a real network
+# call that would hang or fail confusingly.
+
+HAS_LIVE_CREDENTIALS = bool(
+    os.getenv("KALSHI_PROD_KEY_ID") and os.getenv("KALSHI_PROD_PRIVATE_KEY")
+)
+
+for _var, _placeholder in {
+    "GHOST_API_KEY": "test-ghost-api-key",
+    "KALSHI_PROD_KEY_ID": "test-kalshi-key-id",
+    "KALSHI_PROD_PRIVATE_KEY": "test-kalshi-private-key",
+}.items():
+    os.environ.setdefault(_var, _placeholder)
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "live: hits the real Kalshi API; skipped without real credentials"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if HAS_LIVE_CREDENTIALS:
+        return
+    skip_live = pytest.mark.skip(
+        reason="needs real credentials (KALSHI_PROD_KEY_ID, KALSHI_PROD_PRIVATE_KEY)"
+    )
+    for item in items:
+        if "live" in item.keywords:
+            item.add_marker(skip_live)
+
+
 from engine.core.bus import EventBus
 from engine.core.synapse import Synapse
 from engine.core.network import kalshi_client
 from engine.core.vault import RecursiveVault
+
+@pytest.fixture(autouse=True)
+def block_network(request, monkeypatch):
+    """Fail fast instead of dialling out.
+
+    Placeholder credentials let KalshiClient construct, so an unmocked call
+    would attempt a real HTTP request and stall ~2s per test on a timeout.
+    Every HTTP method funnels through request(), so blocking that single method
+    covers every module that imported the client, however it was bound.
+
+    Tests marked `live` opt out and use the real client.
+    """
+    if "live" in request.keywords:
+        return
+
+    from core.network import KalshiClient
+
+    async def _blocked(*_args, **_kwargs):
+        raise RuntimeError(
+            "Network is disabled in tests. Mock the Kalshi client, "
+            "or mark the test with @pytest.mark.live."
+        )
+
+    monkeypatch.setattr(KalshiClient, "request", _blocked)
+
 
 @pytest.fixture(autouse=True)
 def isolate_databases(tmp_path, monkeypatch):
