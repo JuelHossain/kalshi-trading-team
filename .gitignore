@@ -39,3 +39,12 @@ engine/venv/
 brain_debug.txt
 test_report*.txt
 *_audit_report.md
+
+# Virtualenvs
+.venv/
+venv/
+
+# Calibration experiment: the dataset IS the deliverable and CI runners are
+# ephemeral, so this one database is tracked despite any *.db rule above.
+!research/predictions.db
+research/logs/
