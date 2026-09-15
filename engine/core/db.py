@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from supabase import Client, create_client
 
-from core.display import log_error, AgentType
+from core.display import log_error, log_warning, AgentType
 
 load_dotenv()
 
@@ -41,9 +41,30 @@ async def send_heartbeat(agent_id: int, name: str, status: str = "ACTIVE"):
         log_error(f"Heartbeat failed for {name}: {e}")
 
 
+_warned_unconfigured: set[str] = set()
+
+
 async def log_to_db(table: str, data: dict):
+    """Record an analytics row. Never raises.
+
+    This is a telemetry sink, and Supabase is optional. Raising here took down
+    the caller: BrainAgent.queue_for_execution awaits this between appending an
+    approved trade and publishing EXECUTION_READY, the event the Hand agent
+    places orders on. With Supabase unconfigured, an approved trade was queued
+    and then silently never executed -- because an analytics write failed.
+
+    An insert failure was already tolerated a few lines below; only the
+    unconfigured case escalated to fatal, which was the inconsistency.
+    """
     if not supabase:
-        raise RuntimeError("Supabase client not initialized. Check SUPABASE_URL and SUPABASE_KEY in environment.")
+        if table not in _warned_unconfigured:
+            _warned_unconfigured.add(table)
+            log_warning(
+                f"Supabase not configured; skipping analytics for '{table}'. "
+                "Set SUPABASE_URL and SUPABASE_KEY to record these rows.",
+                AgentType.SOUL,
+            )
+        return
     try:
         supabase.table(table).insert(data).execute()
     except Exception as e:
