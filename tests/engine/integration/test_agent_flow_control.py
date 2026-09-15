@@ -9,15 +9,20 @@ This test simulates the full agent lifecycle to ensure:
 
 import asyncio
 import os
-import sys
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import pytest
+
+# NOTE: no sys.path manipulation here. This module previously inserted
+# tests/engine at the front of sys.path, which shadowed the real `agents`
+# package with the test directory of the same name -- it only imported at all
+# because an earlier test had already cached the real module. conftest.py puts
+# the engine source on the path.
 
 from agents.brain import BrainAgent
 from agents.senses import SensesAgent
 from agents.soul import SoulAgent
 from core.bus import EventBus
+from core.flow_control import should_restock
 from core.synapse import MarketData, Opportunity, Synapse
 from core.vault import RecursiveVault
 
@@ -29,6 +34,7 @@ def clear_database(db_path: str):
         print(f"[TEST] Cleared database: {db_path}")
 
 
+@pytest.mark.asyncio
 async def test_senses_guard():
     """Test that Senses only scans once and goes to standby"""
     print("\n" + "="*60)
@@ -67,13 +73,12 @@ async def test_senses_guard():
     print(f"[TEST] Opportunities after second trigger: {opp_size_2}")
 
     # Verify guard is working
-    if opp_size_1 == opp_size_2:
-        print(f"\n[PASS] Senses guard working - no re-queue ({opp_size_1} == {opp_size_2})")
-        return True
-    print(f"\n[FAIL] Senses re-queued ({opp_size_2} > {opp_size_1})")
-    return False
+    assert opp_size_1 == opp_size_2, (
+        f"Senses re-queued on a second PREFLIGHT_COMPLETE: {opp_size_1} -> {opp_size_2}"
+    )
 
 
+@pytest.mark.asyncio
 async def test_brain_no_self_trigger():
     """Test that Brain doesn't self-trigger after processing"""
     print("\n" + "="*60)
@@ -136,48 +141,45 @@ async def test_brain_no_self_trigger():
     print(f"[TEST] Final executions: {exec_size_final}")
 
     # Brain should process exactly 1 opportunity per trigger
-    if opp_size_final == opp_size_after and exec_size_final == exec_size:
-        print("\n[OK PASS] Brain did NOT self-trigger (no change after wait)")
-        return True
-    print("\n[FAIL FAIL] Brain self-triggered or processed multiple")
-    print(f"        Opportunities changed: {opp_size_after} -> {opp_size_final}")
-    print(f"        Executions changed: {exec_size} -> {exec_size_final}")
-    return False
+    assert opp_size_final == opp_size_after, (
+        f"Brain self-triggered: opportunities changed {opp_size_after} -> {opp_size_final}"
+    )
+    assert exec_size_final == exec_size, (
+        f"Brain self-triggered: executions changed {exec_size} -> {exec_size_final}"
+    )
 
 
+@pytest.mark.asyncio
 async def test_restock_cooldown():
-    """Test that restock has proper cooldown"""
-    print("\n" + "="*60)
-    print("TEST 3: Restock Cooldown")
-    print("="*60)
+    """Restock is refused until the cooldown window has elapsed.
 
-    clear_database(os.environ["GHOST_SYNAPSE_DB"])
-
-    bus = EventBus()
+    Previously this published two bus events, asserted nothing, printed
+    "check logs above" and returned True -- it could never fail. should_restock
+    is a pure function, so the cooldown is asserted directly instead.
+    """
     synapse = Synapse()
-    vault = RecursiveVault()
+    now = 1_000_000.0
+    over_threshold = 5  # veto_threshold
 
-    # Initialize agents
-    soul = SoulAgent(1, bus, vault=vault, synapse=synapse)
-    brain = BrainAgent(3, bus, synapse=synapse)
+    # Inside the 60s window: refused even with enough vetoes.
+    assert not await should_restock(
+        synapse, over_threshold, last_restock_time=now - 59, current_time=now
+    )
 
-    await soul.setup()
-    await brain.setup()
+    # Outside the window: allowed.
+    assert await should_restock(
+        synapse, over_threshold, last_restock_time=now - 61, current_time=now
+    )
 
-    # Manually trigger restock twice quickly
-    print("\n[TEST] First REQUEST_RESTOCK...")
-    await bus.publish("REQUEST_RESTOCK", {}, "TEST")
-    await asyncio.sleep(1)
+    # Boundary: exactly the cooldown is allowed (the check is strict <).
+    assert await should_restock(
+        synapse, over_threshold, last_restock_time=now - 60, current_time=now
+    )
 
-    print("[TEST] Second REQUEST_RESTOCK (immediate)...")
-    await bus.publish("REQUEST_RESTOCK", {}, "TEST")
-    await asyncio.sleep(1)
-
-    # Check if cooldown prevented duplicate processing
-    # The cooldown should prevent rapid restocks
-    print("\n[OK INFO] Restock cooldown test completed")
-    print("[OK INFO] Check logs above for flow control messages")
-    return True
+    # Too few vetoes is refused regardless of elapsed time.
+    assert not await should_restock(
+        synapse, over_threshold - 1, last_restock_time=now - 9999, current_time=now
+    )
 
 
 async def main():
