@@ -1,13 +1,15 @@
 """
 Unit tests for Authentication System - Login, Logout, Session Management.
-Tests demo mode (no password) and production mode (password: 993728).
+Tests production-mode authentication. Demo mode has been removed.
 """
 
 import json
+import os
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from core.auth import (
+    MODE_PRODUCTION,
     AuthManager,
     auth_manager,
     login_handler,
@@ -33,11 +35,11 @@ class TestAuthManager:
     """Test AuthManager class initialization and core functionality."""
 
     def test_auth_manager_initial_state(self):
-        """Auth manager starts unauthenticated in demo mode."""
+        """Auth manager starts unauthenticated. Demo mode has been removed."""
         manager = AuthManager()
         assert manager.authenticated is False
         assert manager.is_production is False
-        assert manager.mode == "demo"
+        assert manager.mode == MODE_PRODUCTION
 
     def test_auth_manager_has_api_key(self):
         """Auth manager generates or loads an API key."""
@@ -124,16 +126,16 @@ class TestLoginHandler:
         """Reset auth manager state before each test."""
         auth_manager.authenticated = False
         auth_manager.is_production = False
-        auth_manager.mode = "demo"
+        auth_manager.mode = MODE_PRODUCTION
         yield
         # Reset after test as well
         auth_manager.authenticated = False
         auth_manager.is_production = False
-        auth_manager.mode = "demo"
+        auth_manager.mode = MODE_PRODUCTION
 
     @pytest.mark.asyncio
-    async def test_login_demo_mode_empty_password(self):
-        """Login with empty password sets demo mode."""
+    async def test_login_rejects_empty_password(self):
+        """An empty password is refused. Demo mode no longer grants access."""
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={
             "password": "",
@@ -142,21 +144,15 @@ class TestLoginHandler:
 
         response = await login_handler(mock_request)
 
-        assert response.status == 200
-        data = await get_response_json(response)
-        assert data["isAuthenticated"] is True
-        assert data["mode"] == "demo"
-        assert data["is_production"] is False
-        assert auth_manager.authenticated is True
-        assert auth_manager.mode == "demo"
-        assert auth_manager.is_production is False
+        assert response.status == 401
+        assert auth_manager.authenticated is False
 
     @pytest.mark.asyncio
     async def test_login_production_mode_correct_password(self):
         """Login with correct password sets production mode."""
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={
-            "password": "993728",
+            "password": os.environ["AUTH_PASSWORD"],
             "mode": "production"
         })
 
@@ -189,11 +185,14 @@ class TestLoginHandler:
         assert auth_manager.authenticated is False
 
     @pytest.mark.asyncio
-    async def test_login_production_mode_with_demo_flag(self):
-        """Login with correct password but demo mode stays in demo."""
+    async def test_client_supplied_mode_flag_cannot_downgrade_session(self):
+        """A "demo" flag from the client is ignored; the server decides the mode.
+
+        The client must not be able to talk the engine into a weaker session.
+        """
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={
-            "password": "993728",
+            "password": os.environ["AUTH_PASSWORD"],
             "mode": "demo"
         })
 
@@ -202,8 +201,8 @@ class TestLoginHandler:
         assert response.status == 200
         data = await get_response_json(response)
         assert data["isAuthenticated"] is True
-        assert data["mode"] == "demo"
-        assert data["is_production"] is False
+        assert data["mode"] == MODE_PRODUCTION
+        assert data["is_production"] is True
 
     @pytest.mark.asyncio
     async def test_login_handles_exception(self):
@@ -227,12 +226,12 @@ class TestVerifyHandler:
         """Reset auth manager state before each test."""
         auth_manager.authenticated = False
         auth_manager.is_production = False
-        auth_manager.mode = "demo"
+        auth_manager.mode = MODE_PRODUCTION
         yield
         # Reset after test
         auth_manager.authenticated = False
         auth_manager.is_production = False
-        auth_manager.mode = "demo"
+        auth_manager.mode = MODE_PRODUCTION
 
     @pytest.mark.asyncio
     async def test_verify_returns_unauthenticated_when_not_logged_in(self):
@@ -244,22 +243,7 @@ class TestVerifyHandler:
         assert response.status == 200
         data = await get_response_json(response)
         assert data["isAuthenticated"] is False
-        assert data["mode"] == "demo"
-        assert data["is_production"] is False
-
-    @pytest.mark.asyncio
-    async def test_verify_returns_authenticated_in_demo_mode(self):
-        """Verify endpoint returns demo mode status."""
-        auth_manager.authenticated = True
-        auth_manager.mode = "demo"
-        auth_manager.is_production = False
-
-        mock_request = MagicMock()
-        response = await verify_handler(mock_request)
-
-        data = await get_response_json(response)
-        assert data["isAuthenticated"] is True
-        assert data["mode"] == "demo"
+        assert data["mode"] == MODE_PRODUCTION
         assert data["is_production"] is False
 
     @pytest.mark.asyncio
@@ -291,7 +275,7 @@ class TestLogoutHandler:
         # Reset after test
         auth_manager.authenticated = False
         auth_manager.is_production = False
-        auth_manager.mode = "demo"
+        auth_manager.mode = MODE_PRODUCTION
 
     @pytest.mark.asyncio
     async def test_logout_clears_session(self):
@@ -306,14 +290,13 @@ class TestLogoutHandler:
         assert "Logged out" in data["message"]
         assert auth_manager.authenticated is False
         assert auth_manager.is_production is False
-        assert auth_manager.mode == "demo"
 
     @pytest.mark.asyncio
-    async def test_logout_from_demo_mode(self):
-        """Logout works from demo mode as well."""
+    async def test_logout_from_authenticated_session(self):
+        """Logout clears an established production session."""
         auth_manager.authenticated = True
-        auth_manager.is_production = False
-        auth_manager.mode = "demo"
+        auth_manager.is_production = True
+        auth_manager.mode = MODE_PRODUCTION
 
         mock_request = MagicMock()
         response = await logout_handler(mock_request)
@@ -321,7 +304,7 @@ class TestLogoutHandler:
         data = await get_response_json(response)
         assert data["success"] is True
         assert auth_manager.authenticated is False
-        assert auth_manager.mode == "demo"
+        assert auth_manager.is_production is False
 
 
 class TestAuthManagerStateTransitions:
@@ -332,18 +315,20 @@ class TestAuthManagerStateTransitions:
         """Reset auth manager state before each test."""
         auth_manager.authenticated = False
         auth_manager.is_production = False
-        auth_manager.mode = "demo"
+        auth_manager.mode = MODE_PRODUCTION
         yield
         auth_manager.authenticated = False
         auth_manager.is_production = False
-        auth_manager.mode = "demo"
+        auth_manager.mode = MODE_PRODUCTION
 
     @pytest.mark.asyncio
-    async def test_full_flow_demo_mode(self):
-        """Complete flow: login (demo) -> verify -> logout."""
+    async def test_full_flow(self):
+        """Complete flow: login -> verify -> logout."""
         # Login
         mock_request = MagicMock()
-        mock_request.json = AsyncMock(return_value={"password": "", "mode": "demo"})
+        mock_request.json = AsyncMock(
+            return_value={"password": os.environ["AUTH_PASSWORD"]}
+        )
         response = await login_handler(mock_request)
         assert response.status == 200
 
@@ -352,7 +337,7 @@ class TestAuthManagerStateTransitions:
         response = await verify_handler(mock_request)
         data = await get_response_json(response)
         assert data["isAuthenticated"] is True
-        assert data["mode"] == "demo"
+        assert data["mode"] == MODE_PRODUCTION
 
         # Logout
         mock_request = MagicMock()
@@ -371,7 +356,7 @@ class TestAuthManagerStateTransitions:
         # Login
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={
-            "password": "993728",
+            "password": os.environ["AUTH_PASSWORD"],
             "mode": "production"
         })
         response = await login_handler(mock_request)
@@ -402,7 +387,9 @@ class TestAuthManagerStateTransitions:
         """Failed login attempt does not modify auth state."""
         # First successful login
         mock_request = MagicMock()
-        mock_request.json = AsyncMock(return_value={"password": "", "mode": "demo"})
+        mock_request.json = AsyncMock(
+            return_value={"password": os.environ["AUTH_PASSWORD"]}
+        )
         await login_handler(mock_request)
 
         # Failed login attempt
@@ -419,24 +406,22 @@ class TestAuthManagerStateTransitions:
         response = await verify_handler(mock_request)
         data = await get_response_json(response)
         assert data["isAuthenticated"] is True
-        assert data["mode"] == "demo"
+        assert data["mode"] == MODE_PRODUCTION
 
 
-class TestAuthPasswordConstant:
-    """Test the AUTH_PASSWORD constant."""
+class TestAuthPasswordConfiguration:
+    """The auth password must come from the environment, with no default.
 
-    def test_auth_password_is_string(self):
-        """Auth password is a string type."""
-        assert isinstance(AuthManager.AUTH_PASSWORD, str)
+    This class previously asserted the opposite -- that AuthManager.AUTH_PASSWORD
+    falls back to a literal compiled into the source. That same literal was also
+    built into the frontend bundle and is still in git history. These tests guard
+    against a default being reintroduced.
+    """
 
-    def test_auth_password_has_default_value(self):
-        """Auth password has a default value when not set in environment."""
-        # If AUTH_PASSWORD is not set in environment, it should default to "993728"
-        # This test assumes the environment variable is not set
-        import os
-        if "AUTH_PASSWORD" not in os.environ:
-            assert AuthManager.AUTH_PASSWORD == "993728"
+    def test_password_comes_from_environment(self):
+        assert auth_manager.auth_password == os.environ["AUTH_PASSWORD"]
 
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    def test_construction_fails_without_a_configured_password(self, monkeypatch):
+        monkeypatch.delenv("AUTH_PASSWORD", raising=False)
+        with pytest.raises(ValueError, match="AUTH_PASSWORD not configured"):
+            AuthManager()

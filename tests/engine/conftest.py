@@ -31,6 +31,7 @@ for _var, _placeholder in {
     "GHOST_API_KEY": "test-ghost-api-key",
     "KALSHI_PROD_KEY_ID": "test-kalshi-key-id",
     "KALSHI_PROD_PRIVATE_KEY": "test-kalshi-private-key",
+    "AUTH_PASSWORD": "test-auth-password",
 }.items():
     os.environ.setdefault(_var, _placeholder)
 

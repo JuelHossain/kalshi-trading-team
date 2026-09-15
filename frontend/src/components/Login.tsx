@@ -26,16 +26,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, authError, isAuthenticating }) =
     e.preventDefault();
     setLocalError(null);
 
-    // Validate production mode password
-    if (selectedMode === 'production') {
-      if (!password.trim()) {
-        setLocalError('Password is required for Production Mode');
-        return;
-      }
-      if (password !== '993728') {
-        setLocalError('Invalid password');
-        return;
-      }
+    // Only check that something was entered. The password itself is never
+    // compared here: this file is compiled into the bundle shipped to every
+    // browser, so any literal is public and any check is trivially stepped
+    // past. The engine validates it and returns 401 if it is wrong.
+    if (selectedMode === 'production' && !password.trim()) {
+      setLocalError('Password is required for Production Mode');
+      return;
     }
 
     await onLogin(selectedMode, selectedMode === 'production' ? password : undefined);
