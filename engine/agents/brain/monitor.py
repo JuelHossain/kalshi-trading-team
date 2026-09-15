@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime
 
 from core.flow_control import check_execution_queue_limit, should_restock
+from core.shared_utils import fire_and_forget
 
 
 async def monitor_queue(
@@ -210,11 +211,11 @@ def check_opportunity_freshness(opportunity: dict, log_callback) -> tuple[bool, 
     if ts:
         age = (now - ts).total_seconds()
         if age >= 60:  # Use >= to handle boundary case of exactly 60 seconds
-            asyncio.create_task(log_callback(f"[STALE] Opportunity expired: {ticker} (Age: {age:.0f}s) - skipping", level="WARN"))
+            fire_and_forget(log_callback(f"[STALE] Opportunity expired: {ticker} (Age: {age:.0f}s) - skipping", level="WARN"))
             return (False, "STALE")
     else:
         # For safety, if no timestamp exists, treat as potentially stale
-        asyncio.create_task(log_callback(f"[STALE] Opportunity has no timestamp: {ticker} - skipping for safety", level="WARN"))
+        fire_and_forget(log_callback(f"[STALE] Opportunity has no timestamp: {ticker} - skipping for safety", level="WARN"))
         return (False, "STALE")
 
     return (True, "FRESH")

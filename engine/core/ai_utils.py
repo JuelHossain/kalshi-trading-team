@@ -2,11 +2,11 @@
 Shared AI Utilities for Agents
 Centralizes Gemini initialization and AI client setup.
 """
-import asyncio
 import os
 
 from core.ai_client import AIClient
 from core.bus import EventBus
+from core.shared_utils import fire_and_forget
 
 try:
     from google import genai
@@ -35,7 +35,7 @@ def initialize_gemini_client(
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         if log_callback:
-            asyncio.create_task(log_callback("Gemini API key not found. AI features disabled."))
+            fire_and_forget(log_callback("Gemini API key not found. AI features disabled."))
         return (None, None, None, False)
 
     try:
@@ -45,7 +45,7 @@ def initialize_gemini_client(
         # Initialize AI client with OpenRouter fallback
         ai_client = AIClient(
             openrouter_key=openrouter_key,
-            log_callback=lambda msg, level="INFO": asyncio.create_task(
+            log_callback=lambda msg, level="INFO": fire_and_forget(
                 log_callback(msg, level=level)
             ) if log_callback else None,
             bus=bus
@@ -58,7 +58,7 @@ def initialize_gemini_client(
 
     except Exception as e:
         if log_callback:
-            asyncio.create_task(log_callback(f"Gemini initialization failed: {e}", level="ERROR"))
+            fire_and_forget(log_callback(f"Gemini initialization failed: {e}", level="ERROR"))
         return (None, None, None, False)
 
 
