@@ -40,7 +40,7 @@ from research import store  # noqa: E402
 DEFAULT_API_BASE = os.getenv(
     "KALSHI_API_BASE", "https://api.elections.kalshi.com/trade-api/v2"
 )
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
 # Multi-variate "cross category" combo shards. Kalshi lists these in
 # enormous numbers -- they swamped the first 8,000 markets returned during
@@ -49,17 +49,20 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 # they never consume a page of results.
 MVE_PREFIX = "KXMVE"
 
-# OpenRouter's free tier churns; the list inherited from engine/core/ai_client.py
-# was entirely 404 by the time this was written. Verified working against
-# GET /api/v1/models, first entry is the primary and the rest are fallbacks.
+# Gemini with Google Search grounding. Two findings drove this choice:
 #
-# Fallbacks change which model produced a row, which weakens the study, so
-# model_name is stored per prediction and the analysis can stratify on it.
-# If the primary starts 404-ing, re-check the free list before editing.
-OPENROUTER_MODELS = [
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "nvidia/nemotron-3.5-lightning:free",
-]
+# 1. The OpenRouter free models inherited from engine/core/ai_client.py were
+#    all 404, and the replacements answered 0.50 at confidence 0.05 -- a
+#    uniform prior, which yields no signal to measure.
+# 2. Ungrounded Gemini is worse than useless here: it priced a Banxico
+#    market at 0.01 with 95% confidence by citing a rate decision from the
+#    wrong year. Stale training data plus high confidence is the failure
+#    mode this whole study exists to detect.
+#
+# Grounded, it returns differentiated estimates in 5-8s. Whether those
+# estimates beat Kalshi is precisely the open question.
+DEFAULT_MODEL = "gemini-3.8-flash"
+FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-2.5-flash"]
 
 _PAGE_LIMIT = 1000
 _MAX_PAGES = 5
@@ -218,37 +221,65 @@ def parse_response(text: str) -> tuple[float, float, str] | None:
     return prob, max(0.0, min(1.0, conf)), str(data.get("reasoning", ""))[:500]
 
 
+async def _call_gemini(
+    session: aiohttp.ClientSession,
+    api_key: str,
+    model: str,
+    prompt: str,
+    *,
+    grounded: bool,
+) -> str | None:
+    """Single Gemini generateContent call. Returns raw text or None."""
+    body: dict[str, Any] = {"contents": [{"parts": [{"text": prompt}]}]}
+    if grounded:
+        # Structured-output mode cannot be combined with tools, so grounded
+        # replies are parsed out of prose by parse_response instead.
+        body["tools"] = [{"google_search": {}}]
+    else:
+        body["generationConfig"] = {"responseMimeType": "application/json"}
+
+    try:
+        async with session.post(
+            f"{GEMINI_BASE}/models/{model}:generateContent",
+            params={"key": api_key},
+            json=body,
+        ) as resp:
+            if resp.status != 200:
+                return None
+            payload = await resp.json()
+        parts = payload["candidates"][0]["content"]["parts"]
+    except (aiohttp.ClientError, KeyError, IndexError, TimeoutError):
+        return None
+    return "".join(part.get("text", "") for part in parts)
+
+
 async def ask_model(
-    session: aiohttp.ClientSession, api_key: str, prompt: str
+    session: aiohttp.ClientSession,
+    api_key: str,
+    prompt: str,
+    *,
+    model: str,
+    grounded: bool,
 ) -> tuple[float, float, str, str] | None:
-    """Query OpenRouter, trying each free model until one answers usably."""
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "X-Title": "Kalshi calibration study",
-    }
-    for model in OPENROUTER_MODELS:
-        body = {"model": model, "messages": [{"role": "user", "content": prompt}]}
-        try:
-            async with session.post(OPENROUTER_URL, headers=headers, json=body) as resp:
-                if resp.status != 200:
-                    continue
-                payload = await resp.json()
-                text = payload["choices"][0]["message"]["content"]
-        except (aiohttp.ClientError, KeyError, IndexError, TimeoutError):
+    """Ask Gemini, falling back only if the primary model is unavailable."""
+    for candidate in [model, *FALLBACK_MODELS]:
+        text = await _call_gemini(
+            session, api_key, candidate, prompt, grounded=grounded
+        )
+        if not text:
             continue
         parsed = parse_response(text)
         if parsed:
-            return (*parsed, model)
+            return (*parsed, candidate)
     return None
 
 
 async def run(args: argparse.Namespace) -> int:
     """Collect one batch of predictions. Returns the number stored."""
     _load_env()
-    api_key = os.getenv("OPENROUTER_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        msg = "OPENROUTER_API_KEY is not set (checked environment and engine/.env)"
+        msg = "GEMINI_API_KEY is not set (checked environment and engine/.env)"
         raise SystemExit(msg)
 
     now = datetime.now(UTC)
@@ -282,7 +313,11 @@ async def run(args: argparse.Namespace) -> int:
                     continue
 
                 result = await ask_model(
-                    session, api_key, build_prompt(market, anchored=anchored)
+                    session,
+                    api_key,
+                    build_prompt(market, anchored=anchored),
+                    model=args.model,
+                    grounded=not args.no_grounding,
                 )
                 if result is None:
                     print(f"  skip {market['ticker']}: no usable model response")
@@ -306,6 +341,7 @@ async def run(args: argparse.Namespace) -> int:
                         "model_prob": model_prob,
                         "model_conf": model_conf,
                         "model_name": model_name,
+                        "grounded": 0 if args.no_grounding else 1,
                         "reasoning": reasoning,
                     },
                 )
@@ -331,7 +367,13 @@ def main() -> None:
     parser.add_argument("--max-days", type=int, default=10, help="max days to close")
     parser.add_argument("--min-volume", type=float, default=200)
     parser.add_argument("--max-spread", type=int, default=8, help="max spread, cents")
-    parser.add_argument("--delay", type=float, default=2.0, help="seconds between calls")
+    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument(
+        "--no-grounding",
+        action="store_true",
+        help="disable Google Search; the model answers from training data alone",
+    )
+    parser.add_argument("--delay", type=float, default=1.0, help="seconds between calls")
     parser.add_argument("--api-base", default=DEFAULT_API_BASE)
     asyncio.run(run(parser.parse_args()))
 

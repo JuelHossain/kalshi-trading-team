@@ -69,6 +69,8 @@ def _predict_args(args: argparse.Namespace) -> argparse.Namespace:
         max_days=args.max_days,
         min_volume=args.min_volume,
         max_spread=args.max_spread,
+        model=args.model,
+        no_grounding=args.no_grounding,
         delay=args.delay,
         api_base=args.api_base,
     )
@@ -98,7 +100,9 @@ def main() -> None:
     parser.add_argument("--max-days", type=int, default=10)
     parser.add_argument("--min-volume", type=float, default=200)
     parser.add_argument("--max-spread", type=int, default=8)
-    parser.add_argument("--delay", type=float, default=2.0)
+    parser.add_argument("--model", default=predict.DEFAULT_MODEL)
+    parser.add_argument("--no-grounding", action="store_true")
+    parser.add_argument("--delay", type=float, default=1.0)
     parser.add_argument("--api-base", default=predict.DEFAULT_API_BASE)
     args = parser.parse_args()
 

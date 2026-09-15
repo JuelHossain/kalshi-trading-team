@@ -15,7 +15,7 @@ broken, and can be deleted wholesale if the answer comes back negative.
 
 ## Prerequisites
 
-- `OPENROUTER_API_KEY` in the environment or in `engine/.env`
+- `GEMINI_API_KEY` in the environment or in `engine/.env`
 - `aiohttp` (already an engine dependency)
 - No Kalshi credentials. Market data is read from public endpoints and no
   orders are ever placed.
@@ -39,6 +39,20 @@ python research/analyze.py
 
 Collect daily, settle daily, and ignore the analysis until you have 100+
 settled markets. Reading the verdict early is the main way to fool yourself.
+
+## The model
+
+`gemini-3.8-flash` with Google Search grounding, roughly 10s per market.
+
+Grounding is not optional. Asked from training data alone, the model priced
+a Banxico market at 0.01 with 95% confidence by citing a rate decision from
+the wrong year. Confidently wrong on stale data is the exact failure this
+study exists to detect, so `--no-grounding` is available only as a
+comparison arm, never as the main run.
+
+Grounded, the model reads sportsbook consensus off the web and reports it
+back. Whether that beats Kalshi is the open question: if Kalshi lags the
+sportsbooks there is a real edge, and if it tracks them there is none.
 
 ## The two variants
 

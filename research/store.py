@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS predictions (
     model_prob  REAL NOT NULL,
     model_conf  REAL,
     model_name  TEXT,
+    grounded    INTEGER NOT NULL DEFAULT 1,
     reasoning   TEXT,
     outcome     INTEGER,
     settled_at  TEXT,
