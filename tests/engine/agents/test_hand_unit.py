@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from agents.hand import HandAgent
 from core.vault import RecursiveVault
+from core.constants import HARD_FLOOR_CENTS
 
 
 @pytest.fixture
@@ -21,6 +22,9 @@ def mock_bus():
 def mock_vault():
     """Create an initialized mock vault."""
     vault = MagicMock(spec=RecursiveVault)
+    # spec= only exposes class attributes; HARD_FLOOR_CENTS is set in __init__.
+    # Taken from the real constant so the mock cannot drift from production.
+    vault.HARD_FLOOR_CENTS = HARD_FLOOR_CENTS
     vault.current_balance = 50000  # $500
     vault.get_available_balance.return_value = 50000
     vault.kill_switch_active = False

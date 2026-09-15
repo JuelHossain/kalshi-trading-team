@@ -2,6 +2,7 @@ import asyncio
 import os
 from typing import Any
 
+from core.constants import HARD_FLOOR_CENTS
 from core.logger import get_logger
 from core.shared_utils import (
     format_cents_to_dollars,
@@ -22,7 +23,7 @@ class RecursiveVault:
         # Configuration from Env
         self.PRINCIPAL_CAPITAL_CENTS = int(os.getenv("VAULT_PRINCIPAL_CENTS", "30000"))
         self.DAILY_PROFIT_THRESHOLD_CENTS = int(os.getenv("VAULT_PROFIT_THRESHOLD_CENTS", "5000"))
-        self.HARD_FLOOR_CENTS = 25500  # $255.00 Hard Floor
+        self.HARD_FLOOR_CENTS = HARD_FLOOR_CENTS
         self.KILL_SWITCH_THRESHOLD_PCT = 0.85
         # Explicit arg wins, then GHOST_VAULT_DB, then the production default.
         # Without this the path is unredirectable, so tests persist reservations

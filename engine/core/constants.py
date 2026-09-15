@@ -88,4 +88,14 @@ BRAIN_MAX_VARIANCE = 0.25  # Maximum acceptable variance
 
 # Hand Agent
 HAND_MAX_STAKE_CENTS = 7500  # $75 max per trade
+
+# ==============================================================================
+# VAULT SAFETY
+# ==============================================================================
+
+# Balance below which the engine refuses to trade and locks down.
+# Single source of truth: RecursiveVault and engine/config.py both read this.
+# It was previously written out separately in each, so changing one silently
+# left the others disagreeing about a safety limit.
+HARD_FLOOR_CENTS = 25500  # $255.00
 HAND_PROFIT_LOCK_THRESHOLD = 5000  # $50 profit triggers principal lock
