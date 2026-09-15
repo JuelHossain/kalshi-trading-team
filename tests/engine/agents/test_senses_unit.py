@@ -20,8 +20,15 @@ def senses_agent():
 
 @pytest.mark.asyncio
 async def test_fetch_market_context_success(senses_agent):
-    """Test context fetching with mocked DDGS"""
-    with patch('agents.senses.DDGS') as MockDDGS:
+    """Test context fetching with mocked DDGS.
+
+    Patches ddgs.DDGS, not agents.senses.DDGS: fetch_market_context does a
+    local `from ddgs import DDGS` inside the function body, so it resolves the
+    name from the ddgs module at call time and never sees the package-level
+    alias. The old target patched a name nothing read, so the real search ran
+    (or failed) and returned [].
+    """
+    with patch('ddgs.DDGS') as MockDDGS:
         mock_ddgs_instance = MockDDGS.return_value
         mock_ddgs_instance.text.return_value = [
             {"body": "News Item 1"},
@@ -37,7 +44,7 @@ async def test_fetch_market_context_success(senses_agent):
 @pytest.mark.asyncio
 async def test_fetch_market_context_failure(senses_agent):
     """Test context fetching handling exception"""
-    with patch('agents.senses.DDGS') as MockDDGS:
+    with patch('ddgs.DDGS') as MockDDGS:
         mock_ddgs_instance = MockDDGS.return_value
         mock_ddgs_instance.text.side_effect = Exception("Search failed")
         

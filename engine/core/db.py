@@ -89,9 +89,16 @@ async def set_system_status(status: str, reason: str = ""):
 
 
 async def check_connection() -> bool:
-    """Simple health check for Supabase connection."""
+    """Simple health check for Supabase connection.
+
+    Returns False when unconfigured rather than raising. This is a health
+    probe declared `-> bool`, and its caller (SoulAgent.check_api_health)
+    handles False by recording "Supabase unreachable". Raising escaped that
+    handling and took down the whole health check, so one unconfigured
+    optional dependency masked the status of every other one.
+    """
     if not supabase:
-        raise RuntimeError("Supabase client not initialized. Check SUPABASE_URL and SUPABASE_KEY in environment.")
+        return False
     try:
         # Using a lightweight query (fetch 1 header row from agent_heartbeats or similar)
         # We use count operation which is usually cheap
