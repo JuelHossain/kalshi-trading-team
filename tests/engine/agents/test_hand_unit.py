@@ -42,7 +42,7 @@ def hand_agent(mock_bus, mock_vault):
         bus=mock_bus,
         vault=mock_vault,
         brain_agent=None,
-        kalshi_client=None,  # Will use simulation mode
+        kalshi_client=None,  # tests that need one attach a mock explicitly
         synapse=None
     )
     return agent
@@ -125,20 +125,45 @@ class TestOrderExecution:
     """Test order execution flow."""
 
     @pytest.mark.asyncio
-    async def test_simulation_mode_success(self, hand_agent, mock_vault):
-        """Simulation mode returns success with proper reservation."""
+    async def test_successful_order_reserves_then_confirms(self, hand_agent, mock_vault):
+        """A placed order reserves funds first, then confirms the reservation.
+
+        This previously asserted a simulated success with no client attached.
+        Simulation was removed from the trade path, so a missing client is now
+        a refusal, not a fake fill.
+        """
+        mock_client = AsyncMock()
+        mock_client.place_order = AsyncMock(return_value={"order_id": "test-123"})
+        hand_agent.kalshi_client = mock_client
+
         result = await hand_agent.execute_order("KXWIN-2024-001", 50, 1000)
 
         assert result["success"] is True
-        assert result["simulated"] is True
-        assert "order_id" in result
+        assert result["order_id"] == "test-123"
         mock_vault.reserve_funds.assert_called_once_with(1000)
         mock_vault.confirm_reservation.assert_called_once_with(1000)
 
     @pytest.mark.asyncio
+    async def test_order_refused_without_a_client(self, hand_agent, mock_vault):
+        """No market connection means no trade -- never a simulated fill."""
+        hand_agent.kalshi_client = None
+
+        result = await hand_agent.execute_order("KXWIN-2024-001", 50, 1000)
+
+        assert result["success"] is False
+        assert "unavailable" in result["error"].lower()
+        mock_vault.reserve_funds.assert_not_called()
+        mock_vault.confirm_reservation.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_reservation_fails_if_cannot_reserve(self, hand_agent, mock_vault):
-        """Order fails if fund reservation fails."""
+        """Order fails if fund reservation fails.
+
+        The missing-client check runs before reservation, so a client is needed
+        to reach this path at all.
+        """
         mock_vault.reserve_funds.return_value = False
+        hand_agent.kalshi_client = AsyncMock()
 
         result = await hand_agent.execute_order("KXWIN-2024-001", 50, 1000)
 
@@ -218,8 +243,10 @@ class TestSnipeCheck:
         """Snipe check passes when spread is narrow."""
         mock_client = AsyncMock()
         mock_client.get_orderbook.return_value = {
-            "bids": [{"price": 48}],
-            "asks": [{"price": 52}]  # 4 cent spread
+            "bids": [{"price": 48, "count": 300}],
+            # 4 cent spread, and deep enough for the liquidity check: the book
+            # must carry at least twice the max stake within the spread.
+            "asks": [{"price": 52, "count": 300}],
         }
         hand_agent.kalshi_client = mock_client
 
@@ -229,14 +256,18 @@ class TestSnipeCheck:
         assert result["entry_price"] == 52
 
     @pytest.mark.asyncio
-    async def test_snipe_check_no_client_simulates_success(self, hand_agent):
-        """Without kalshi_client, snipe check simulates success."""
+    async def test_snipe_check_refuses_without_a_client(self, hand_agent):
+        """Without a client there is no order book, so the check must refuse.
+
+        This previously asserted a simulated pass at a made-up entry price of
+        50c -- approving a trade on data that was never fetched.
+        """
         hand_agent.kalshi_client = None
 
         result = await hand_agent.snipe_check("KXWIN-2024-001")
 
-        assert result["valid"] is True
-        assert result["entry_price"] == 50
+        assert result["valid"] is False
+        assert "unavailable" in result["reason"].lower()
 
 
 if __name__ == "__main__":
