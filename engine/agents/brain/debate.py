@@ -46,6 +46,46 @@ def load_personas(base_path: str = "ai-env/personas") -> dict[str, str]:
     return personas
 
 
+def _normalise_confidence(raw: Any) -> float:
+    """Return confidence as a 0-1 fraction, accepting either scale.
+
+    The prompt asks for an integer 0-100, but models frequently answer 0.85
+    instead of 85. The old parser divided unconditionally by 100, turning 0.85
+    into 0.0085 -- below every threshold, so the bot silently stopped trading
+    with no error anywhere.
+
+    A value at or below 1.0 is read as a fraction, above that as a percentage.
+    Anything unparseable or out of range is treated as no confidence, which
+    vetoes the trade rather than guessing.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+
+    if value < 0:
+        return 0.0
+    if value <= 1.0:
+        return value
+    if value <= 100.0:
+        return value / 100.0
+    return 0.0
+
+
+def _validate_probability(raw: Any) -> float | None:
+    """Return a probability in [0, 1], or None if the model gave something else.
+
+    None propagates to the caller's veto rather than silently defaulting to
+    0.5, which would have the bot trade on a coin flip it never estimated.
+    """
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+
+    return value if 0.0 <= value <= 1.0 else None
+
+
 async def run_debate(
     opportunity: dict,
     client: Any,
@@ -91,36 +131,52 @@ async def run_debate(
     title = market_data.get("title", ticker)
     subtitle = market_data.get("subtitle", "")
 
-    kalshi_price = opportunity.get("kalshi_price", 0.5)
+    # The market price is deliberately NOT shown to the model.
+    #
+    # This prompt previously included "Current Kalshi Price: {x}%" before asking
+    # for the true probability. Anchoring is one of the most reliably reproduced
+    # effects in language models, so the estimate drifted toward the number it
+    # had just been shown -- and the bot's entire edge is the gap between its
+    # estimate and that price. Asking the model to beat a number while showing
+    # it the number destroys the measurement.
+    #
+    # Nothing is lost by withholding it: the price never entered the model's
+    # arithmetic. EV and sizing are computed in Python from the returned
+    # probability and the real book price.
 
-    # Check if we have external odds (legacy support)
     has_odds = opportunity.get("vegas_prob") is not None
-    odds_context = f"Vegas Probability: {opportunity['vegas_prob']*100:.1f}%" if has_odds else "NO EXTERNAL ODDS AVAILABLE."
+    odds_context = f"Independent market-implied probability: {opportunity['vegas_prob']*100:.1f}%" if has_odds else "No external odds available."
 
     fetched_news = opportunity.get("external_context", "")
-    full_context = f"ODDS: {odds_context}\nNEWS/CONTEXT:\n{fetched_news}" if fetched_news else f"ODDS: {odds_context}\n(No news found)"
+    full_context = f"{odds_context}\nNEWS/CONTEXT:\n{fetched_news}" if fetched_news else f"{odds_context}\n(No news found)"
 
-    prompt = f"""You are a trading committee with two personas debating a market opportunity.
+    prompt = f"""You are a forecasting committee estimating the probability of a real-world event.
 
-MARKET: {ticker}
+EVENT: {ticker}
 TITLE: {title}
 SUBTITLE: {subtitle}
-Current Kalshi Price: {kalshi_price*100:.1f}%
 Context: {full_context}
 
 {f"Today's Trading Instructions: {trading_instructions[:500]}" if trading_instructions else ""}
 
 TASK:
-1. Estimate the TRUE probability of this event occurring (0.00 to 1.00) based on your knowledge of the world and the provided Context.
-2. Debate the trade at the current price.
-3. Explicitly reference the 'NEWS/CONTEXT' in your reasoning if available.
+Estimate the TRUE probability of this event occurring, from your knowledge of the
+world and the Context above. You are NOT being shown any market price, and you
+should not guess at one -- estimate the event on its merits alone.
+
+1. OPTIMIST: argue why the event is more likely than it first appears.
+2. CRITIC: argue why it is less likely than it first appears.
+3. JUDGE: weigh both and commit to a single probability.
+4. Reference the NEWS/CONTEXT explicitly if any was provided.
 
 PERSONAS:
 {personas['optimist']}
 
 {personas['critic']}
 
-JUDGE: Final verdict based on the debate above.
+OUTPUT RULES:
+- estimated_probability: a decimal between 0.0 and 1.0
+- confidence: an INTEGER from 0 to 100, how sure you are of that estimate
 
 Respond in JSON format:
 {{
@@ -153,10 +209,25 @@ Respond in JSON format:
         if json_match:
             try:
                 result = json.loads(json_match.group())
+                confidence = _normalise_confidence(result.get("confidence"))
+                probability = _validate_probability(result.get("estimated_probability"))
+
+                if probability is None:
+                    await log_callback(
+                        f"Unusable probability from AI for {ticker}: "
+                        f"{result.get('estimated_probability')!r} - rejecting",
+                        level="WARN",
+                    )
+                    return {
+                        "confidence": 0.0,
+                        "reasoning": "AI returned an out-of-range probability - trade rejected",
+                        "estimated_probability": None,
+                    }
+
                 return {
-                    "confidence": result.get("confidence", 50) / 100,
+                    "confidence": confidence,
                     "reasoning": result.get("judge_verdict", ""),
-                    "estimated_probability": result.get("estimated_probability", 0.5)
+                    "estimated_probability": probability,
                 }
             except json.JSONDecodeError as je:
                 await log_callback(f"JSON parse error for {ticker}. Response: {text[:200]}", level="ERROR")
