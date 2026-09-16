@@ -100,7 +100,7 @@ class TestTheHandActsOnIt:
         closed = await hand.check_exits()
 
         assert closed == 1
-        kalshi.close_position.assert_awaited_once_with("KXA", 10)
+        kalshi.close_position.assert_awaited_once_with("KXA", 10, side="yes")
 
     @pytest.mark.asyncio
     async def test_a_healthy_position_is_left_alone(self, cycle):
@@ -148,3 +148,74 @@ class TestTheHandActsOnIt:
         kalshi.close_position = AsyncMock(side_effect=flaky)
 
         assert await hand.check_exits() == 1
+
+
+class TestNoPositionsAreValuedCorrectly:
+    """A NO holding gains when the YES price falls.
+
+    Valuing it as YES reads its stop-loss backwards: a NO position that is
+    winning would look like it is losing and be closed at a profit it had not
+    finished making -- or worse, a losing one would be held.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_winning_no_position_is_not_closed(self, cycle):
+        hand, kalshi = cycle["hand"], cycle["kalshi"]
+        # Bought 10 NO at 40c (exposure 400, negative quantity = NO).
+        kalshi.get_positions = AsyncMock(
+            return_value=[{"ticker": "KXA", "position": -10, "market_exposure": 400}]
+        )
+        # YES has fallen to 10c, so NO is worth 90c. Entry was 40c, leaving 60c
+        # of upside, so the 80% take-profit target is 88c -- 90c clears it.
+        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 10, "count": 100}]})
+
+        closed = await hand.check_exits()
+
+        assert closed == 1, "a NO position at 90c against a 40c entry should take profit"
+        assert kalshi.close_position.await_args.kwargs["side"] == "no"
+
+    @pytest.mark.asyncio
+    async def test_a_no_position_short_of_the_target_is_held(self, cycle):
+        """Entry 40c, NO now 80c: a real gain, but under the 88c target."""
+        hand, kalshi = cycle["hand"], cycle["kalshi"]
+        kalshi.get_positions = AsyncMock(
+            return_value=[{"ticker": "KXA", "position": -10, "market_exposure": 400}]
+        )
+        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 20, "count": 100}]})
+
+        assert await hand.check_exits() == 0
+
+    @pytest.mark.asyncio
+    async def test_a_losing_no_position_is_stopped_out(self, cycle):
+        hand, kalshi = cycle["hand"], cycle["kalshi"]
+        # Bought 10 NO at 60c; YES has risen to 85c, so NO is worth 15c.
+        kalshi.get_positions = AsyncMock(
+            return_value=[{"ticker": "KXA", "position": -10, "market_exposure": 600}]
+        )
+        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 85, "count": 100}]})
+
+        assert await hand.check_exits() == 1
+        assert kalshi.close_position.await_args.kwargs["side"] == "no"
+
+    @pytest.mark.asyncio
+    async def test_a_healthy_no_position_is_held(self, cycle):
+        hand, kalshi = cycle["hand"], cycle["kalshi"]
+        # Bought 10 NO at 60c; YES at 45c means NO is worth 55c -- a small loss.
+        kalshi.get_positions = AsyncMock(
+            return_value=[{"ticker": "KXA", "position": -10, "market_exposure": 600}]
+        )
+        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 45, "count": 100}]})
+
+        assert await hand.check_exits() == 0
+        kalshi.close_position.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_yes_positions_are_still_valued_as_before(self, cycle):
+        """The mirroring must not disturb the side that already worked."""
+        hand, kalshi = cycle["hand"], cycle["kalshi"]
+        kalshi.get_positions = AsyncMock(
+            return_value=[{"ticker": "KXA", "position": 10, "market_exposure": 600}]
+        )
+        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 62, "count": 100}]})
+
+        assert await hand.check_exits() == 0

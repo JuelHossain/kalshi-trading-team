@@ -77,6 +77,12 @@ class HandAgent(BaseAgent):
             if not ticker or not quantity:
                 continue
 
+            # Kalshi signs the quantity: negative means a NO holding. A NO
+            # position gains when the YES price falls, so valuing it as YES
+            # would read its stop-loss exactly backwards -- a winning NO
+            # position would look like a losing one and be closed.
+            side = "no" if int(quantity) < 0 else "yes"
+
             entry = average_entry_price_cents(position)
             if entry is None:
                 await self.log(
@@ -86,7 +92,7 @@ class HandAgent(BaseAgent):
                 )
                 continue
 
-            current = await self._current_price_cents(ticker)
+            current = await self._current_price_cents(ticker, side)
             if current is None:
                 continue
 
@@ -98,9 +104,11 @@ class HandAgent(BaseAgent):
             if not decision.should_exit:
                 continue
 
-            await self.log(f"EXIT {ticker}: {decision.reason}", level="WARN")
+            await self.log(f"EXIT {side.upper()} {ticker}: {decision.reason}", level="WARN")
             try:
-                result = await self.kalshi_client.close_position(ticker, abs(int(quantity)))
+                result = await self.kalshi_client.close_position(
+                    ticker, abs(int(quantity)), side=side
+                )
             except Exception as e:  # noqa: BLE001
                 await self.log(f"Failed to close {ticker}: {e}", level="ERROR")
                 continue
@@ -119,8 +127,12 @@ class HandAgent(BaseAgent):
 
         return closed
 
-    async def _current_price_cents(self, ticker: str) -> int | None:
-        """Best available ask, which is what exiting would actually cost to cross."""
+    async def _current_price_cents(self, ticker: str, side: str = "yes") -> int | None:
+        """What the held side is worth now, in cents.
+
+        Both sides are valued off the same YES ask, so they stay consistent:
+        the NO price is its mirror, (100 - yes_ask).
+        """
         try:
             book = await self.kalshi_client.get_orderbook(ticker)
         except Exception:  # noqa: BLE001
@@ -130,7 +142,10 @@ class HandAgent(BaseAgent):
         if not asks:
             return None
         price = asks[0].get("price")
-        return int(price) if price is not None else None
+        if price is None:
+            return None
+
+        return 100 - int(price) if side == "no" else int(price)
 
     @staticmethod
     def _hours_to_expiry(position: dict) -> float | None:
