@@ -107,6 +107,25 @@ BRAIN_MAX_DISAGREEMENT = 0.20
 # Hand Agent
 HAND_MAX_STAKE_CENTS = 7500  # $75 max per trade
 
+# --- Exit policy -------------------------------------------------------------
+# The engine can close a position; these decide when it should.
+#
+# Holding every contract to settlement is defensible for binaries -- they
+# resolve to 0 or 100, so time favours a correct forecast. But a contract
+# bought at 60c that has drifted to 5c is near-certainly lost, and holding it
+# converts "near-certainly" into "certainly" while the capital sits idle.
+
+# Close when the price has fallen this far below what was paid.
+HAND_STOP_LOSS_PCT = 0.50
+
+# Close when the price has captured this much of the distance from entry to
+# 100 -- trading the last of the upside for certainty.
+HAND_TAKE_PROFIT_PCT = 0.80
+
+# Close a losing position this many hours before expiry. A winning one is left
+# to settle, since settlement pays 100 and a thin pre-expiry book does not.
+HAND_EXIT_BEFORE_EXPIRY_HOURS = 2.0
+
 # Fraction of full Kelly to stake. Full Kelly maximises long-run growth but is
 # famously violent; a quarter is the usual conservative choice and costs little
 # expected growth for a large reduction in drawdown.
