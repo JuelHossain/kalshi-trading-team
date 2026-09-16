@@ -186,6 +186,36 @@ decision to increase size.
 Settlement is not automatic yet -- call `record_settlement(ticker, settled_yes)`
 as markets resolve.
 
+## Backtesting against settled markets
+
+Kalshi markets settle, so every past market is labelled data: the question, the
+price, and the answer. Scoring the engine against a few hundred of them says in
+an afternoon what paper trading suggests in weeks.
+
+Fetching needs network access to Kalshi; scoring does not. Produce a file with
+one row per settled market:
+
+```csv
+ticker,probability,price,settled_yes,confidence
+KXTEST-01,0.85,0.50,1,0.95
+```
+
+- `probability` — what the engine estimated, 0-1
+- `price` — the YES price it could have traded at, 0-1
+- `settled_yes` — 1/0, true/false, yes/no
+
+Then:
+
+```bash
+python3 scripts/backtest.py data/settled.csv
+```
+
+**Read the calibration, not the return.** A positive return over a few hundred
+markets is not evidence of edge — buying cheap long shots pays enormously on
+the few that land, so pure noise can post a profit. The report warns you when
+that is what it is looking at. The Brier score is the number that matters:
+below 0.25 means better than always guessing 50%, above means no better.
+
 ## Stop
 
 ```bash
