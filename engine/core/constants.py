@@ -98,6 +98,11 @@ BRAIN_MAX_VARIANCE = 0.25
 # Hand Agent
 HAND_MAX_STAKE_CENTS = 7500  # $75 max per trade
 
+# Fraction of full Kelly to stake. Full Kelly maximises long-run growth but is
+# famously violent; a quarter is the usual conservative choice and costs little
+# expected growth for a large reduction in drawdown.
+HAND_KELLY_FRACTION = 0.25
+
 # ==============================================================================
 # VAULT SAFETY
 # ==============================================================================

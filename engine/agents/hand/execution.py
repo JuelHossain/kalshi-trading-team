@@ -5,7 +5,12 @@ Handles trade validation, order placement, and notifications.
 import os
 
 import aiohttp
-from core.constants import HAND_MAX_STAKE_CENTS, HAND_PROFIT_LOCK_THRESHOLD
+from core.constants import (
+    HAND_KELLY_FRACTION,
+    HAND_MAX_STAKE_CENTS,
+    HAND_PROFIT_LOCK_THRESHOLD,
+)
+from agents.brain.simulation import kelly_fraction
 
 
 async def snipe_check(kalshi_client, ticker: str, log_callback, max_stake_cents: int = HAND_MAX_STAKE_CENTS) -> dict:
@@ -55,20 +60,41 @@ async def snipe_check(kalshi_client, ticker: str, log_callback, max_stake_cents:
         return {"valid": False, "reason": str(e)[:50]}
 
 
-def calculate_kelly_stake(confidence: float, ev: float, vault, max_stake_cents: int = HAND_MAX_STAKE_CENTS) -> int:
-    """Kelly Criterion with conservative factor"""
-    if ev <= 0:
+def calculate_kelly_stake(
+    confidence: float,
+    ev: float,
+    vault,
+    max_stake_cents: int = HAND_MAX_STAKE_CENTS,
+    probability: float | None = None,
+    price_cents: int | None = None,
+    kelly_factor: float = HAND_KELLY_FRACTION,
+) -> int:
+    """Stake a fraction of Kelly, sized on the edge.
+
+    Kelly for a binary contract costing k and paying 1 is (p - k)/(1 - k).
+
+    The previous implementation did not use the edge at all. It sized on
+    `(confidence - 0.5) * 0.5 * 0.25` -- the model's self-reported certainty --
+    so a 1% edge and a 45% edge with equal confidence received an identical
+    stake. It also multiplied that fraction by `min(balance, max_stake)` rather
+    than by the bankroll, which capped the result at about 6% of the maximum:
+    the $75 ceiling was unreachable, the real one being roughly $4.68.
+
+    Confidence is now a gate rather than a sizing input, which is what it is
+    good for: the Brain already refuses to trade below its threshold.
+
+    Returns 0 rather than guessing when the probability or price is missing,
+    so a wiring mistake cannot silently produce a mis-sized live order.
+    """
+    if ev <= 0 or probability is None or price_cents is None:
         return 0
 
-    # Simplified Kelly with 25% fraction (quarter Kelly for safety)
-    kelly_fraction = max(0, (confidence - 0.5) * 0.5) * 0.25
+    fraction = kelly_fraction(probability, price_cents / 100.0) * kelly_factor
+    if fraction <= 0:
+        return 0
 
-    # Calculate stake in cents
-    available = min(vault.current_balance, max_stake_cents)
-    stake = int(available * kelly_fraction)
-
-    # Cap at max stake
-    return min(stake, max_stake_cents)
+    bankroll = vault.get_available_balance()
+    return min(int(bankroll * fraction), max_stake_cents)
 
 
 async def execute_order(

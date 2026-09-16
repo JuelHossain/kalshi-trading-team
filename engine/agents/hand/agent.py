@@ -65,6 +65,7 @@ class HandAgent(BaseAgent):
                         "ticker": signal_model.target_opportunity.ticker,
                         "confidence": signal_model.confidence,
                         "ev": signal_model.monte_carlo_ev,
+                        "estimated_probability": signal_model.estimated_probability,
                         "reasoning": signal_model.reasoning,
                         "suggested_size": signal_model.suggested_count,
                         "market_data": signal_model.target_opportunity.market_data.raw_response
@@ -90,9 +91,27 @@ class HandAgent(BaseAgent):
 
         entry_price = snipe_result.get("entry_price", 50)
 
-        # 2. Kelly Sizing
-        stake = exec_calculate_kelly_stake(confidence, ev, self.vault, self.MAX_STAKE_CENTS)
-        await self.log(f"Kelly sizing: ${stake/100:.2f} (Confidence: {confidence*100:.1f}%)")
+        # 2. Kelly Sizing, against the price actually available in the book
+        probability = target.get("estimated_probability")
+        stake = exec_calculate_kelly_stake(
+            confidence,
+            ev,
+            self.vault,
+            self.MAX_STAKE_CENTS,
+            probability=probability,
+            price_cents=entry_price,
+        )
+        if stake <= 0:
+            await self.log(
+                f"No stake for {ticker}: edge {ev:+.3f} at {entry_price}c "
+                f"(p={probability}) does not justify a position.",
+                level="WARN",
+            )
+            return
+        await self.log(
+            f"Kelly sizing: ${stake/100:.2f} "
+            f"(p={probability:.2f} @ {entry_price}c, edge {ev:+.3f})"
+        )
 
         # 3. Execute Order
         order_result = await exec_execute_order(
@@ -145,9 +164,22 @@ class HandAgent(BaseAgent):
             log_callback=self.log
         )
 
-    def calculate_kelly_stake(self, confidence: float, ev: float) -> int:
-        """Calculate Kelly stake - instance method wrapper for tests."""
-        return exec_calculate_kelly_stake(confidence, ev, self.vault, self.MAX_STAKE_CENTS)
+    def calculate_kelly_stake(
+        self,
+        confidence: float,
+        ev: float,
+        probability: float | None = None,
+        price_cents: int | None = None,
+    ) -> int:
+        """Size a position. Thin wrapper over the execution module."""
+        return exec_calculate_kelly_stake(
+            confidence,
+            ev,
+            self.vault,
+            self.MAX_STAKE_CENTS,
+            probability=probability,
+            price_cents=price_cents,
+        )
 
     async def snipe_check(self, ticker: str) -> dict:
         """Perform snipe check - instance method wrapper for tests."""

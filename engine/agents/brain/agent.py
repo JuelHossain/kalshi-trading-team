@@ -214,6 +214,7 @@ class BrainAgent(BaseAgent):
                     "confidence": confidence,
                     "variance": variance,
                     "ev": ev,
+                    "estimated_probability": estimated_prob,
                     "debate_reasoning": debate_result.get("reasoning", ""),
                 }
             )
@@ -287,6 +288,7 @@ class BrainAgent(BaseAgent):
                     target_opportunity=opp,
                     confidence=execution_package["confidence"],
                     monte_carlo_ev=execution_package["monte_carlo_ev"],
+                    estimated_probability=target.get("estimated_probability"),
                     reasoning=execution_package["reasoning"],
                     suggested_count=execution_package["suggested_size"] or 10,
                     status="PENDING"

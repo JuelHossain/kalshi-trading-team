@@ -188,35 +188,86 @@ class TestOrderExecution:
 
 
 class TestKellyCriterion:
-    """Test Kelly criterion stake calculation."""
+    """Stake is sized on edge, not on how certain the model claims to be.
+
+    The previous implementation sized on `(confidence - 0.5) * 0.5 * 0.25` and
+    used the edge only as an on/off gate, so two trades with identical
+    confidence and wildly different edges received identical stakes. It also
+    multiplied by `min(balance, max_stake)` rather than the bankroll, capping
+    the result near 6% of the maximum -- the $75 ceiling was unreachable.
+    """
+
+    @staticmethod
+    def _stake(hand_agent, probability, price_cents, confidence=0.9):
+        return hand_agent.calculate_kelly_stake(
+            confidence=confidence,
+            ev=probability - price_cents / 100.0,
+            probability=probability,
+            price_cents=price_cents,
+        )
 
     def test_zero_ev_returns_zero_stake(self, hand_agent):
-        """Zero or negative EV returns zero stake."""
-        stake = hand_agent.calculate_kelly_stake(confidence=0.6, ev=0)
-        assert stake == 0
+        assert self._stake(hand_agent, probability=0.50, price_cents=50) == 0
 
     def test_negative_ev_returns_zero_stake(self, hand_agent):
-        """Negative EV returns zero stake."""
-        stake = hand_agent.calculate_kelly_stake(confidence=0.6, ev=-0.1)
-        assert stake == 0
+        assert self._stake(hand_agent, probability=0.40, price_cents=50) == 0
 
-    def test_high_confidence_higher_stake(self, hand_agent, mock_vault):
-        """Higher confidence leads to higher stake."""
-        mock_vault.current_balance = 10000
-        mock_vault.get_available_balance = lambda: 10000
+    def test_bigger_edge_means_bigger_stake(self, hand_agent, mock_vault):
+        """The property the old sizing could not express."""
+        mock_vault.get_available_balance = lambda: 100_000
 
-        low_conf_stake = hand_agent.calculate_kelly_stake(confidence=0.6, ev=0.1)
-        high_conf_stake = hand_agent.calculate_kelly_stake(confidence=0.9, ev=0.1)
+        small = self._stake(hand_agent, probability=0.55, price_cents=50)
+        large = self._stake(hand_agent, probability=0.70, price_cents=50)
 
-        assert high_conf_stake > low_conf_stake
+        assert 0 < small < large
+
+    def test_confidence_does_not_change_the_stake(self, hand_agent, mock_vault):
+        """Confidence is a gate, not a sizing input.
+
+        The Brain already refuses anything below its threshold, so by the time
+        the Hand sizes a trade, confidence has done its job.
+        """
+        mock_vault.get_available_balance = lambda: 100_000
+
+        low = self._stake(hand_agent, probability=0.60, price_cents=50, confidence=0.86)
+        high = self._stake(hand_agent, probability=0.60, price_cents=50, confidence=0.99)
+
+        assert low == high
+
+    def test_price_matters_at_the_same_probability(self, hand_agent, mock_vault):
+        """Buying the same belief cheaper is a better bet and earns more size."""
+        mock_vault.get_available_balance = lambda: 100_000
+
+        cheap = self._stake(hand_agent, probability=0.70, price_cents=40)
+        dear = self._stake(hand_agent, probability=0.70, price_cents=65)
+
+        assert cheap > dear > 0
 
     def test_stake_capped_at_max(self, hand_agent, mock_vault):
-        """Stake never exceeds MAX_STAKE_CENTS."""
-        mock_vault.current_balance = 1000000  # $10,000
+        mock_vault.get_available_balance = lambda: 1_000_000  # $10,000
 
-        stake = hand_agent.calculate_kelly_stake(confidence=0.99, ev=0.5)
+        stake = self._stake(hand_agent, probability=0.95, price_cents=50)
 
-        assert stake <= hand_agent.MAX_STAKE_CENTS
+        assert stake == hand_agent.MAX_STAKE_CENTS
+
+    def test_the_cap_is_actually_reachable(self, hand_agent, mock_vault):
+        """The old sizing topped out near $4.68 against a $75 limit."""
+        mock_vault.get_available_balance = lambda: 100_000
+
+        stake = self._stake(hand_agent, probability=0.90, price_cents=50)
+
+        assert stake == hand_agent.MAX_STAKE_CENTS
+
+    def test_missing_inputs_refuse_rather_than_guess(self, hand_agent, mock_vault):
+        """A wiring mistake must not silently produce a mis-sized live order."""
+        mock_vault.get_available_balance = lambda: 100_000
+
+        assert hand_agent.calculate_kelly_stake(
+            confidence=0.9, ev=0.2, probability=None, price_cents=50
+        ) == 0
+        assert hand_agent.calculate_kelly_stake(
+            confidence=0.9, ev=0.2, probability=0.7, price_cents=None
+        ) == 0
 
 
 class TestSnipeCheck:

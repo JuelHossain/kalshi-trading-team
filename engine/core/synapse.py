@@ -44,6 +44,9 @@ class ExecutionSignal(BaseModel):
     side: str = "YES"    # YES / NO
     confidence: float
     monte_carlo_ev: float
+    # The Brain's probability estimate. The Hand needs it to size the position:
+    # Kelly is (p - k)/(1 - k), so edge alone is not enough.
+    estimated_probability: float | None = None
     reasoning: str
     suggested_count: int
     status: str = "PENDING"  # PENDING, EXECUTED, FAILED, CANCELLED
