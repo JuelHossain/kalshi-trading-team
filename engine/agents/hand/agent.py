@@ -15,6 +15,7 @@ from core.vault_utils import check_profit_lock_threshold, publish_vault_state
 
 from .execution import (
     snipe_check as exec_snipe_check,
+    has_open_position as exec_has_open_position,
     calculate_kelly_stake as exec_calculate_kelly_stake,
     execute_order as exec_execute_order,
     send_notification
@@ -82,6 +83,14 @@ class HandAgent(BaseAgent):
         ev = target.get("ev", 0)
 
         await self.log(f"Target acquired: {ticker}")
+
+        # 0. Refuse to stack into a market we already hold.
+        if await exec_has_open_position(self.kalshi_client, ticker):
+            await self.log(
+                f"Already holding {ticker} - skipping to avoid concentrating exposure.",
+                level="WARN",
+            )
+            return
 
         # 1. Snipe Check (Order Book Analysis)
         snipe_result = await exec_snipe_check(self.kalshi_client, ticker, self.log, self.MAX_STAKE_CENTS)

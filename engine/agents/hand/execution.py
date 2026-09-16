@@ -195,3 +195,28 @@ async def send_notification(ticker: str, stake: int, result: dict, log_callback=
     except Exception as e:
         if log_callback:
             await log_callback(f"Notification failed: {str(e)[:30]}", level="ERROR")
+
+
+async def has_open_position(kalshi_client, ticker: str) -> bool:
+    """Whether the engine already holds this market.
+
+    Nothing previously stopped the same ticker being scanned, approved and
+    bought on cycle after cycle. Combined with having no exit path, exposure
+    accumulated in a position the engine could neither see nor close.
+
+    Fails closed: if positions cannot be read, the answer is "assume we hold
+    it" and the trade is skipped. Declining a good trade costs an opportunity;
+    doubling blindly into one costs money.
+    """
+    if not kalshi_client:
+        return False
+
+    try:
+        positions = await kalshi_client.get_positions()
+    except Exception:  # noqa: BLE001 - unreadable positions must not open new risk
+        return True
+
+    return any(
+        (p.get("ticker") or p.get("market_id")) == ticker and p.get("position")
+        for p in positions or []
+    )
