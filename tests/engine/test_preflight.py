@@ -4,6 +4,7 @@ It is the thing standing between a misconfigured laptop and a confusing
 failure at the Kalshi handshake, so its two dangerous outcomes are reporting
 ready when something is missing, and printing a secret.
 """
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,17 @@ def pem() -> str:
 
 def _run(env: dict) -> subprocess.CompletedProcess:
     base = {"PATH": "/usr/bin:/bin", "PYTHONPATH": str(ROOT / "engine")}
+    if sys.platform == "win32":
+        # The child environment is replaced wholesale to keep these tests
+        # deterministic. On Windows that is not free: without SYSTEMROOT the
+        # child cannot initialise winsock, and the script dies with
+        # WinError 10106 the moment it imports asyncio -- before it can print
+        # the message being asserted on. A POSIX-only PATH is equally useless
+        # here. Pass through the minimum Windows needs to start a process.
+        base["PATH"] = os.environ.get("PATH", "")
+        for name in ("SYSTEMROOT", "COMSPEC"):
+            if name in os.environ:
+                base[name] = os.environ[name]
     return subprocess.run(
         [sys.executable, str(SCRIPT)],
         capture_output=True, text=True, env={**base, **env}, cwd=str(ROOT),
