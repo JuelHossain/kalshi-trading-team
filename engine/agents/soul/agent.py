@@ -182,8 +182,15 @@ class SoulAgent(BaseAgent):
             errors.append(f"Kalshi API Error: {e}")
 
         # 2. Supabase Check
+        # Analytics only -- no trading decision reads from it. Treating it as
+        # fatal meant a dead or paused project locked the engine down at
+        # pre-flight and no cycle could run, which is a strictly worse outcome
+        # than trading without a metrics sink.
         if not await check_supabase_connection():
-            errors.append("Supabase (Database) unreachable.")
+            await self.log(
+                "Supabase unreachable - continuing without the analytics sink.",
+                level="WARN",
+            )
 
         # 3. Gemini Check
         if self._gemini_available and self.client:

@@ -52,7 +52,7 @@ def initialize_gemini_client(
         )
 
         # Default model
-        gemini_model = "gemini-2.0-flash-exp"
+        gemini_model = get_default_models()[0]
 
         return (client, ai_client, gemini_model, True)
 
@@ -64,12 +64,15 @@ def initialize_gemini_client(
 
 def get_default_models() -> list[str]:
     """Get list of Gemini models to try (in order of preference)."""
+    # Verified against GET /v1beta/models. Every id in the previous list
+    # 404'd, including the gemini-2.0-flash-exp used as the default below,
+    # so the Brain could not reach a model at all. The *-latest aliases sit
+    # last as a rot-resistant floor: they follow Google's current release
+    # even after the pinned ids above are retired.
     return [
-        "gemini-3-flash-preview",
-        "gemini-3-pro-preview",
-        "gemini-2.0-flash-thinking-exp-01-21",
-        "gemini-2.0-pro-exp-02-05",
-        "gemini-2.0-flash-exp",
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
+        "gemini-3.8-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-flash-latest",
+        "gemini-pro-latest",
     ]
