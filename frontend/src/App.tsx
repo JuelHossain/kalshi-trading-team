@@ -11,6 +11,7 @@ import { useOrchestrator } from './hooks/useOrchestrator';
 import { useStore } from './store/useStore';
 import { useAuth } from './hooks/useAuth';
 import LogisticsCenter from './components/LogisticsCenter';
+import EnginePanel from './components/engine-status/EnginePanel';
 import SensesMetrics from './components/SensesMetrics';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -214,6 +215,9 @@ const App: React.FC = () => {
           <div className="max-w-[1600px] mx-auto h-full">
             {activeTab === 'dashboard' && (
               <div className="flex flex-col gap-6 h-full animate-scale-in">
+                {/* What the engine will actually do, read from the engine. */}
+                <EnginePanel />
+
                 {/* Bottom: Visualizer & Charts */}
                 <div className="flex-1 grid grid-cols-12 gap-6 min-h-0">
                   <div className="col-span-12 xl:col-span-8 flex flex-col gap-6">
