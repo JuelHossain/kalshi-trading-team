@@ -19,25 +19,48 @@ class KalshiClient:
     Handles Authentication, Connection Pooling, and Exponential Backoff.
     """
 
+    # Which Kalshi to talk to. Demo is a separate environment with its own
+    # accounts, keys and play money, so it is the only place a first handshake
+    # can be made without risking anything.
+    ENVIRONMENTS = {
+        "demo": ("https://demo-api.kalshi.co/trade-api/v2", "KALSHI_DEMO"),
+        "prod": ("https://api.kalshi.co/trade-api/v2", "KALSHI_PROD"),
+    }
+
     def __init__(self):
         self._session: aiohttp.ClientSession | None = None
         self.private_key = None
 
-        # Production configuration (demo mode removed for production security)
-        self.key_id = os.getenv("KALSHI_PROD_KEY_ID")
+        # Demo unless production is asked for by name. A previous change removed
+        # demo mode entirely and hardcoded the production URL, which left no way
+        # to connect to Kalshi at all without risking real money: demo
+        # credentials cannot authenticate against the production host. Defaulting
+        # to demo means a missing or misspelled setting costs play money.
+        self.env = os.getenv("KALSHI_ENV", "demo").strip().lower()
+        if self.env not in self.ENVIRONMENTS:
+            raise ValueError(
+                f"KALSHI_ENV must be one of {sorted(self.ENVIRONMENTS)}, got {self.env!r}."
+            )
+
+        self.base_url, prefix = self.ENVIRONMENTS[self.env]
+
+        # Each environment has its own key pair, so they are read separately.
+        # Falling back from one to the other would send production credentials
+        # to the demo host, or the reverse.
+        self.key_id = os.getenv(f"{prefix}_KEY_ID")
         if not self.key_id:
             raise ValueError(
-                "KALSHI_PROD_KEY_ID not configured. Set KALSHI_PROD_KEY_ID in environment variables. "
-                "Demo mode has been removed for production security."
+                f"{prefix}_KEY_ID not configured. KALSHI_ENV={self.env} reads "
+                f"{prefix}_KEY_ID and {prefix}_PRIVATE_KEY."
             )
-        
-        self.base_url = "https://api.kalshi.co/trade-api/v2"
-        pk_pem = os.getenv("KALSHI_PROD_PRIVATE_KEY")
+
+        pk_pem = os.getenv(f"{prefix}_PRIVATE_KEY")
         if not pk_pem:
             raise ValueError(
-                "KALSHI_PROD_PRIVATE_KEY not configured. Set KALSHI_PROD_PRIVATE_KEY in environment variables."
+                f"{prefix}_PRIVATE_KEY not configured. KALSHI_ENV={self.env} reads "
+                f"{prefix}_KEY_ID and {prefix}_PRIVATE_KEY."
             )
-        
+
         if pk_pem:
             try:
                 if "\\n" in pk_pem:

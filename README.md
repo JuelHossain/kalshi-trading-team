@@ -42,8 +42,9 @@ cp .env.example .env
 | `GHOST_API_KEY` | API key for internal authentication | none | **Yes** |
 | `IS_PAPER_TRADING` | Pin every cycle to paper; orders are simulated | `false` | No |
 | `IS_PRODUCTION` | Enable production trading mode | `false` | No |
-| `KALSHI_PROD_KEY_ID` | Kalshi API key ID | - | Yes |
-| `KALSHI_PROD_PRIVATE_KEY` | Kalshi RSA private key | - | Yes |
+| `KALSHI_ENV` | Which Kalshi to talk to: `demo` or `prod` | `demo` | No |
+| `KALSHI_DEMO_KEY_ID` / `KALSHI_DEMO_PRIVATE_KEY` | Demo credentials (`KALSHI_ENV=demo`) | - | Yes |
+| `KALSHI_PROD_KEY_ID` / `KALSHI_PROD_PRIVATE_KEY` | Production credentials (`KALSHI_ENV=prod`) — real money | - | Only for `prod` |
 | `GEMINI_API_KEY` | Google Gemini AI API key | - | Yes |
 
 > `AUTH_PASSWORD` has no default. The engine refuses to start without it, on

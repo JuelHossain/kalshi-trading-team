@@ -27,13 +27,34 @@ HAS_LIVE_CREDENTIALS = bool(
     os.getenv("KALSHI_PROD_KEY_ID") and os.getenv("KALSHI_PROD_PRIVATE_KEY")
 )
 
+_PLACEHOLDER_VARS: set[str] = set()
+
 for _var, _placeholder in {
     "GHOST_API_KEY": "test-ghost-api-key",
+    # Both environments are seeded because KalshiClient reads the pair matching
+    # KALSHI_ENV, which defaults to demo. Seeding only one pair would make the
+    # suite pass or fail on which environment happened to be selected.
+    "KALSHI_DEMO_KEY_ID": "test-kalshi-key-id",
+    "KALSHI_DEMO_PRIVATE_KEY": "test-kalshi-private-key",
     "KALSHI_PROD_KEY_ID": "test-kalshi-key-id",
     "KALSHI_PROD_PRIVATE_KEY": "test-kalshi-private-key",
     "AUTH_PASSWORD": "test-auth-password",
 }.items():
-    os.environ.setdefault(_var, _placeholder)
+    if os.getenv(_var):
+        continue
+    os.environ[_var] = _placeholder
+    _PLACEHOLDER_VARS.add(_var)
+
+
+def has_real_credentials(*names: str) -> bool:
+    """Whether these variables came from the environment rather than from us.
+
+    Presence is not enough: the placeholders above are set for every run, so a
+    test that skipped on `not os.getenv(...)` would stop skipping the moment a
+    placeholder was added for that name and would then try to reach the real
+    Kalshi API with a fake key.
+    """
+    return all(os.getenv(n) and n not in _PLACEHOLDER_VARS for n in names)
 
 
 def pytest_configure(config):
@@ -144,7 +165,7 @@ async def k_client():
     os.environ["IS_PRODUCTION"] = "false"
     
     # Check if we have credentials
-    if not os.getenv("KALSHI_DEMO_KEY_ID") or not os.getenv("KALSHI_DEMO_PRIVATE_KEY"):
+    if not has_real_credentials("KALSHI_DEMO_KEY_ID", "KALSHI_DEMO_PRIVATE_KEY"):
         pytest.skip("Kalshi Demo credentials not found in engine/.env")
         
     # Re-initialize to ensure it picks up the latest env (if needed)
