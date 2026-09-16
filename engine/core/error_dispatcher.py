@@ -71,7 +71,7 @@ class ErrorDispatcher:
     # Error deduplication window (seconds)
     DEDUPLICATION_WINDOW = 60
 
-    def __init__(self, agent_name: str, event_bus=None, synapse=None):
+    def __init__(self, agent_name: str, event_bus=None, synapse=None, error_manager=None):
         """
         Initialize ErrorDispatcher
 
@@ -79,10 +79,23 @@ class ErrorDispatcher:
             agent_name: Name of the agent (e.g., "BRAIN", "SENSES")
             event_bus: EventBus instance for broadcasting errors
             synapse: Optional Synapse instance for persistent error logging
+            error_manager: Optional ErrorManager. Every dispatched error is
+                also registered with it, so the system that DECIDES what an
+                error means sees the same errors the operator does.
+
+                These two are not duplicates: the dispatcher is transport
+                (terminal, dashboard, Synapse) and the manager is policy
+                (shut down, retry, count). But nothing connected them, so an
+                error painted on the dashboard never reached the thing that
+                decides whether to halt, and the manager's statistics
+                described only the errors that happened to be routed through
+                it directly. BaseAgent already held both objects and passed
+                neither to the other.
         """
         self.agent_name = agent_name
         self.event_bus = event_bus
         self.synapse = synapse
+        self.error_manager = error_manager
         self._error_hashes = set()  # For deduplication
         self._error_timestamps = {}  # Hash -> timestamp
 
@@ -231,7 +244,35 @@ class ErrorDispatcher:
                 # Non-critical: Fire-and-forget
                 asyncio.create_task(self._log_to_synapse(error))
 
+        # Hand the error to the policy layer. This is what makes severity mean
+        # something: the manager escalates, counts, and can halt the engine.
+        await self._register_with_manager(error)
+
         return error
+
+    async def _register_with_manager(self, error: ErrorEvent) -> None:
+        """Report the error to the ErrorManager, if one is attached.
+
+        Never raises. The dispatcher's job is to surface the error; if the
+        policy layer fails while being told about it, the operator has still
+        been told, and swallowing that is better than losing the original
+        error behind a second one.
+        """
+        if not self.error_manager:
+            return
+
+        try:
+            await self.error_manager.register_error(
+                code=error.code,
+                message=error.message,
+                severity=error.severity,
+                domain=error.domain,
+                agent_name=self.agent_name,
+                context=error.context,
+                hint=error.hint,
+            )
+        except Exception as e:  # noqa: BLE001 - reporting must not mask the error
+            print(f"[ErrorDispatcher] Could not register error with manager: {e}")
 
     async def _broadcast_error(self, error: ErrorEvent):
         """Broadcast error to frontend via EventBus"""

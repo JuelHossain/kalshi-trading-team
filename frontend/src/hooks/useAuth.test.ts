@@ -60,6 +60,7 @@ describe('useAuth Hook', () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ isAuthenticated: true }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ isAuthenticated: true })) }),
       });
       global.fetch = mockFetch;
 
@@ -86,6 +87,7 @@ describe('useAuth Hook', () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ isAuthenticated: true }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ isAuthenticated: true })) }),
       });
       global.fetch = mockFetch;
 
@@ -103,6 +105,7 @@ describe('useAuth Hook', () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ isAuthenticated: true }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ isAuthenticated: true })) }),
       });
       global.fetch = mockFetch;
 
@@ -121,13 +124,14 @@ describe('useAuth Hook', () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ isAuthenticated: true }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ isAuthenticated: true })) }),
       });
       global.fetch = mockFetch;
 
       const { result } = renderHook(() => useAuth());
 
       await act(async () => {
-        await result.current.login('production', '993728');
+        await result.current.login('production', 'test-password');
       });
 
       expect(mockFetch).toHaveBeenCalledWith('/api/auth/login', {
@@ -138,7 +142,7 @@ describe('useAuth Hook', () => {
         credentials: 'include',
         body: JSON.stringify({
           mode: 'production',
-          password: '993728',
+          password: 'test-password',
         }),
       });
     });
@@ -147,13 +151,14 @@ describe('useAuth Hook', () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ isAuthenticated: true }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ isAuthenticated: true })) }),
       });
       global.fetch = mockFetch;
 
       const { result } = renderHook(() => useAuth());
 
       await act(async () => {
-        await result.current.login('production', '993728');
+        await result.current.login('production', 'test-password');
       });
 
       expect(mockSetAuthMode).toHaveBeenCalledWith('production');
@@ -167,6 +172,7 @@ describe('useAuth Hook', () => {
         ok: false,
         status: 401,
         json: () => Promise.resolve({ error: 'Invalid credentials' }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ error: 'Invalid credentials' })) }),
       });
       global.fetch = mockFetch;
 
@@ -188,6 +194,7 @@ describe('useAuth Hook', () => {
         ok: false,
         status: 401,
         json: () => Promise.resolve({ error: 'Auth Failed' }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ error: 'Auth Failed' })) }),
       });
       global.fetch = mockFetch;
 
@@ -227,6 +234,7 @@ describe('useAuth Hook', () => {
         ok: false,
         status: 401,
         json: () => Promise.resolve({ error: 'Authentication failed' }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ error: 'Authentication failed' })) }),
       });
       global.fetch = mockFetch;
 
@@ -246,6 +254,9 @@ describe('useAuth Hook', () => {
       const mockFetch = vi.fn().mockReturnValue({
         ok: true,
         json: () => jsonPromise,
+        // Stays pending until resolveJson fires, so login is still in flight
+        // when isAuthenticating is checked -- which is the point of this test.
+        clone: () => ({ text: () => jsonPromise.then((v) => JSON.stringify(v)) }),
       });
       global.fetch = mockFetch;
 
@@ -271,6 +282,7 @@ describe('useAuth Hook', () => {
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ isAuthenticated: true }),
+          clone: () => ({ text: () => Promise.resolve(JSON.stringify({ isAuthenticated: true })) }),
         });
       global.fetch = mockFetch;
 
@@ -299,6 +311,7 @@ describe('useAuth Hook', () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ isAuthenticated: true, mode: 'demo' }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ isAuthenticated: true, mode: 'demo' })) }),
       });
       global.fetch = mockFetch;
 
@@ -318,6 +331,7 @@ describe('useAuth Hook', () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ isAuthenticated: false }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ isAuthenticated: false })) }),
       });
       global.fetch = mockFetch;
 
@@ -422,6 +436,7 @@ describe('useAuth Hook', () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ isAuthenticated: true, mode: 'demo' }),
+        clone: () => ({ text: () => Promise.resolve(JSON.stringify({ isAuthenticated: true, mode: 'demo' })) }),
       });
       global.fetch = mockFetch;
 

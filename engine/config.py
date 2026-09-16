@@ -1,7 +1,16 @@
 
+"""Legacy configuration.
+
+NOTE: this module is not imported by anything in the engine. Values set here
+have no effect. Live configuration is core/constants.py plus the environment
+variables documented in .env.example. Kept only so existing references do not
+break; do not add to it.
+"""
 import os
 
 from dotenv import load_dotenv
+
+from core.constants import HARD_FLOOR_CENTS
 
 # Load Env
 load_dotenv(os.path.join(os.path.dirname(__file__), "../.env"))
@@ -19,7 +28,7 @@ MAX_STAKE_CENTS = 7500  # $75
 PROFIT_LOCK_THRESHOLD_CENTS = 5000 # $50
 
 # --- VAULT CONFIG ---
-HARD_FLOOR_CENTS = 25500 # $255
+HARD_FLOOR_CENTS = HARD_FLOOR_CENTS  # re-exported; defined in core.constants
 VAULT_Principal_CENTS = 30000 # $300
 DAILY_PROFIT_GOAL_CENTS = 5000 # $50
 

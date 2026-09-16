@@ -31,6 +31,9 @@ export interface LogEntry {
   phaseId: number; // Required: explicit phase for cycle-based tracking
   level: 'INFO' | 'WARN' | 'ERROR' | 'SUCCESS';
   message: string;
+  /** How many identical lines this row stands for. Set by Terminal's
+   *  de-duplication, which collapses repeats into "(12x)". */
+  count?: number;
 }
 
 export interface CycleState {
@@ -111,7 +114,8 @@ export type TimelineEventType =
   | 'MARKET'
   | 'INTERCEPT'
   | 'ERROR'
-  | 'FIXER';
+  | 'FIXER'
+  | 'TRADE';
 
 export interface FixerActivity {
   errorMessage: string;

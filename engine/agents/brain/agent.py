@@ -15,13 +15,15 @@ from core.ai_utils import GEMINI_AVAILABLE, get_default_models, initialize_gemin
 from core.bus import EventBus
 from core.constants import (
     BRAIN_CONFIDENCE_THRESHOLD,
-    BRAIN_MAX_VARIANCE,
-    BRAIN_SIMULATION_ITERATIONS,
+    BRAIN_ESTIMATE_SAMPLES,
+    BRAIN_MAX_DISAGREEMENT,
+    BRAIN_MIN_EDGE,
 )
 from core.db import log_to_db
+from core.ledger import record_decision
 from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
 
-from .debate import load_personas, run_debate
+from .debate import load_personas, run_debate_ensemble
 from .monitor import (
     check_opportunity_freshness,
     handle_restock_trigger,
@@ -35,14 +37,15 @@ class BrainAgent(BaseAgent):
     """The Decision Maker - Intelligence & Mathematical Verification"""
 
     CONFIDENCE_THRESHOLD = BRAIN_CONFIDENCE_THRESHOLD
-    SIMULATION_ITERATIONS = BRAIN_SIMULATION_ITERATIONS
-    MAX_VARIANCE = BRAIN_MAX_VARIANCE
+    MIN_EDGE = BRAIN_MIN_EDGE
+    ESTIMATE_SAMPLES = BRAIN_ESTIMATE_SAMPLES
+    MAX_DISAGREEMENT = BRAIN_MAX_DISAGREEMENT
 
     # Gemini model names to try (in order of preference)
     DEFAULT_MODELS = get_default_models()
 
-    def __init__(self, agent_id: int, bus: EventBus, synapse: Synapse = None):
-        super().__init__("BRAIN", agent_id, bus, synapse)
+    def __init__(self, agent_id: int, bus: EventBus, synapse: Synapse = None, error_manager=None):
+        super().__init__("BRAIN", agent_id, bus, synapse, error_manager)
         self.execution_queue: list[dict] = []
         self.trading_instructions = ""
 
@@ -158,6 +161,10 @@ class BrainAgent(BaseAgent):
         # Check opportunity freshness
         is_fresh, freshness_status = check_opportunity_freshness(opportunity, self.log)
         if not is_fresh:
+            record_decision(
+                ticker, opportunity.get("kalshi_price", 0.5),
+                outcome=freshness_status, veto_reason="market data too old",
+            )
             return freshness_status
 
         await self.log(f"Analyzing: {ticker}")
@@ -166,23 +173,50 @@ class BrainAgent(BaseAgent):
         debate_result = await self.run_debate(opportunity)
         estimated_prob = debate_result.get("estimated_probability", 0.5)
         confidence = debate_result.get("confidence", 0)
+        disagreement = debate_result.get("disagreement", 0.0)
 
         # FIX: Variance Veto Logic Bypass (Anti-Audit)
         if confidence == 0 or estimated_prob is None:
             reason = "Zero AI confidence" if confidence == 0 else "No probability estimate"
             await self.log(f"[VETO] VETOED: {ticker} | {reason} - skipping simulation", level="WARN")
+            record_decision(
+                ticker, opportunity.get("kalshi_price", 0.5),
+                outcome="VETOED", estimated_probability=estimated_prob,
+                confidence=confidence, veto_reason=reason,
+            )
             return "VETOED"
 
-        # 2. Monte Carlo Simulation
+        # Independent estimates that disagree widely mean the model does not
+        # know. That is a different condition from believing the odds are even,
+        # and a more dangerous one to trade into.
+        if disagreement > self.MAX_DISAGREEMENT:
+            reason = f"Estimates disagree by {disagreement:.2f} (max {self.MAX_DISAGREEMENT:.2f})"
+            await self.log(f"[VETO] VETOED: {ticker} | {reason}", level="WARN")
+            record_decision(
+                ticker, opportunity.get("kalshi_price", 0.5),
+                outcome="VETOED", estimated_probability=estimated_prob,
+                confidence=confidence, veto_reason=reason,
+            )
+            return "VETOED"
+
+        # 2. Outcome maths
         sim_result = self.run_simulation(opportunity, override_prob=estimated_prob)
 
         # 3. Decision
         variance = sim_result.get("variance", 1)
         ev = sim_result.get("ev", 0)
+        side = sim_result.get("side", "yes")
+        side_price = sim_result.get("side_price", 0.5)
+        side_probability = sim_result.get("side_probability", estimated_prob)
 
         # Only log and publish if we have valid data
         if variance == 999.0:
             await self.log(f"[SKIP] SKIPPED: {ticker} | No valid probability data available", level="DEBUG")
+            record_decision(
+                ticker, opportunity.get("kalshi_price", 0.5),
+                outcome="SKIPPED", confidence=confidence,
+                veto_reason="no usable probability",
+            )
             return "SKIPPED"
 
         prob_str = f"{estimated_prob:.2f}" if estimated_prob is not None else "N/A"
@@ -196,32 +230,52 @@ class BrainAgent(BaseAgent):
                 "win_rate": float(sim_result.get("win_rate", 0.5)),
                 "ev_score": float(ev),
                 "variance": float(variance),
-                "iterations": int(self.SIMULATION_ITERATIONS),
-                "veto": bool(confidence < self.CONFIDENCE_THRESHOLD or variance > self.MAX_VARIANCE),
+                "veto": bool(confidence < self.CONFIDENCE_THRESHOLD or ev < self.MIN_EDGE),
             },
             self.name,
         )
 
-        if confidence >= self.CONFIDENCE_THRESHOLD and variance <= self.MAX_VARIANCE and ev > 0:
-            await self.log(f"[OK] APPROVED: {ticker} | Pushing to execution.")
+        # Gate on edge, not variance. p(1-p) peaks at exactly the old 0.25
+        # threshold, so the variance test could never reject anything.
+        if confidence >= self.CONFIDENCE_THRESHOLD and ev >= self.MIN_EDGE:
+            await self.log(f"[OK] APPROVED: {ticker} | Buying {side.upper()} @ {side_price*100:.0f}c | Pushing to execution.")
+            record_decision(
+                ticker, opportunity.get("kalshi_price", 0.5),
+                outcome="APPROVED", estimated_probability=estimated_prob,
+                confidence=confidence,
+            )
             await self.queue_for_execution(
                 {
                     **opportunity,
                     "confidence": confidence,
                     "variance": variance,
                     "ev": ev,
+                    "estimated_probability": estimated_prob,
+                    "side": side,
+                    "side_price": side_price,
+                    "side_probability": side_probability,
                     "debate_reasoning": debate_result.get("reasoning", ""),
                 }
             )
             return "APPROVED"
 
-        reason = "Low confidence" if confidence < self.CONFIDENCE_THRESHOLD else ("High variance" if variance > self.MAX_VARIANCE else "Negative EV")
+        reason = (
+            "Low confidence"
+            if confidence < self.CONFIDENCE_THRESHOLD
+            else f"Edge {ev:+.3f} below minimum {self.MIN_EDGE:+.3f}"
+        )
         await self.log(f"[X] VETOED: {ticker} | Reason: {reason}")
+        record_decision(
+            ticker, opportunity.get("kalshi_price", 0.5),
+            outcome="VETOED", estimated_probability=estimated_prob,
+            confidence=confidence, veto_reason=reason,
+        )
         return "VETOED"
 
     async def run_debate(self, opportunity: dict) -> dict:
-        """Run multi-persona AI debate - delegates to debate module"""
-        return await run_debate(
+        """Draw ESTIMATE_SAMPLES independent estimates and aggregate them."""
+        return await run_debate_ensemble(
+            samples=self.ESTIMATE_SAMPLES,
             opportunity=opportunity,
             client=self.client,
             gemini_model=self.gemini_model,
@@ -233,12 +287,12 @@ class BrainAgent(BaseAgent):
         )
 
     def run_simulation(self, opportunity: dict, override_prob: float = None) -> dict:
-        """Monte Carlo simulation - delegates to simulation module"""
-        return run_simulation(
-            opportunity=opportunity,
-            override_prob=override_prob,
-            simulation_iterations=self.SIMULATION_ITERATIONS
-        )
+        """Evaluate the contract - delegates to the simulation module.
+
+        No longer a simulation: EV and variance have closed forms, so there is
+        nothing to iterate. The name is kept because call sites and tests use it.
+        """
+        return run_simulation(opportunity=opportunity, override_prob=override_prob)
 
     async def queue_for_execution(self, target: dict):
         """Push approved target to execution queue and Synapse"""
@@ -279,6 +333,10 @@ class BrainAgent(BaseAgent):
                     target_opportunity=opp,
                     confidence=execution_package["confidence"],
                     monte_carlo_ev=execution_package["monte_carlo_ev"],
+                    estimated_probability=target.get("estimated_probability"),
+                    side=str(target.get("side", "yes")).upper(),
+                    side_price=target.get("side_price"),
+                    side_probability=target.get("side_probability"),
                     reasoning=execution_package["reasoning"],
                     suggested_count=execution_package["suggested_size"] or 10,
                     status="PENDING"

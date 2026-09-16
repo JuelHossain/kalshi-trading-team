@@ -82,10 +82,62 @@ SENSES_STOCK_BUFFER_SIZE = 30  # Total markets to pull from Kalshi
 SENSES_QUEUE_BATCH_SIZE = 10   # Markets to queue at once
 
 # Brain Agent
-BRAIN_CONFIDENCE_THRESHOLD = 0.85  # 85% minimum confidence
-BRAIN_SIMULATION_ITERATIONS = 10000
-BRAIN_MAX_VARIANCE = 0.25  # Maximum acceptable variance
+BRAIN_CONFIDENCE_THRESHOLD = 0.85  # 85% minimum AI confidence in its estimate
+
+# Minimum edge (estimated probability minus contract price) required to trade.
+# Replaces BRAIN_MAX_VARIANCE, which could never bind: the variance of a binary
+# outcome is p(1-p), whose maximum is exactly the 0.25 the veto tested against.
+# Edge is the quantity that actually decides whether a trade is worth taking,
+# and a floor on it keeps the engine out of thin edges that the spread eats.
+BRAIN_MIN_EDGE = 0.05  # 5c of expected profit per $1 contract
+
+# How many independent estimates to draw per market. One opinion has no
+# uncertainty attached to it; several do. Set to 1 to disable sampling and pay
+# a single API call per market.
+BRAIN_ESTIMATE_SAMPLES = 3
+
+# Reject when independent estimates disagree by more than this. This is the
+# risk signal the variance veto was reaching for and could never provide:
+# unlike p(1-p), disagreement varies independently of the probability, so it
+# can actually bind. Wide disagreement means the model does not know, which is
+# different from -- and more dangerous than -- believing the odds are even.
+BRAIN_MAX_DISAGREEMENT = 0.20
+
 
 # Hand Agent
 HAND_MAX_STAKE_CENTS = 7500  # $75 max per trade
+
+# --- Exit policy -------------------------------------------------------------
+# The engine can close a position; these decide when it should.
+#
+# Holding every contract to settlement is defensible for binaries -- they
+# resolve to 0 or 100, so time favours a correct forecast. But a contract
+# bought at 60c that has drifted to 5c is near-certainly lost, and holding it
+# converts "near-certainly" into "certainly" while the capital sits idle.
+
+# Close when the price has fallen this far below what was paid.
+HAND_STOP_LOSS_PCT = 0.50
+
+# Close when the price has captured this much of the distance from entry to
+# 100 -- trading the last of the upside for certainty.
+HAND_TAKE_PROFIT_PCT = 0.80
+
+# Close a losing position this many hours before expiry. A winning one is left
+# to settle, since settlement pays 100 and a thin pre-expiry book does not.
+HAND_EXIT_BEFORE_EXPIRY_HOURS = 2.0
+
+# Fraction of full Kelly to stake. Full Kelly maximises long-run growth but is
+# famously violent; a quarter is the usual conservative choice and costs little
+# expected growth for a large reduction in drawdown.
+HAND_KELLY_FRACTION = 0.25
+
+# ==============================================================================
+# VAULT SAFETY
+# ==============================================================================
+
+# Balance below which the engine refuses to trade and locks down.
+# Single source of truth: RecursiveVault and engine/config.py both read this.
+# It was previously written out separately in each, so changing one silently
+# left the others disagreeing about a safety limit.
+HARD_FLOOR_CENTS = 25500  # $255.00
 HAND_PROFIT_LOCK_THRESHOLD = 5000  # $50 profit triggers principal lock

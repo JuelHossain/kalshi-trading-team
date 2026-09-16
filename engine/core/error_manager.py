@@ -477,6 +477,7 @@ _global_error_manager: ErrorManager | None = None
 
 def get_error_manager() -> ErrorManager:
     """Get the global error manager instance"""
+    global _global_error_manager
     if _global_error_manager is None:
         console = Console()
         _global_error_manager = ErrorManager(console=console)

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import Login from './Login';
 import React from 'react';
 
@@ -178,7 +178,12 @@ describe('Login Component', () => {
       expect(mockOnLogin).not.toHaveBeenCalled();
     });
 
-    it('validates incorrect password in production mode', async () => {
+    it('submits the password rather than judging it in the browser', async () => {
+      // This previously asserted the component rejected a wrong password itself,
+      // by comparing against a literal compiled into the bundle. Any viewer could
+      // read that literal, and any viewer could step past the check. The engine
+      // decides now, so the component forwards whatever was typed and surfaces
+      // the 401.
       render(<Login {...defaultProps} />);
 
       const productionButton = screen.getByText('PRODUCTION');
@@ -191,10 +196,8 @@ describe('Login Component', () => {
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(screen.getByText('Invalid password')).toBeInTheDocument();
+        expect(mockOnLogin).toHaveBeenCalledWith('production', 'wrong-password');
       });
-
-      expect(mockOnLogin).not.toHaveBeenCalled();
     });
 
     it('calls onLogin with production mode and password when correct password is entered', async () => {
@@ -204,13 +207,13 @@ describe('Login Component', () => {
       fireEvent.click(productionButton);
 
       const passwordInput = screen.getByPlaceholderText('Enter production password');
-      fireEvent.change(passwordInput, { target: { value: '993728' } });
+      fireEvent.change(passwordInput, { target: { value: 'test-password' } });
 
       const submitButton = screen.getByText('🔓 UNLOCK PRODUCTION');
       fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(mockOnLogin).toHaveBeenCalledWith('production', '993728');
+        expect(mockOnLogin).toHaveBeenCalledWith('production', 'test-password');
       });
     });
   });

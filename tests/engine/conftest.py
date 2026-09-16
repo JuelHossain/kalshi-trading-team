@@ -11,10 +11,114 @@ engine_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../eng
 sys.path.append(engine_path)
 load_dotenv(os.path.join(engine_path, ".env"))
 
+# ---------------------------------------------------------------------------
+# Credentials
+# ---------------------------------------------------------------------------
+# Unit tests must never require real secrets. Several constructors only check
+# that a credential is *present*, so a placeholder lets them run -- previously
+# these tests failed rather than skipped, and CI could never be green.
+#
+# Record whether genuine credentials were supplied BEFORE filling placeholders
+# in. Tests that actually reach the Kalshi API are marked `live` and skipped
+# unless real credentials exist, so placeholders never cause a real network
+# call that would hang or fail confusingly.
+
+HAS_LIVE_CREDENTIALS = bool(
+    os.getenv("KALSHI_PROD_KEY_ID") and os.getenv("KALSHI_PROD_PRIVATE_KEY")
+)
+
+_PLACEHOLDER_VARS: set[str] = set()
+
+for _var, _placeholder in {
+    "GHOST_API_KEY": "test-ghost-api-key",
+    # Both environments are seeded because KalshiClient reads the pair matching
+    # KALSHI_ENV, which defaults to demo. Seeding only one pair would make the
+    # suite pass or fail on which environment happened to be selected.
+    "KALSHI_DEMO_KEY_ID": "test-kalshi-key-id",
+    "KALSHI_DEMO_PRIVATE_KEY": "test-kalshi-private-key",
+    "KALSHI_PROD_KEY_ID": "test-kalshi-key-id",
+    "KALSHI_PROD_PRIVATE_KEY": "test-kalshi-private-key",
+    "AUTH_PASSWORD": "test-auth-password",
+}.items():
+    if os.getenv(_var):
+        continue
+    os.environ[_var] = _placeholder
+    _PLACEHOLDER_VARS.add(_var)
+
+
+def has_real_credentials(*names: str) -> bool:
+    """Whether these variables came from the environment rather than from us.
+
+    Presence is not enough: the placeholders above are set for every run, so a
+    test that skipped on `not os.getenv(...)` would stop skipping the moment a
+    placeholder was added for that name and would then try to reach the real
+    Kalshi API with a fake key.
+    """
+    return all(os.getenv(n) and n not in _PLACEHOLDER_VARS for n in names)
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "live: hits the real Kalshi API; skipped without real credentials"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if HAS_LIVE_CREDENTIALS:
+        return
+    skip_live = pytest.mark.skip(
+        reason="needs real credentials (KALSHI_PROD_KEY_ID, KALSHI_PROD_PRIVATE_KEY)"
+    )
+    for item in items:
+        if "live" in item.keywords:
+            item.add_marker(skip_live)
+
+
 from engine.core.bus import EventBus
 from engine.core.synapse import Synapse
 from engine.core.network import kalshi_client
 from engine.core.vault import RecursiveVault
+
+@pytest.fixture(autouse=True)
+def block_network(request, monkeypatch):
+    """Fail fast instead of dialling out.
+
+    Placeholder credentials let KalshiClient construct, so an unmocked call
+    would attempt a real HTTP request and stall ~2s per test on a timeout.
+    Every HTTP method funnels through request(), so blocking that single method
+    covers every module that imported the client, however it was bound.
+
+    Tests marked `live` opt out and use the real client.
+    """
+    if "live" in request.keywords:
+        return
+
+    from core.network import KalshiClient
+
+    async def _blocked(*_args, **_kwargs):
+        raise RuntimeError(
+            "Network is disabled in tests. Mock the Kalshi client, "
+            "or mark the test with @pytest.mark.live."
+        )
+
+    monkeypatch.setattr(KalshiClient, "request", _blocked)
+
+
+@pytest.fixture(autouse=True)
+def isolate_databases(tmp_path, monkeypatch):
+    """Point every test at throwaway databases.
+
+    Vault and Synapse otherwise write to the real engine/ghost_memory.db and
+    ghost_memory.db. Vault.initialize() reloads persisted reservations from
+    there, so one test's reserved funds leaked into the next and some tests
+    passed or failed purely on run order.
+
+    Autouse so no test can opt out by forgetting a fixture.
+    """
+    monkeypatch.setenv("GHOST_VAULT_DB", str(tmp_path / "vault.db"))
+    monkeypatch.setenv("GHOST_SYNAPSE_DB", str(tmp_path / "synapse.db"))
+    monkeypatch.setenv("GHOST_LEDGER_DB", str(tmp_path / "ledger.db"))
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -61,7 +165,7 @@ async def k_client():
     os.environ["IS_PRODUCTION"] = "false"
     
     # Check if we have credentials
-    if not os.getenv("KALSHI_DEMO_KEY_ID") or not os.getenv("KALSHI_DEMO_PRIVATE_KEY"):
+    if not has_real_credentials("KALSHI_DEMO_KEY_ID", "KALSHI_DEMO_PRIVATE_KEY"):
         pytest.skip("Kalshi Demo credentials not found in engine/.env")
         
     # Re-initialize to ensure it picks up the latest env (if needed)

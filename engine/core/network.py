@@ -9,6 +9,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
 from core.display import AgentType, log_warning, log_error, get_display
+from core.lazy import lazy
+from core import trading_mode
 
 
 class KalshiClient:
@@ -17,25 +19,48 @@ class KalshiClient:
     Handles Authentication, Connection Pooling, and Exponential Backoff.
     """
 
+    # Which Kalshi to talk to. Demo is a separate environment with its own
+    # accounts, keys and play money, so it is the only place a first handshake
+    # can be made without risking anything.
+    ENVIRONMENTS = {
+        "demo": ("https://demo-api.kalshi.co/trade-api/v2", "KALSHI_DEMO"),
+        "prod": ("https://api.kalshi.co/trade-api/v2", "KALSHI_PROD"),
+    }
+
     def __init__(self):
         self._session: aiohttp.ClientSession | None = None
         self.private_key = None
 
-        # Production configuration (demo mode removed for production security)
-        self.key_id = os.getenv("KALSHI_PROD_KEY_ID")
+        # Demo unless production is asked for by name. A previous change removed
+        # demo mode entirely and hardcoded the production URL, which left no way
+        # to connect to Kalshi at all without risking real money: demo
+        # credentials cannot authenticate against the production host. Defaulting
+        # to demo means a missing or misspelled setting costs play money.
+        self.env = os.getenv("KALSHI_ENV", "demo").strip().lower()
+        if self.env not in self.ENVIRONMENTS:
+            raise ValueError(
+                f"KALSHI_ENV must be one of {sorted(self.ENVIRONMENTS)}, got {self.env!r}."
+            )
+
+        self.base_url, prefix = self.ENVIRONMENTS[self.env]
+
+        # Each environment has its own key pair, so they are read separately.
+        # Falling back from one to the other would send production credentials
+        # to the demo host, or the reverse.
+        self.key_id = os.getenv(f"{prefix}_KEY_ID")
         if not self.key_id:
             raise ValueError(
-                "KALSHI_PROD_KEY_ID not configured. Set KALSHI_PROD_KEY_ID in environment variables. "
-                "Demo mode has been removed for production security."
+                f"{prefix}_KEY_ID not configured. KALSHI_ENV={self.env} reads "
+                f"{prefix}_KEY_ID and {prefix}_PRIVATE_KEY."
             )
-        
-        self.base_url = "https://api.kalshi.co/trade-api/v2"
-        pk_pem = os.getenv("KALSHI_PROD_PRIVATE_KEY")
+
+        pk_pem = os.getenv(f"{prefix}_PRIVATE_KEY")
         if not pk_pem:
             raise ValueError(
-                "KALSHI_PROD_PRIVATE_KEY not configured. Set KALSHI_PROD_PRIVATE_KEY in environment variables."
+                f"{prefix}_PRIVATE_KEY not configured. KALSHI_ENV={self.env} reads "
+                f"{prefix}_KEY_ID and {prefix}_PRIVATE_KEY."
             )
-        
+
         if pk_pem:
             try:
                 if "\\n" in pk_pem:
@@ -159,6 +184,7 @@ class KalshiClient:
         type: str,
         price: int,
         count: int,
+        action: str = "buy",
     ) -> dict | None:
         """Place an order on Kalshi.
 
@@ -168,13 +194,25 @@ class KalshiClient:
             type: 'limit' or 'market'
             price: Price in cents (1-99)
             count: Number of contracts
+            action: 'buy' or 'sell'. The field was previously absent entirely,
+                which left the engine unable to express a sell at all -- there
+                was no way to exit a position once entered.
 
         Returns:
             Order response dict or None on failure
+
+        In paper mode this returns a simulated fill without contacting Kalshi.
+        The check sits here, at the one function entries, exits and Ragnarok all
+        funnel through, so no future call site can place a real order by
+        forgetting to ask whether it should.
         """
+        if not trading_mode.is_live():
+            return trading_mode.paper_fill(ticker, side, price, count, action)
+
         path = "/portfolio/orders"
         json_data = {
             "market_id": ticker,
+            "action": action.lower(),
             "side": side.lower(),
             "type": type.lower(),
             "price": price,
@@ -182,10 +220,39 @@ class KalshiClient:
         }
         return await self.request("POST", path, json_data=json_data)
 
+    async def get_positions(self) -> list[dict]:
+        """Open positions.
+
+        The client had no way to read these, so the engine could not know what
+        it held: it could not avoid doubling into a market, size against
+        existing exposure, or close anything.
+        """
+        res = await self.request("GET", "/portfolio/positions")
+        if res and "market_positions" in res:
+            return res["market_positions"]
+        if res and "positions" in res:
+            return res["positions"]
+        return []
+
+    async def close_position(self, ticker: str, count: int, side: str = "yes") -> dict | None:
+        """Flatten a holding by selling it back.
+
+        Uses a marketable limit at the extreme tick so an emergency exit is not
+        left resting in the book. Getting out matters more than the last cent.
+        """
+        return await self.place_order(
+            ticker=ticker,
+            side=side,
+            type="limit",
+            price=1 if side.lower() == "yes" else 99,
+            count=count,
+            action="sell",
+        )
+
     async def close(self):
         if self._session and not self._session.closed:
             await self._session.close()
 
 
-# Singleton instance
-kalshi_client = KalshiClient()
+# Singleton instance (constructed on first attribute access, not on import)
+kalshi_client = lazy(KalshiClient)

@@ -9,15 +9,20 @@ This test simulates the full agent lifecycle to ensure:
 
 import asyncio
 import os
-import sys
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import pytest
+
+# NOTE: no sys.path manipulation here. This module previously inserted
+# tests/engine at the front of sys.path, which shadowed the real `agents`
+# package with the test directory of the same name -- it only imported at all
+# because an earlier test had already cached the real module. conftest.py puts
+# the engine source on the path.
 
 from agents.brain import BrainAgent
 from agents.senses import SensesAgent
 from agents.soul import SoulAgent
 from core.bus import EventBus
+from core.flow_control import should_restock
 from core.synapse import MarketData, Opportunity, Synapse
 from core.vault import RecursiveVault
 
@@ -29,13 +34,43 @@ def clear_database(db_path: str):
         print(f"[TEST] Cleared database: {db_path}")
 
 
+
+async def _settled(read, quiet_for: float = 0.3, timeout: float = 10.0):
+    """Wait until `read()` stops changing, then return its value.
+
+    These tests used fixed sleeps -- publish, sleep 2s, measure -- which assumes
+    the agents finish within the guess. On a slower machine they do not, so the
+    measurement lands mid-processing and the queue keeps draining during the
+    window the test believes is quiet. That is how test_brain_no_self_trigger
+    failed on CI while passing locally: not a self-trigger, just a stopwatch.
+
+    Polls until the value has held steady for `quiet_for` seconds, so the test
+    waits exactly as long as the work takes and no longer.
+    """
+    deadline = asyncio.get_event_loop().time() + timeout
+    previous = await read()
+    stable_since = asyncio.get_event_loop().time()
+
+    while asyncio.get_event_loop().time() < deadline:
+        await asyncio.sleep(0.05)
+        current = await read()
+        now = asyncio.get_event_loop().time()
+        if current != previous:
+            previous, stable_since = current, now
+        elif now - stable_since >= quiet_for:
+            return current
+
+    return previous
+
+
+@pytest.mark.asyncio
 async def test_senses_guard():
     """Test that Senses only scans once and goes to standby"""
     print("\n" + "="*60)
     print("TEST 1: Senses Initial Scan Guard")
     print("="*60)
 
-    clear_database("ghost_memory.db")
+    clear_database(os.environ["GHOST_SYNAPSE_DB"])
 
     bus = EventBus()
     synapse = Synapse()
@@ -53,48 +88,66 @@ async def test_senses_guard():
     # First trigger - should queue opportunities
     print("\n[TEST] First PREFLIGHT_COMPLETE trigger...")
     await bus.publish("PREFLIGHT_COMPLETE", {}, "TEST")
-    await asyncio.sleep(1)
 
-    opp_size_1 = await synapse.opportunities.size()
+    opp_size_1 = await _settled(synapse.opportunities.size)
     print(f"[TEST] Opportunities after first trigger: {opp_size_1}")
 
     # Second trigger - should NOT queue more
     print("\n[TEST] Second PREFLIGHT_COMPLETE trigger...")
     await bus.publish("PREFLIGHT_COMPLETE", {}, "TEST")
-    await asyncio.sleep(1)
 
-    opp_size_2 = await synapse.opportunities.size()
+    opp_size_2 = await _settled(synapse.opportunities.size)
     print(f"[TEST] Opportunities after second trigger: {opp_size_2}")
 
     # Verify guard is working
-    if opp_size_1 == opp_size_2:
-        print(f"\n[PASS] Senses guard working - no re-queue ({opp_size_1} == {opp_size_2})")
-        return True
-    print(f"\n[FAIL] Senses re-queued ({opp_size_2} > {opp_size_1})")
-    return False
+    assert opp_size_1 == opp_size_2, (
+        f"Senses re-queued on a second PREFLIGHT_COMPLETE: {opp_size_1} -> {opp_size_2}"
+    )
 
 
-async def test_brain_no_self_trigger():
-    """Test that Brain doesn't self-trigger after processing"""
+@pytest.mark.asyncio
+async def test_brain_does_not_retrigger_itself():
+    """The Brain must not publish the event that wakes it.
+
+    This asserted that the opportunity queue stops changing after a trigger,
+    on the premise that the Brain "processes exactly 1 opportunity per
+    trigger". That is not the design: monitor_queue is documented as a
+    CONTINUOUS MONITORING LOOP that "processes ALL items until empty", so a
+    draining queue is the Brain working, not misbehaving.
+
+    The assertion was unfalsifiable before -- the function signalled its result
+    with `return False`, which pytest ignores -- so the mismatch went unnoticed
+    until it was converted to a real assertion, at which point it failed on CI
+    whenever the runner was slow enough for the measurement to land mid-drain.
+
+    A self-trigger would mean the Brain publishing OPPORTUNITIES_READY itself
+    and looping forever. That is what this now checks, alongside the behaviour
+    the design actually promises.
+    """
     print("\n" + "="*60)
-    print("TEST 2: Brain No Self-Trigger")
+    print("TEST 2: Brain Does Not Re-Trigger Itself")
     print("="*60)
 
-    clear_database("ghost_memory.db")
+    clear_database(os.environ["GHOST_SYNAPSE_DB"])
 
     bus = EventBus()
     synapse = Synapse()
     vault = RecursiveVault()
 
-    # Initialize agents
     soul = SoulAgent(1, bus, vault=vault, synapse=synapse)
     brain = BrainAgent(3, bus, synapse=synapse)
 
     await soul.setup()
     await brain.setup()
 
-    # Manually add some test opportunities
-    print("\n[TEST] Adding 3 test opportunities...")
+    # Record every OPPORTUNITIES_READY, and who sent it.
+    senders = []
+
+    async def record(message):
+        senders.append(message.sender)
+
+    await bus.subscribe("OPPORTUNITIES_READY", record)
+
     for i in range(3):
         await synapse.opportunities.push(
             Opportunity(
@@ -111,73 +164,51 @@ async def test_brain_no_self_trigger():
             )
         )
 
-    opp_size_initial = await synapse.opportunities.size()
-    print(f"[TEST] Initial opportunities: {opp_size_initial}")
+    await bus.publish("OPPORTUNITIES_READY", {"count": 3, "source": "SENSES"}, "TEST")
 
-    # Trigger Brain processing
-    print("\n[TEST] Triggering OPPORTUNITIES_READY...")
-    await bus.publish("OPPORTUNITIES_READY", {"count": opp_size_initial, "source": "SENSES"}, "TEST")
-    await asyncio.sleep(2)
+    remaining = await _settled(synapse.opportunities.size, quiet_for=1.0)
+    print(f"[TEST] Opportunities remaining once settled: {remaining}")
+    print(f"[TEST] OPPORTUNITIES_READY senders seen: {senders}")
 
-    opp_size_after = await synapse.opportunities.size()
-    exec_size = await synapse.executions.size()
-
-    print(f"[TEST] Opportunities after processing: {opp_size_after}")
-    print(f"[TEST] Executions queued: {exec_size}")
-
-    # Wait to check for self-trigger
-    print("\n[TEST] Waiting 3 seconds to check for self-trigger...")
-    await asyncio.sleep(3)
-
-    opp_size_final = await synapse.opportunities.size()
-    exec_size_final = await synapse.executions.size()
-
-    print(f"[TEST] Final opportunities: {opp_size_final}")
-    print(f"[TEST] Final executions: {exec_size_final}")
-
-    # Brain should process exactly 1 opportunity per trigger
-    if opp_size_final == opp_size_after and exec_size_final == exec_size:
-        print("\n[OK PASS] Brain did NOT self-trigger (no change after wait)")
-        return True
-    print("\n[FAIL FAIL] Brain self-triggered or processed multiple")
-    print(f"        Opportunities changed: {opp_size_after} -> {opp_size_final}")
-    print(f"        Executions changed: {exec_size} -> {exec_size_final}")
-    return False
+    assert brain.name not in senders, (
+        f"Brain published its own trigger, which would loop forever: {senders}"
+    )
+    assert remaining == 0, (
+        f"the monitor loop is meant to drain the queue to empty, left {remaining}"
+    )
 
 
+@pytest.mark.asyncio
 async def test_restock_cooldown():
-    """Test that restock has proper cooldown"""
-    print("\n" + "="*60)
-    print("TEST 3: Restock Cooldown")
-    print("="*60)
+    """Restock is refused until the cooldown window has elapsed.
 
-    clear_database("ghost_memory.db")
-
-    bus = EventBus()
+    Previously this published two bus events, asserted nothing, printed
+    "check logs above" and returned True -- it could never fail. should_restock
+    is a pure function, so the cooldown is asserted directly instead.
+    """
     synapse = Synapse()
-    vault = RecursiveVault()
+    now = 1_000_000.0
+    over_threshold = 5  # veto_threshold
 
-    # Initialize agents
-    soul = SoulAgent(1, bus, vault=vault, synapse=synapse)
-    brain = BrainAgent(3, bus, synapse=synapse)
+    # Inside the 60s window: refused even with enough vetoes.
+    assert not await should_restock(
+        synapse, over_threshold, last_restock_time=now - 59, current_time=now
+    )
 
-    await soul.setup()
-    await brain.setup()
+    # Outside the window: allowed.
+    assert await should_restock(
+        synapse, over_threshold, last_restock_time=now - 61, current_time=now
+    )
 
-    # Manually trigger restock twice quickly
-    print("\n[TEST] First REQUEST_RESTOCK...")
-    await bus.publish("REQUEST_RESTOCK", {}, "TEST")
-    await asyncio.sleep(1)
+    # Boundary: exactly the cooldown is allowed (the check is strict <).
+    assert await should_restock(
+        synapse, over_threshold, last_restock_time=now - 60, current_time=now
+    )
 
-    print("[TEST] Second REQUEST_RESTOCK (immediate)...")
-    await bus.publish("REQUEST_RESTOCK", {}, "TEST")
-    await asyncio.sleep(1)
-
-    # Check if cooldown prevented duplicate processing
-    # The cooldown should prevent rapid restocks
-    print("\n[OK INFO] Restock cooldown test completed")
-    print("[OK INFO] Check logs above for flow control messages")
-    return True
+    # Too few vetoes is refused regardless of elapsed time.
+    assert not await should_restock(
+        synapse, over_threshold - 1, last_restock_time=now - 9999, current_time=now
+    )
 
 
 async def main():

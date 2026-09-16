@@ -10,15 +10,14 @@ import time
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import sys
-sys.path.insert(0, 'e:/Projects/kalshi-trading-team')
-
 from engine.main import GhostEngine
 from engine.core.vault import RecursiveVault
 
 @pytest.fixture
 def clean_db():
-    db_path = "engine/ghost_memory.db"
+    # Read the isolated path set by the autouse isolate_databases fixture;
+    # this previously hardcoded -- and deleted -- the real engine database.
+    db_path = os.environ["GHOST_VAULT_DB"]
     if os.path.exists(db_path):
         os.remove(db_path)
     yield db_path
@@ -89,9 +88,18 @@ class TestPhase3Hardening:
 
     @pytest.mark.asyncio
     async def test_hard_floor_centralization(self):
-        """Verify all components use the centralized HARD_FLOOR_CENTS."""
+        """Verify all components use the centralized HARD_FLOOR_CENTS.
+
+        This previously asserted the literal 25500, which is what a third
+        independent copy of the constant looks like. It now checks the values
+        agree with core.constants, which is what "centralized" means.
+        """
+        import config
+        from core.constants import HARD_FLOOR_CENTS
+
         vault = RecursiveVault()
-        assert vault.HARD_FLOOR_CENTS == 25500
+        assert vault.HARD_FLOOR_CENTS == HARD_FLOOR_CENTS
+        assert config.HARD_FLOOR_CENTS == HARD_FLOOR_CENTS
         
         # Check if other agents would see it (integration check)
         # We already grepped for this, so this is a logic check.

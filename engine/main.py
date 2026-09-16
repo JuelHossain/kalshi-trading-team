@@ -57,8 +57,10 @@ from core.error_codes import ErrorDomain, ErrorSeverity
 from core.error_manager import ErrorManager, get_error_manager, set_error_manager
 from core.logger import get_logger
 from core.network import kalshi_client
+from core.shared_utils import get_env_bool
 from core.synapse import Synapse
 from core.vault import RecursiveVault
+from core import trading_mode
 from http_api.routes import register_all_routes, register_sse_subscriptions
 
 # HTTP imports
@@ -83,6 +85,7 @@ class GhostEngine:
         self.agents: list[BaseAgent] = []
         self.cycle_count: int = 0
         self.is_processing: bool = False
+        self._shutting_down: bool = False
         self.last_cycle_time: datetime = None  # Rate limit tracking
         self.manual_kill_switch: bool = False
         self.sse_clients: set[asyncio.Queue] = set()
@@ -237,10 +240,31 @@ class GhostEngine:
         return True
 
     async def execute_single_cycle(self, is_paper_trading: bool = True):
-        """Execute a single trading cycle with 4 Mega-Agents."""
+        """Execute a single trading cycle with 4 Mega-Agents.
+
+        Whether a cycle trades for real arrives in the request body from the
+        browser. IS_PAPER_TRADING=true pins it to paper on the server, so going
+        live takes a deliberate change on the machine running the engine rather
+        than a different JSON field from a client.
+
+        ecosystem.config.cjs has always set IS_PAPER_TRADING=true with the
+        comment "Default to paper trading". Nothing read it until now.
+        """
         if self.is_processing:
             log_warning("Cycle already in progress. Ignoring.")
             return
+
+        if get_env_bool("IS_PAPER_TRADING", default=False) and not is_paper_trading:
+            log_warning(
+                "IS_PAPER_TRADING is set: forcing this cycle to paper. "
+                "Unset it on the server to allow live trading."
+            )
+            is_paper_trading = True
+
+        # Arm or disarm real order placement for this cycle. Until this line ran,
+        # is_paper_trading reached the display and the event payloads and nothing
+        # else -- a cycle labelled PAPER TRADING still sent live orders.
+        trading_mode.set_live(not is_paper_trading)
 
         self.is_processing = True
 
@@ -382,9 +406,20 @@ class GhostEngine:
         """
         Shutdown the engine gracefully
 
+        Idempotent. Two independent paths can now request a shutdown -- the
+        SYSTEM_FATAL bus event that call sites publish explicitly, and the
+        ErrorManager escalating a CRITICAL error -- and a trading engine
+        tearing down its agents and closing its API session twice concurrently
+        is a good way to turn a clean stop into a messy one.
+
         Args:
             reason: The reason for the shutdown
         """
+        if self._shutting_down:
+            log_warning(f"Shutdown already in progress; ignoring: {reason}")
+            return
+        self._shutting_down = True
+
         log_critical(f"SHUTDOWN PROTOCOL INITIATED: {reason}")
         self.running = False
 

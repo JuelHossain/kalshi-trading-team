@@ -259,3 +259,30 @@ __all__ = [
     "format_cents_to_dollars",
     "format_dollars_to_cents",
 ]
+
+
+# -------------------------------------------------------------------------
+# Async Scheduling Utilities
+# -------------------------------------------------------------------------
+
+
+def fire_and_forget(coro) -> None:
+    """Run a fire-and-forget coroutine from sync or async context.
+
+    `asyncio.create_task` needs a running loop and raises RuntimeError without
+    one. Sync helpers that log via an async callback therefore crash when called
+    outside the event loop -- and because those calls sit on degraded paths
+    ("API key missing", "init failed"), the recovery path fails instead of the
+    condition it was reporting.
+
+    Schedules the coroutine when a loop is running, otherwise runs it to
+    completion on a temporary one. Logging must never take down its caller, so
+    a failure here is swallowed after closing the coroutine.
+    """
+    try:
+        asyncio.get_running_loop().create_task(coro)
+    except RuntimeError:
+        try:
+            asyncio.run(coro)
+        except Exception:  # noqa: BLE001 - a failed log must not raise into its caller
+            coro.close()

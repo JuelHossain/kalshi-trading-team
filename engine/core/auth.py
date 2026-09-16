@@ -4,6 +4,7 @@ Implements API key-based authentication for all trading endpoints.
 """
 
 import os
+import secrets
 from functools import wraps
 
 from aiohttp import web
@@ -14,6 +15,7 @@ from core.http_utils import (
     unauthorized_response,
 )
 from core.display import log_info, log_error, log_success, AgentType
+from core.lazy import lazy
 
 # API Path Constants
 _DIRECT_PATHS = {
@@ -31,9 +33,6 @@ MODE_PRODUCTION = "production"
 class AuthManager:
     """Manages API authentication for the Ghost Engine."""
 
-    # Production password for authentication (loaded from environment)
-    AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "993728")
-
     def __init__(self):
         # Load API key from environment
         self.api_key = os.getenv("GHOST_API_KEY")
@@ -41,6 +40,15 @@ class AuthManager:
             raise ValueError(
                 "GHOST_API_KEY not configured. Set GHOST_API_KEY in environment variables. "
                 "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+            )
+
+        # No default. A password written into the source is published with it:
+        # readable in the repository, in git history, and in any built bundle.
+        self.auth_password = os.getenv("AUTH_PASSWORD")
+        if not self.auth_password:
+            raise ValueError(
+                "AUTH_PASSWORD not configured. Set AUTH_PASSWORD in environment variables. "
+                "Generate one with: python -c 'import secrets; print(secrets.token_urlsafe(16))'"
             )
 
         # Session state
@@ -95,7 +103,7 @@ class AuthManager:
 
 
 # Global auth manager instance
-auth_manager = AuthManager()
+auth_manager = lazy(AuthManager)
 
 
 async def login_handler(request: web.Request) -> web.Response:
@@ -104,7 +112,7 @@ async def login_handler(request: web.Request) -> web.Response:
 
     Expected JSON body:
     {
-        "password": "993728"
+        "password": "<the value of AUTH_PASSWORD>"
     }
 
     Note: Demo mode has been removed for production security.
@@ -121,8 +129,8 @@ async def login_handler(request: web.Request) -> web.Response:
                 401
             )
 
-        # Validate password for production mode
-        if password != AuthManager.AUTH_PASSWORD:
+        # Constant-time compare so response timing cannot leak the password.
+        if not secrets.compare_digest(password, auth_manager.auth_password):
             return error_response("Invalid password", "Authentication failed", 401)
 
         # Update session state

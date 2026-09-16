@@ -38,12 +38,18 @@ cp .env.example .env
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `AUTH_PASSWORD` | Password for production mode authentication | `993728` | No |
-| `GHOST_API_KEY` | API key for internal authentication | Auto-generated | No |
+| `AUTH_PASSWORD` | Password for dashboard authentication | none | **Yes** |
+| `GHOST_API_KEY` | API key for internal authentication | none | **Yes** |
+| `IS_PAPER_TRADING` | Pin every cycle to paper; orders are simulated | `false` | No |
 | `IS_PRODUCTION` | Enable production trading mode | `false` | No |
-| `KALSHI_DEMO_KEY_ID` | Kalshi demo API key ID | - | Yes |
-| `KALSHI_DEMO_PRIVATE_KEY` | Kalshi demo RSA private key | - | Yes |
+| `KALSHI_ENV` | Which Kalshi to talk to: `demo` or `prod` | `demo` | No |
+| `KALSHI_DEMO_KEY_ID` / `KALSHI_DEMO_PRIVATE_KEY` | Demo credentials (`KALSHI_ENV=demo`) | - | Yes |
+| `KALSHI_PROD_KEY_ID` / `KALSHI_PROD_PRIVATE_KEY` | Production credentials (`KALSHI_ENV=prod`) — real money | - | Only for `prod` |
 | `GEMINI_API_KEY` | Google Gemini AI API key | - | Yes |
+
+> `AUTH_PASSWORD` has no default. The engine refuses to start without it, on
+> purpose. The value previously documented here was a real password and remains
+> in git history — if you ever used it, rotate it.
 
 **Authentication Modes:**
 - **Demo Mode**: Login with empty password (or any password if `AUTH_PASSWORD` not set)

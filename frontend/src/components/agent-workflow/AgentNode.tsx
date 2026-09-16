@@ -1,11 +1,14 @@
 import React, { memo, useMemo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { motion } from 'framer-motion';
 import { AgentState } from '@/store/slices/agentSlice';
 
-interface AgentNodeData extends AgentState {}
+// xyflow v12 stores node data in a generic index-signature bag, so a data
+// interface has to be assignable to Record<string, unknown> to satisfy Node.
+type AgentNodeData = AgentState & Record<string, unknown>;
+type AgentFlowNode = Node<AgentNodeData, 'agentNode'>;
 
-const AgentNode = memo(({ data, selected }: NodeProps<AgentNodeData>) => {
+const AgentNode = memo(({ data, selected }: NodeProps<AgentFlowNode>) => {
   const { agentId, name, role, status, color, metrics, lastAction } = data;
 
   // Determine animation variants based on status

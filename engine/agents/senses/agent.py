@@ -29,8 +29,8 @@ class SensesAgent(BaseAgent):
     QUEUE_BATCH_SIZE = SENSES_QUEUE_BATCH_SIZE
     RESTOCK_THRESHOLD = 5
 
-    def __init__(self, agent_id: int, bus: EventBus, kalshi_client=None, synapse: Synapse = None):
-        super().__init__("SENSES", agent_id, bus, synapse)
+    def __init__(self, agent_id: int, bus: EventBus, kalshi_client=None, synapse: Synapse = None, error_manager=None):
+        super().__init__("SENSES", agent_id, bus, synapse, error_manager)
         self.kalshi_client = kalshi_client
         self.opportunity_queue: list[dict] = []
         self.is_scanning = False

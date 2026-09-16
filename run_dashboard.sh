@@ -1,27 +1,22 @@
 #!/bin/bash
+# Launch the dashboard (React frontend) in dev mode against a running engine.
+#
+# This script previously installed dashboard/requirements.txt and ran
+# dashboard/app.py via Streamlit. There is no dashboard/ directory in this
+# repository -- that dashboard is frontend/, a React app. The script could
+# never have worked.
+#
+# Start the engine first (see RUNBOOK.md); this serves the UI and proxies
+# /api to the engine on :3002.
 
-# Function to check if a command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
+set -e
 
-echo "⚡ Initializing UI & Visuals Developer Persona..."
+cd "$(dirname "$0")/frontend"
 
-# Check Python
-if ! command_exists python3; then
-    echo "❌ Python3 is not installed."
-    exit 1
+if [ ! -d node_modules ]; then
+  echo "Installing frontend dependencies..."
+  npm ci
 fi
 
-# Check Pip
-if ! python3 -m pip --version >/dev/null 2>&1; then
-    echo "❌ pip is not installed."
-    echo "👉 Please run: sudo apt install python3-pip"
-    exit 1
-fi
-
-echo "📦 Installing Dependencies..."
-python3 -m pip install -r dashboard/requirements.txt
-
-echo "🚀 Launching Command Center..."
-python3 -m streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0 --theme.base "dark"
+echo "Dashboard: http://localhost:5173  (engine expected on :3002)"
+npm run dev

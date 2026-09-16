@@ -16,8 +16,8 @@ class GatewayAgent(BaseAgent):
     Role: Formats internal bus events into JSON for the TS Backend to broadcast.
     """
 
-    def __init__(self, agent_id: int, bus: EventBus, vault: RecursiveVault):
-        super().__init__("GATEWAY", agent_id, bus)
+    def __init__(self, agent_id: int, bus: EventBus, vault: RecursiveVault, error_manager=None):
+        super().__init__("GATEWAY", agent_id, bus, error_manager=error_manager)
         self.vault = vault
 
     async def setup(self):

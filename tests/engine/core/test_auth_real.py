@@ -2,6 +2,7 @@ import pytest
 import os
 from engine.core.network import kalshi_client
 
+@pytest.mark.live
 @pytest.mark.asyncio
 async def test_kalshi_auth_demo():
     """Verify that we can authenticate with Kalshi Demo using credentials in .env."""

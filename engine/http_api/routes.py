@@ -14,8 +14,11 @@ from core.event_formatter import (
     format_log_event,
     format_simulation_event,
     format_state_event,
+    format_trade_event,
     format_vault_event,
 )
+from core.network import KalshiClient
+from core.shared_utils import get_env_bool
 
 
 def register_all_routes(app, engine):
@@ -69,6 +72,10 @@ def register_all_routes(app, engine):
     # Environment routes
     app.router.add_get("/env-health", get_env_health(engine))
     app.router.add_get("/api/env-health", get_env_health(engine))
+
+    # Ground truth about what the engine will actually do with an order.
+    app.router.add_get("/status", get_engine_status(engine))
+    app.router.add_get("/api/status", get_engine_status(engine))
 
     # Emergency routes
     app.router.add_post("/ragnarok", trigger_ragnarok(engine))
@@ -433,6 +440,76 @@ def get_synapse_queues(engine):
     return handler
 
 
+def get_engine_status(engine):
+    async def handler(request):
+        """What the engine will actually do, read from the engine itself.
+
+        The dashboard had no way to answer its most important question -- is this
+        about to spend real money, and where? -- because nothing reported it.
+        ModeIndicator derived "Live Trading" from an auth-session flag, and
+        SystemHealth reported Kalshi "Authenticated" whenever a key-id string
+        existed in the browser's config, having never contacted Kalshi.
+
+        Every field here is read from the object that governs the behaviour it
+        describes, not from configuration that is merely supposed to agree with
+        it. `orders_are_real` is the same switch place_order consults; a UI built
+        on it cannot say PAPER while the engine sends live orders.
+        """
+        import os
+
+        from core import trading_mode
+
+        env = os.getenv("KALSHI_ENV", "demo").strip().lower()
+        prefix = "KALSHI_PROD" if env == "prod" else "KALSHI_DEMO"
+        base_url = KalshiClient.ENVIRONMENTS.get(env, (None, None))[0]
+
+        vault = engine.vault
+        balance = vault.current_balance
+        floor = vault.HARD_FLOOR_CENTS
+
+        return web.json_response({
+            # The only two facts that decide whether money can move.
+            "orders_are_real": trading_mode.is_live(),
+            "venue": {
+                "env": env,
+                "base_url": base_url,
+                "is_production": env == "prod",
+                "credentials_present": bool(
+                    os.getenv(f"{prefix}_KEY_ID") and os.getenv(f"{prefix}_PRIVATE_KEY")
+                ),
+                "credential_vars": [f"{prefix}_KEY_ID", f"{prefix}_PRIVATE_KEY"],
+            },
+            "paper_pinned_by_env": get_env_bool("IS_PAPER_TRADING", default=False),
+
+            # What is stopping it, if anything.
+            "halted": {
+                "kill_switch": bool(vault.kill_switch_active),
+                "manual_kill_switch": bool(engine.manual_kill_switch),
+                "below_hard_floor": balance < floor,
+            },
+
+            # Money.
+            "vault": {
+                "balance_cents": balance,
+                "hard_floor_cents": floor,
+                "headroom_cents": balance - floor,
+                "principal_locked": bool(getattr(vault, "principal_locked", False)),
+            },
+
+            # What it is doing right now.
+            "engine": {
+                "running": bool(engine.running),
+                "processing": bool(engine.is_processing),
+                "cycle": engine.cycle_count,
+                "agents": [a.name for a in getattr(engine, "agents", [])],
+                "last_cycle": (
+                    engine.last_cycle_time.isoformat() if engine.last_cycle_time else None
+                ),
+            },
+        })
+    return handler
+
+
 def get_env_health(engine):
     async def handler(request):
         """Verify 'Stay Alive' environment integrity."""
@@ -517,6 +594,10 @@ def register_sse_subscriptions(engine):
             formatted_event = format_simulation_event(payload)
         elif event_type == "SYSTEM_STATE":
             formatted_event = format_state_event(payload)
+        elif event_type == "TRADE_RESULT":
+            formatted_event = format_trade_event(payload, engine.cycle_count)
+        elif event_type == "POSITION_CLOSED":
+            formatted_event = format_trade_event(payload, engine.cycle_count, closed=True)
         elif event_type == "SYSTEM_ERROR":
             formatted_event = format_error_event(payload, engine.cycle_count, AGENT_TO_PHASE, AGENT_NAME_TO_ID)
 
@@ -535,3 +616,6 @@ def register_sse_subscriptions(engine):
     asyncio.create_task(engine.bus.subscribe("SIM_RESULT", _broadcast_to_sse))
     asyncio.create_task(engine.bus.subscribe("SYSTEM_STATE", _broadcast_to_sse))
     asyncio.create_task(engine.bus.subscribe("SYSTEM_ERROR", _broadcast_to_sse))
+    # Entries and exits: the two events that mean the engine did something.
+    asyncio.create_task(engine.bus.subscribe("TRADE_RESULT", _broadcast_to_sse))
+    asyncio.create_task(engine.bus.subscribe("POSITION_CLOSED", _broadcast_to_sse))
