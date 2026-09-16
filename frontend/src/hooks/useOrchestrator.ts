@@ -204,15 +204,18 @@ export const useOrchestrator = (isLoggedIn: boolean, isPaperTrading: boolean) =>
             }
           }
           // if (log.phaseId !== undefined) setCurrentPhaseId(log.phaseId); // Handled by store if needed
-        } else if (['SIMULATION', 'VAULT', 'MARKET', 'INTERCEPT'].includes(eventType)) {
+        } else if (['SIMULATION', 'VAULT', 'MARKET', 'INTERCEPT', 'TRADE'].includes(eventType)) {
+          // TRADE was already mapped to the Execution phase by getPhaseForType and
+          // counted by the workflow graph, but it was missing from this list, so
+          // every entry and exit was dropped on arrival.
           const phaseId = getPhaseForType(eventType, rawData.state);
           newEvent = {
-            id: `evt-${Date.now()}-${Math.random()}`,
+            id: rawData.trade?.id ?? `evt-${Date.now()}-${Math.random()}`,
             type: eventType as TimelineEventType,
-            timestamp: timestamp,
-            cycleId: store.cycleCount,
+            timestamp: rawData.trade?.timestamp ?? timestamp,
+            cycleId: rawData.trade?.cycleId ?? store.cycleCount,
             phaseId: phaseId,
-            data: rawData.state || rawData,
+            data: rawData.trade || rawData.state || rawData,
           };
 
           if (eventType === 'VAULT') store.setVault(rawData.state);

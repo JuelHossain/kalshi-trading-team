@@ -225,7 +225,7 @@ const PhaseAccordionItem: React.FC<{
   isComplete: boolean;
   onToggle: () => void;
   expanded: boolean;
-}> = ({ phaseId, events, isActive, _isPending, isComplete, onToggle, expanded }) => {
+}> = ({ phaseId, events, isActive, isPending, isComplete, onToggle, expanded }) => {
   const config = getPhaseConfig(phaseId);
 
   // Status visual logic

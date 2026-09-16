@@ -1,14 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DebateResponse, LogEntry } from '@shared/types';
 
 interface MarketAnalysisProps {
   onLog?: (message: string, agentId: number, level: LogEntry['level']) => void;
+  /** The market the engine is currently looking at, used to seed the query.
+   *  App.tsx has always passed this; the component never declared it, so it was
+   *  dropped silently and the tab always opened empty. */
+  market?: string | null;
 }
 
 const BACKEND_URL = ''; // Relative path handled by proxy
 
-const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog }) => {
+const MarketAnalysis: React.FC<MarketAnalysisProps> = ({ onLog, market }) => {
   const [query, setQuery] = useState('');
+
+  // Seed from the engine's current target, but never overwrite typing in progress.
+  useEffect(() => {
+    if (market) setQuery((q) => (q ? q : market));
+  }, [market]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DebateResponse | null>(null);
 

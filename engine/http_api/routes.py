@@ -14,6 +14,7 @@ from core.event_formatter import (
     format_log_event,
     format_simulation_event,
     format_state_event,
+    format_trade_event,
     format_vault_event,
 )
 from core.network import KalshiClient
@@ -593,6 +594,10 @@ def register_sse_subscriptions(engine):
             formatted_event = format_simulation_event(payload)
         elif event_type == "SYSTEM_STATE":
             formatted_event = format_state_event(payload)
+        elif event_type == "TRADE_RESULT":
+            formatted_event = format_trade_event(payload, engine.cycle_count)
+        elif event_type == "POSITION_CLOSED":
+            formatted_event = format_trade_event(payload, engine.cycle_count, closed=True)
         elif event_type == "SYSTEM_ERROR":
             formatted_event = format_error_event(payload, engine.cycle_count, AGENT_TO_PHASE, AGENT_NAME_TO_ID)
 
@@ -611,3 +616,6 @@ def register_sse_subscriptions(engine):
     asyncio.create_task(engine.bus.subscribe("SIM_RESULT", _broadcast_to_sse))
     asyncio.create_task(engine.bus.subscribe("SYSTEM_STATE", _broadcast_to_sse))
     asyncio.create_task(engine.bus.subscribe("SYSTEM_ERROR", _broadcast_to_sse))
+    # Entries and exits: the two events that mean the engine did something.
+    asyncio.create_task(engine.bus.subscribe("TRADE_RESULT", _broadcast_to_sse))
+    asyncio.create_task(engine.bus.subscribe("POSITION_CLOSED", _broadcast_to_sse))

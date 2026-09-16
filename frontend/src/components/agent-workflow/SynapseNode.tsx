@@ -1,8 +1,8 @@
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { motion } from 'framer-motion';
 
-interface SynapseNodeData {
+interface SynapseNodeDataShape {
   name: string;
   status: 'idle' | 'active' | 'processing';
   color: string;
@@ -14,7 +14,10 @@ interface SynapseNodeData {
   lastAction: string;
 }
 
-const SynapseNode = memo(({ data, selected }: NodeProps<SynapseNodeData>) => {
+type SynapseNodeData = SynapseNodeDataShape & Record<string, unknown>;
+type SynapseFlowNode = Node<SynapseNodeData, 'synapseNode'>;
+
+const SynapseNode = memo(({ data, selected }: NodeProps<SynapseFlowNode>) => {
   const { name, status, color, queueMetrics } = data;
 
   const isActive = status === 'active' || status === 'processing';

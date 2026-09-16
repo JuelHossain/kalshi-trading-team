@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import { TimelineEvent, VaultState, SimulationState, SystemHealthData } from '../../shared/types';
+import { TimelineEvent, VaultState, SimulationState, SystemHealthData } from '@shared/types';
 import { createAgentSlice, AgentSlice } from './slices/agentSlice';
 import { AuthMode } from '../components/Login';
 

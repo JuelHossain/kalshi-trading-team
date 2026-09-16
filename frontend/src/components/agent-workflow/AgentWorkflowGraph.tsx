@@ -329,12 +329,12 @@ const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({ className }) =>
           return {
             ...node,
             data: {
-              ...node.data,
+              ...(node.data as Record<string, unknown>),
               status: state.status,
               lastAction: state.lastAction,
               // Update metrics based on real data
               metrics: {
-                ...node.data.metrics,
+                ...((node.data as { metrics?: Record<string, unknown> }).metrics ?? {}),
                 ...(Number(agentId) === 1 && {
                   balance: vault?.total || 0,
                   cyclesCompleted: cycleCount,
@@ -476,8 +476,10 @@ const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({ className }) =>
         <Background
           color={isProcessing ? '#ec4899' : '#333333'}
           gap={50}
-          opacity={isProcessing ? 0.15 : 0.05}
           style={{
+            // v12's Background takes no `opacity` prop, so the value passed here
+            // was dropped and the pattern never faded with processing state.
+            opacity: isProcessing ? 0.15 : 0.05,
             transition: 'all 0.5s ease',
           }}
         />
@@ -502,7 +504,7 @@ const AgentWorkflowGraph: React.FC<AgentWorkflowGraphProps> = ({ className }) =>
             border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: '8px',
           }}
-          nodeColor={(node) => node.data.color}
+          nodeColor={(node) => String((node.data as { color?: string }).color ?? '#666')}
           maskColor="rgba(0, 0, 0, 0.6)"
         />
 

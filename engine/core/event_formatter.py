@@ -160,3 +160,33 @@ def format_gateway_log_event(
         "level": payload.get("level", "INFO"),
         "message": payload.get("message", ""),
     }
+
+
+def format_trade_event(payload: dict, cycle_count: int, closed: bool = False) -> dict:
+    """Format an executed trade, or a closed position, for SSE streaming.
+
+    The Hand published TRADE_RESULT on entry and POSITION_CLOSED on exit, and
+    neither was ever bridged to the dashboard. The workflow graph counted
+    executions with `events.filter(e => e.type === 'TRADE')` against a union
+    that had no 'TRADE' member, so that counter read zero however many orders
+    the engine placed -- the single most important thing it does was the one
+    thing the dashboard could not show.
+
+    Entries and exits share a shape so a client can render one timeline of
+    positions opened and closed rather than two unrelated feeds.
+    """
+    return {
+        "type": "TRADE",
+        "trade": {
+            "id": f"trade-{datetime.now().timestamp()}-{uuid.uuid4().hex[:8]}",
+            "timestamp": datetime.now().isoformat(),
+            "cycleId": cycle_count,
+            "action": "CLOSE" if closed else "OPEN",
+            "ticker": payload.get("ticker", "UNKNOWN"),
+            "side": (payload.get("side") or "yes").upper(),
+            "priceCents": payload.get("price") or payload.get("entry_price"),
+            "stakeCents": payload.get("stake"),
+            "outcome": payload.get("outcome", "pending"),
+            "reason": payload.get("reason", ""),
+        },
+    }

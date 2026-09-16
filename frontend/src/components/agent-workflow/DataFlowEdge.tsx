@@ -1,13 +1,16 @@
 import React from 'react';
-import { BaseEdge, EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
+import { BaseEdge, type Edge, type EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
 import { motion } from 'framer-motion';
 
-interface DataFlowEdgeData {
+interface DataFlowEdgeDataShape {
   flowType: 'authorization' | 'opportunity' | 'decision' | 'execution';
   active: boolean;
   color: string;
   label?: string;
 }
+
+type DataFlowEdgeData = DataFlowEdgeDataShape & Record<string, unknown>;
+type DataFlowEdgeType = Edge<DataFlowEdgeData, 'dataFlow'>;
 
 const DataFlowEdge = ({
   id,
@@ -19,7 +22,7 @@ const DataFlowEdge = ({
   targetPosition,
   data,
   selected,
-}: EdgeProps<DataFlowEdgeData>) => {
+}: EdgeProps<DataFlowEdgeType>) => {
   const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
