@@ -83,7 +83,6 @@ SENSES_QUEUE_BATCH_SIZE = 10   # Markets to queue at once
 
 # Brain Agent
 BRAIN_CONFIDENCE_THRESHOLD = 0.85  # 85% minimum AI confidence in its estimate
-BRAIN_SIMULATION_ITERATIONS = 10000  # unused; outcome maths is closed-form
 
 # Minimum edge (estimated probability minus contract price) required to trade.
 # Replaces BRAIN_MAX_VARIANCE, which could never bind: the variance of a binary
@@ -104,8 +103,6 @@ BRAIN_ESTIMATE_SAMPLES = 3
 # different from -- and more dangerous than -- believing the odds are even.
 BRAIN_MAX_DISAGREEMENT = 0.20
 
-# Retained only so an out-of-range value still reads as unusable upstream.
-BRAIN_MAX_VARIANCE = 0.25
 
 # Hand Agent
 HAND_MAX_STAKE_CENTS = 7500  # $75 max per trade

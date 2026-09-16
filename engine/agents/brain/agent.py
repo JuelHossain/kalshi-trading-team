@@ -15,11 +15,9 @@ from core.ai_utils import GEMINI_AVAILABLE, get_default_models, initialize_gemin
 from core.bus import EventBus
 from core.constants import (
     BRAIN_CONFIDENCE_THRESHOLD,
-    BRAIN_MAX_VARIANCE,
     BRAIN_ESTIMATE_SAMPLES,
     BRAIN_MAX_DISAGREEMENT,
     BRAIN_MIN_EDGE,
-    BRAIN_SIMULATION_ITERATIONS,
 )
 from core.db import log_to_db
 from core.ledger import record_decision
@@ -39,8 +37,6 @@ class BrainAgent(BaseAgent):
     """The Decision Maker - Intelligence & Mathematical Verification"""
 
     CONFIDENCE_THRESHOLD = BRAIN_CONFIDENCE_THRESHOLD
-    SIMULATION_ITERATIONS = BRAIN_SIMULATION_ITERATIONS
-    MAX_VARIANCE = BRAIN_MAX_VARIANCE
     MIN_EDGE = BRAIN_MIN_EDGE
     ESTIMATE_SAMPLES = BRAIN_ESTIMATE_SAMPLES
     MAX_DISAGREEMENT = BRAIN_MAX_DISAGREEMENT
@@ -231,7 +227,6 @@ class BrainAgent(BaseAgent):
                 "win_rate": float(sim_result.get("win_rate", 0.5)),
                 "ev_score": float(ev),
                 "variance": float(variance),
-                "iterations": int(self.SIMULATION_ITERATIONS),
                 "veto": bool(confidence < self.CONFIDENCE_THRESHOLD or ev < self.MIN_EDGE),
             },
             self.name,
@@ -286,12 +281,12 @@ class BrainAgent(BaseAgent):
         )
 
     def run_simulation(self, opportunity: dict, override_prob: float = None) -> dict:
-        """Monte Carlo simulation - delegates to simulation module"""
-        return run_simulation(
-            opportunity=opportunity,
-            override_prob=override_prob,
-            simulation_iterations=self.SIMULATION_ITERATIONS
-        )
+        """Evaluate the contract - delegates to the simulation module.
+
+        No longer a simulation: EV and variance have closed forms, so there is
+        nothing to iterate. The name is kept because call sites and tests use it.
+        """
+        return run_simulation(opportunity=opportunity, override_prob=override_prob)
 
     async def queue_for_execution(self, target: dict):
         """Push approved target to execution queue and Synapse"""

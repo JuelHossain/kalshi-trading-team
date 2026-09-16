@@ -1,4 +1,11 @@
 
+"""Legacy configuration.
+
+NOTE: this module is not imported by anything in the engine. Values set here
+have no effect. Live configuration is core/constants.py plus the environment
+variables documented in .env.example. Kept only so existing references do not
+break; do not add to it.
+"""
 import os
 
 from dotenv import load_dotenv
