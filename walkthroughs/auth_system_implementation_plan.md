@@ -4,7 +4,7 @@
 Implement secure password-based authentication system that switches between Demo (development) and Production (real trading) modes.
 
 ## Security Requirements
-- **Password**: `993728` (hardcoded for now, move to env var later)
+- **Password**: `«REDACTED — rotated; see README»` (hardcoded for now, move to env var later)
 - **Production Mode**: Real Kalshi API, real money trading
 - **Demo Mode**: Everything real EXCEPT Kalshi Demo API
 - **Clear Visual Indicators**: Users must always know which mode is active
@@ -27,7 +27,7 @@ Implement secure password-based authentication system that switches between Demo
 ```python
 # engine/core/auth.py - Add these functions
 
-AUTH_PASSWORD = "993728"
+AUTH_PASSWORD = "«REDACTED — rotated; see README»"
 
 async def login_handler(request: web.Request) -> web.Response:
     """Handle login request"""
@@ -533,7 +533,7 @@ export default ErrorBoundary;
 ## Phase 7: Testing Checklist
 
 ### Backend Tests:
-- [ ] Login with correct password (993728) → Production mode
+- [ ] Login with correct password («REDACTED — rotated; see README») → Production mode
 - [ ] Login with incorrect password → Error
 - [ ] Login without password → Demo mode
 - [ ] Verify production mode uses real Kalshi API

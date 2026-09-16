@@ -82,3 +82,54 @@ async def test_paper_request_stays_paper_either_way(engine, monkeypatch):
     seen.clear()
     monkeypatch.delenv("IS_PAPER_TRADING", raising=False)
     assert await _run(eng, seen, requested=True) is True
+
+
+@pytest.mark.asyncio
+async def test_cycle_arms_the_order_path_for_live(engine, monkeypatch):
+    """The decision must reach the order path, not just the display.
+
+    This is the defect these tests originally missed: every assertion above
+    passes while `is_paper_trading` goes only to the progress bar and the event
+    payloads. The switch consulted by KalshiClient.place_order is what actually
+    decides whether money moves, so that is what has to agree.
+    """
+    from core import trading_mode
+
+    eng, seen = engine
+    monkeypatch.delenv("IS_PAPER_TRADING", raising=False)
+    trading_mode.set_live(False)
+
+    assert await _run(eng, seen, requested=False) is False
+    assert trading_mode.is_live() is True, (
+        "cycle reported LIVE but the order path was left in paper mode"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cycle_disarms_the_order_path_for_paper(engine, monkeypatch):
+    """A paper cycle must leave the order path unable to place a real order."""
+    from core import trading_mode
+
+    eng, seen = engine
+    monkeypatch.delenv("IS_PAPER_TRADING", raising=False)
+    trading_mode.set_live(True)
+
+    assert await _run(eng, seen, requested=True) is True
+    assert trading_mode.is_live() is False, (
+        "cycle reported PAPER while the order path was still armed for live"
+    )
+
+
+@pytest.mark.asyncio
+async def test_override_disarms_the_order_path(engine, monkeypatch):
+    """IS_PAPER_TRADING must disarm the order path, not merely relabel the cycle."""
+    from core import trading_mode
+
+    eng, seen = engine
+    monkeypatch.setenv("IS_PAPER_TRADING", "true")
+    trading_mode.set_live(True)
+
+    assert await _run(eng, seen, requested=False) is True
+    assert trading_mode.is_live() is False, (
+        "IS_PAPER_TRADING relabelled the cycle but left live orders armed"
+    )

@@ -44,7 +44,7 @@ DDGS(proxy=None).text(query, max_results=3)
 **Location**: [engine/core/auth.py](engine/core/auth.py)
 **Fix**: Added login/verify/logout handlers
 ```python
-AUTH_PASSWORD = "993728"
+AUTH_PASSWORD = "«REDACTED — rotated; see README»"
 
 async def login_handler(request):
     # Demo mode: empty password
@@ -153,7 +153,7 @@ KALSHI_PROD_PRIVATE_KEY=...
 - [x] SSE endpoint accepts connections
 - [x] Authentication routes registered
 - [ ] Login with demo mode (empty password)
-- [ ] Login with production mode (password: 993728)
+- [ ] Login with production mode (password: «REDACTED — rotated; see README»)
 - [ ] Verify endpoint returns auth status
 - [ ] Logout clears session
 

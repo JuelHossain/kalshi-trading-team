@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 
 from core.display import AgentType, log_warning, log_error, get_display
 from core.lazy import lazy
+from core import trading_mode
 
 
 class KalshiClient:
@@ -176,7 +177,15 @@ class KalshiClient:
 
         Returns:
             Order response dict or None on failure
+
+        In paper mode this returns a simulated fill without contacting Kalshi.
+        The check sits here, at the one function entries, exits and Ragnarok all
+        funnel through, so no future call site can place a real order by
+        forgetting to ask whether it should.
         """
+        if not trading_mode.is_live():
+            return trading_mode.paper_fill(ticker, side, price, count, action)
+
         path = "/portfolio/orders"
         json_data = {
             "market_id": ticker,

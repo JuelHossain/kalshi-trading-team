@@ -129,9 +129,19 @@ class TestTheEmergencyPathNeverRaises:
 
 class TestTheClientCanExpressASell:
     @pytest.mark.asyncio
-    async def test_close_position_sends_a_sell(self):
-        """place_order had no action field at all, so a sell was unexpressable."""
+    async def test_close_position_sends_a_sell(self, monkeypatch):
+        """place_order had no action field at all, so a sell was unexpressable.
+
+        Arms live mode first: place_order now returns a simulated fill in paper
+        mode without reaching the transport, so a test of what goes over the
+        wire has to say it means the wire. That the guard intercepted this test
+        is itself the point -- Ragnarok's flatten routes through close_position,
+        so paper mode covers the emergency exit as well as ordinary entries.
+        """
+        from core import trading_mode
         from core.network import KalshiClient
+
+        monkeypatch.setattr(trading_mode, "_live", True)
 
         client = KalshiClient.__new__(KalshiClient)
         sent = {}

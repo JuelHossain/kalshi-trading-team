@@ -60,6 +60,7 @@ from core.network import kalshi_client
 from core.shared_utils import get_env_bool
 from core.synapse import Synapse
 from core.vault import RecursiveVault
+from core import trading_mode
 from http_api.routes import register_all_routes, register_sse_subscriptions
 
 # HTTP imports
@@ -259,6 +260,11 @@ class GhostEngine:
                 "Unset it on the server to allow live trading."
             )
             is_paper_trading = True
+
+        # Arm or disarm real order placement for this cycle. Until this line ran,
+        # is_paper_trading reached the display and the event payloads and nothing
+        # else -- a cycle labelled PAPER TRADING still sent live orders.
+        trading_mode.set_live(not is_paper_trading)
 
         self.is_processing = True
 
