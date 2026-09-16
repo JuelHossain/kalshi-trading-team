@@ -84,6 +84,7 @@ class GhostEngine:
         self.agents: list[BaseAgent] = []
         self.cycle_count: int = 0
         self.is_processing: bool = False
+        self._shutting_down: bool = False
         self.last_cycle_time: datetime = None  # Rate limit tracking
         self.manual_kill_switch: bool = False
         self.sse_clients: set[asyncio.Queue] = set()
@@ -399,9 +400,20 @@ class GhostEngine:
         """
         Shutdown the engine gracefully
 
+        Idempotent. Two independent paths can now request a shutdown -- the
+        SYSTEM_FATAL bus event that call sites publish explicitly, and the
+        ErrorManager escalating a CRITICAL error -- and a trading engine
+        tearing down its agents and closing its API session twice concurrently
+        is a good way to turn a clean stop into a messy one.
+
         Args:
             reason: The reason for the shutdown
         """
+        if self._shutting_down:
+            log_warning(f"Shutdown already in progress; ignoring: {reason}")
+            return
+        self._shutting_down = True
+
         log_critical(f"SHUTDOWN PROTOCOL INITIATED: {reason}")
         self.running = False
 
