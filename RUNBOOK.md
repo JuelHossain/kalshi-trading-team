@@ -162,6 +162,30 @@ npx pm2 logs sentient-alpha-engine
 | `No module named 'ddgs'` | Dependencies not installed into the active venv. |
 | Dashboard shows nothing | Engine not running, or not on `:3002`. |
 
+## Is the bot any good?
+
+The engine records every decision it makes -- approvals and rejections alike --
+to `ghost_ledger.db`, and fills in the outcome once a market settles. That is
+how you answer the only question that matters:
+
+```bash
+source engine/venv/bin/activate
+PYTHONPATH=engine:. python3 -c "
+from core.ledger import calibration, realised_edge
+for b in calibration():
+    print(f\"{b['bucket']:>9}  n={b['n']:4d}  said {b['predicted']:.0%}  happened {b['actual']:.0%}  gap {b['gap']:+.2f}\")
+print(realised_edge())
+"
+```
+
+A calibrated engine's `said` and `happened` track each other. If it says 80%
+and the event happens 50% of the time, it is confidently wrong, and no amount
+of work downstream of that will make it profitable. Check this before every
+decision to increase size.
+
+Settlement is not automatic yet -- call `record_settlement(ticker, settled_yes)`
+as markets resolve.
+
 ## Stop
 
 ```bash

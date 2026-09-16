@@ -237,3 +237,47 @@ class TestSafetyRulesRefuseTheTrade:
         await hand.on_execution_ready(None)
 
         cycle["kalshi"].place_order.assert_not_awaited()
+
+
+class TestEveryDecisionIsRecorded:
+    """The Brain must leave a trail whatever it decides."""
+
+    @pytest.mark.asyncio
+    async def test_an_approval_is_recorded(self, cycle):
+        from core.ledger import calibration, record_settlement
+
+        cycle["brain"].run_debate = _debate()
+        await cycle["brain"].process_single_opportunity(_opportunity(kalshi_price=0.50))
+        record_settlement("KXTEST-01", settled_yes=True)
+
+        rows = calibration()
+        assert rows and rows[0]["n"] == 1
+
+    @pytest.mark.asyncio
+    async def test_a_veto_is_recorded(self, cycle):
+        from core.ledger import calibration, record_settlement
+
+        cycle["brain"].run_debate = _debate(probability=0.51)
+        await cycle["brain"].process_single_opportunity(_opportunity(kalshi_price=0.50))
+        record_settlement("KXTEST-01", settled_yes=False)
+
+        rows = calibration()
+        assert rows and rows[0]["n"] == 1, "a rejected trade left no record"
+
+    @pytest.mark.asyncio
+    async def test_stale_data_is_recorded(self, cycle, monkeypatch):
+        """Patch the name in brain.agent: it imports record_decision directly,
+        so patching core.ledger would leave the bound reference untouched."""
+        import agents.brain.agent as brain_agent
+
+        seen = []
+        monkeypatch.setattr(
+            brain_agent, "record_decision",
+            lambda *a, **k: seen.append(k.get("outcome")) or 1,
+        )
+
+        cycle["brain"].run_debate = _debate()
+        stale = (datetime.now() - timedelta(seconds=120)).isoformat()
+        await cycle["brain"].process_single_opportunity(_opportunity(timestamp=stale))
+
+        assert "STALE" in seen, f"stale rejection left no ledger entry, saw {seen}"

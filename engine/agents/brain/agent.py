@@ -20,6 +20,7 @@ from core.constants import (
     BRAIN_SIMULATION_ITERATIONS,
 )
 from core.db import log_to_db
+from core.ledger import record_decision
 from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
 
 from .debate import load_personas, run_debate
@@ -160,6 +161,10 @@ class BrainAgent(BaseAgent):
         # Check opportunity freshness
         is_fresh, freshness_status = check_opportunity_freshness(opportunity, self.log)
         if not is_fresh:
+            record_decision(
+                ticker, opportunity.get("kalshi_price", 0.5),
+                outcome=freshness_status, veto_reason="market data too old",
+            )
             return freshness_status
 
         await self.log(f"Analyzing: {ticker}")
@@ -173,6 +178,11 @@ class BrainAgent(BaseAgent):
         if confidence == 0 or estimated_prob is None:
             reason = "Zero AI confidence" if confidence == 0 else "No probability estimate"
             await self.log(f"[VETO] VETOED: {ticker} | {reason} - skipping simulation", level="WARN")
+            record_decision(
+                ticker, opportunity.get("kalshi_price", 0.5),
+                outcome="VETOED", estimated_probability=estimated_prob,
+                confidence=confidence, veto_reason=reason,
+            )
             return "VETOED"
 
         # 2. Monte Carlo Simulation
@@ -185,6 +195,11 @@ class BrainAgent(BaseAgent):
         # Only log and publish if we have valid data
         if variance == 999.0:
             await self.log(f"[SKIP] SKIPPED: {ticker} | No valid probability data available", level="DEBUG")
+            record_decision(
+                ticker, opportunity.get("kalshi_price", 0.5),
+                outcome="SKIPPED", confidence=confidence,
+                veto_reason="no usable probability",
+            )
             return "SKIPPED"
 
         prob_str = f"{estimated_prob:.2f}" if estimated_prob is not None else "N/A"
@@ -208,6 +223,11 @@ class BrainAgent(BaseAgent):
         # threshold, so the variance test could never reject anything.
         if confidence >= self.CONFIDENCE_THRESHOLD and ev >= self.MIN_EDGE:
             await self.log(f"[OK] APPROVED: {ticker} | Pushing to execution.")
+            record_decision(
+                ticker, opportunity.get("kalshi_price", 0.5),
+                outcome="APPROVED", estimated_probability=estimated_prob,
+                confidence=confidence,
+            )
             await self.queue_for_execution(
                 {
                     **opportunity,
@@ -226,6 +246,11 @@ class BrainAgent(BaseAgent):
             else f"Edge {ev:+.3f} below minimum {self.MIN_EDGE:+.3f}"
         )
         await self.log(f"[X] VETOED: {ticker} | Reason: {reason}")
+        record_decision(
+            ticker, opportunity.get("kalshi_price", 0.5),
+            outcome="VETOED", estimated_probability=estimated_prob,
+            confidence=confidence, veto_reason=reason,
+        )
         return "VETOED"
 
     async def run_debate(self, opportunity: dict) -> dict:
