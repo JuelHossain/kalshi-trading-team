@@ -16,6 +16,7 @@ from core.bus import EventBus
 from core.constants import (
     BRAIN_CONFIDENCE_THRESHOLD,
     BRAIN_MAX_VARIANCE,
+    BRAIN_MIN_EDGE,
     BRAIN_SIMULATION_ITERATIONS,
 )
 from core.db import log_to_db
@@ -37,6 +38,7 @@ class BrainAgent(BaseAgent):
     CONFIDENCE_THRESHOLD = BRAIN_CONFIDENCE_THRESHOLD
     SIMULATION_ITERATIONS = BRAIN_SIMULATION_ITERATIONS
     MAX_VARIANCE = BRAIN_MAX_VARIANCE
+    MIN_EDGE = BRAIN_MIN_EDGE
 
     # Gemini model names to try (in order of preference)
     DEFAULT_MODELS = get_default_models()
@@ -197,12 +199,14 @@ class BrainAgent(BaseAgent):
                 "ev_score": float(ev),
                 "variance": float(variance),
                 "iterations": int(self.SIMULATION_ITERATIONS),
-                "veto": bool(confidence < self.CONFIDENCE_THRESHOLD or variance > self.MAX_VARIANCE),
+                "veto": bool(confidence < self.CONFIDENCE_THRESHOLD or ev < self.MIN_EDGE),
             },
             self.name,
         )
 
-        if confidence >= self.CONFIDENCE_THRESHOLD and variance <= self.MAX_VARIANCE and ev > 0:
+        # Gate on edge, not variance. p(1-p) peaks at exactly the old 0.25
+        # threshold, so the variance test could never reject anything.
+        if confidence >= self.CONFIDENCE_THRESHOLD and ev >= self.MIN_EDGE:
             await self.log(f"[OK] APPROVED: {ticker} | Pushing to execution.")
             await self.queue_for_execution(
                 {
@@ -215,7 +219,11 @@ class BrainAgent(BaseAgent):
             )
             return "APPROVED"
 
-        reason = "Low confidence" if confidence < self.CONFIDENCE_THRESHOLD else ("High variance" if variance > self.MAX_VARIANCE else "Negative EV")
+        reason = (
+            "Low confidence"
+            if confidence < self.CONFIDENCE_THRESHOLD
+            else f"Edge {ev:+.3f} below minimum {self.MIN_EDGE:+.3f}"
+        )
         await self.log(f"[X] VETOED: {ticker} | Reason: {reason}")
         return "VETOED"
 

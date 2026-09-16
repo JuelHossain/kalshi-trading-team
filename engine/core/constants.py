@@ -82,9 +82,18 @@ SENSES_STOCK_BUFFER_SIZE = 30  # Total markets to pull from Kalshi
 SENSES_QUEUE_BATCH_SIZE = 10   # Markets to queue at once
 
 # Brain Agent
-BRAIN_CONFIDENCE_THRESHOLD = 0.85  # 85% minimum confidence
-BRAIN_SIMULATION_ITERATIONS = 10000
-BRAIN_MAX_VARIANCE = 0.25  # Maximum acceptable variance
+BRAIN_CONFIDENCE_THRESHOLD = 0.85  # 85% minimum AI confidence in its estimate
+BRAIN_SIMULATION_ITERATIONS = 10000  # unused; outcome maths is closed-form
+
+# Minimum edge (estimated probability minus contract price) required to trade.
+# Replaces BRAIN_MAX_VARIANCE, which could never bind: the variance of a binary
+# outcome is p(1-p), whose maximum is exactly the 0.25 the veto tested against.
+# Edge is the quantity that actually decides whether a trade is worth taking,
+# and a floor on it keeps the engine out of thin edges that the spread eats.
+BRAIN_MIN_EDGE = 0.05  # 5c of expected profit per $1 contract
+
+# Retained only so an out-of-range value still reads as unusable upstream.
+BRAIN_MAX_VARIANCE = 0.25
 
 # Hand Agent
 HAND_MAX_STAKE_CENTS = 7500  # $75 max per trade

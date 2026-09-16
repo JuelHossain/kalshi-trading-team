@@ -153,16 +153,34 @@ class TestSafetyRulesRefuseTheTrade:
         assert await cycle["synapse"].executions.size() == 0
 
     @pytest.mark.asyncio
-    async def test_variance_above_the_veto_does_not_trade(self, cycle):
+    async def test_edge_below_the_minimum_does_not_trade(self, cycle):
+        """Replaces the old variance veto, which could never bind.
+
+        Variance of a binary outcome is p(1-p), maximum 0.25, and the veto
+        tested for more than 0.25. Edge is the quantity that decides whether a
+        trade is worth taking, and a floor on it can actually reject one.
+        """
         brain = cycle["brain"]
-        brain.run_debate = _debate()
-        with patch.object(
-            brain, "run_simulation",
-            return_value={"variance": brain.MAX_VARIANCE + 0.01, "ev": 5.0, "win_rate": 0.8},
-        ):
-            await brain.process_single_opportunity(_opportunity())
+        # Price 0.50, estimate 0.52 -> edge 0.02, under the 0.05 minimum.
+        brain.run_debate = _debate(probability=0.52)
+
+        await brain.process_single_opportunity(
+            _opportunity(kalshi_price=0.50)
+        )
 
         assert await cycle["synapse"].executions.size() == 0
+
+    @pytest.mark.asyncio
+    async def test_edge_at_the_minimum_does_trade(self, cycle):
+        """The boundary is inclusive, so a trade exactly at the floor is taken."""
+        brain = cycle["brain"]
+        brain.run_debate = _debate(probability=0.50 + brain.MIN_EDGE)
+
+        await brain.process_single_opportunity(
+            _opportunity(kalshi_price=0.50)
+        )
+
+        assert await cycle["synapse"].executions.size() == 1
 
     @pytest.mark.asyncio
     async def test_balance_below_the_hard_floor_blocks_the_order(self, cycle):
