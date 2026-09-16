@@ -16,6 +16,8 @@ from core.bus import EventBus
 from core.constants import (
     BRAIN_CONFIDENCE_THRESHOLD,
     BRAIN_MAX_VARIANCE,
+    BRAIN_ESTIMATE_SAMPLES,
+    BRAIN_MAX_DISAGREEMENT,
     BRAIN_MIN_EDGE,
     BRAIN_SIMULATION_ITERATIONS,
 )
@@ -23,7 +25,7 @@ from core.db import log_to_db
 from core.ledger import record_decision
 from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
 
-from .debate import load_personas, run_debate
+from .debate import load_personas, run_debate_ensemble
 from .monitor import (
     check_opportunity_freshness,
     handle_restock_trigger,
@@ -40,6 +42,8 @@ class BrainAgent(BaseAgent):
     SIMULATION_ITERATIONS = BRAIN_SIMULATION_ITERATIONS
     MAX_VARIANCE = BRAIN_MAX_VARIANCE
     MIN_EDGE = BRAIN_MIN_EDGE
+    ESTIMATE_SAMPLES = BRAIN_ESTIMATE_SAMPLES
+    MAX_DISAGREEMENT = BRAIN_MAX_DISAGREEMENT
 
     # Gemini model names to try (in order of preference)
     DEFAULT_MODELS = get_default_models()
@@ -173,6 +177,7 @@ class BrainAgent(BaseAgent):
         debate_result = await self.run_debate(opportunity)
         estimated_prob = debate_result.get("estimated_probability", 0.5)
         confidence = debate_result.get("confidence", 0)
+        disagreement = debate_result.get("disagreement", 0.0)
 
         # FIX: Variance Veto Logic Bypass (Anti-Audit)
         if confidence == 0 or estimated_prob is None:
@@ -185,7 +190,20 @@ class BrainAgent(BaseAgent):
             )
             return "VETOED"
 
-        # 2. Monte Carlo Simulation
+        # Independent estimates that disagree widely mean the model does not
+        # know. That is a different condition from believing the odds are even,
+        # and a more dangerous one to trade into.
+        if disagreement > self.MAX_DISAGREEMENT:
+            reason = f"Estimates disagree by {disagreement:.2f} (max {self.MAX_DISAGREEMENT:.2f})"
+            await self.log(f"[VETO] VETOED: {ticker} | {reason}", level="WARN")
+            record_decision(
+                ticker, opportunity.get("kalshi_price", 0.5),
+                outcome="VETOED", estimated_probability=estimated_prob,
+                confidence=confidence, veto_reason=reason,
+            )
+            return "VETOED"
+
+        # 2. Outcome maths
         sim_result = self.run_simulation(opportunity, override_prob=estimated_prob)
 
         # 3. Decision
@@ -254,8 +272,9 @@ class BrainAgent(BaseAgent):
         return "VETOED"
 
     async def run_debate(self, opportunity: dict) -> dict:
-        """Run multi-persona AI debate - delegates to debate module"""
-        return await run_debate(
+        """Draw ESTIMATE_SAMPLES independent estimates and aggregate them."""
+        return await run_debate_ensemble(
+            samples=self.ESTIMATE_SAMPLES,
             opportunity=opportunity,
             client=self.client,
             gemini_model=self.gemini_model,

@@ -293,3 +293,65 @@ Respond in JSON format:
         )
         await asyncio.sleep(0.5)
         return {"confidence": 0.0, "reasoning": f"Debate failed ({error_type}) - trade rejected", "estimated_probability": None}
+
+
+async def run_debate_ensemble(samples: int = 1, **kwargs) -> dict:
+    """Draw several independent estimates and report how much they disagree.
+
+    A single call gives a probability with no uncertainty attached to it. The
+    engine treated that number as fact, and its only risk gate was the variance
+    of the outcome -- p(1-p), which is a fixed function of the probability and
+    so carries no information the probability does not already carry.
+
+    Sampling the same question repeatedly gives a spread. That spread is a real
+    signal: it varies independently of the probability, so it can actually
+    reject a trade. Wide disagreement means the model does not know, which is
+    different from -- and more dangerous than -- it believing the odds are even.
+
+    Returns the usual debate fields plus:
+        disagreement: max estimate minus min estimate, 0.0 for a single sample
+        samples:      how many usable estimates were obtained
+
+    The median is used rather than the mean, so one wild draw cannot drag the
+    estimate. Confidence is taken as the minimum across samples: if any run was
+    unsure, the ensemble is unsure.
+    """
+    if samples <= 1:
+        result = await run_debate(**kwargs)
+        result.setdefault("disagreement", 0.0)
+        result.setdefault("samples", 1)
+        return result
+
+    results = await asyncio.gather(
+        *[run_debate(**kwargs) for _ in range(samples)], return_exceptions=True
+    )
+
+    usable = [
+        r for r in results
+        if isinstance(r, dict) and r.get("estimated_probability") is not None
+    ]
+
+    if not usable:
+        return {
+            "confidence": 0.0,
+            "reasoning": "No usable estimate from any sample - trade rejected",
+            "estimated_probability": None,
+            "disagreement": 1.0,
+            "samples": 0,
+        }
+
+    probabilities = sorted(r["estimated_probability"] for r in usable)
+    middle = len(probabilities) // 2
+    median = (
+        probabilities[middle]
+        if len(probabilities) % 2
+        else (probabilities[middle - 1] + probabilities[middle]) / 2
+    )
+
+    return {
+        "confidence": min(r.get("confidence", 0.0) for r in usable),
+        "reasoning": usable[0].get("reasoning", ""),
+        "estimated_probability": median,
+        "disagreement": probabilities[-1] - probabilities[0],
+        "samples": len(usable),
+    }

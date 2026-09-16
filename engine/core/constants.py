@@ -92,6 +92,18 @@ BRAIN_SIMULATION_ITERATIONS = 10000  # unused; outcome maths is closed-form
 # and a floor on it keeps the engine out of thin edges that the spread eats.
 BRAIN_MIN_EDGE = 0.05  # 5c of expected profit per $1 contract
 
+# How many independent estimates to draw per market. One opinion has no
+# uncertainty attached to it; several do. Set to 1 to disable sampling and pay
+# a single API call per market.
+BRAIN_ESTIMATE_SAMPLES = 3
+
+# Reject when independent estimates disagree by more than this. This is the
+# risk signal the variance veto was reaching for and could never provide:
+# unlike p(1-p), disagreement varies independently of the probability, so it
+# can actually bind. Wide disagreement means the model does not know, which is
+# different from -- and more dangerous than -- believing the odds are even.
+BRAIN_MAX_DISAGREEMENT = 0.20
+
 # Retained only so an out-of-range value still reads as unusable upstream.
 BRAIN_MAX_VARIANCE = 0.25
 
