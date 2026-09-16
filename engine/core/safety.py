@@ -10,58 +10,118 @@ from core.network import kalshi_client
 
 async def execute_ragnarok() -> dict[str, Any]:
     """
-    RAGNAROK PROTOCOL: Emergency liquidation of all open orders.
-    1. Fetch all open orders.
-    2. Cancel each one asynchronously.
-    3. Return usage report.
+    RAGNAROK PROTOCOL: emergency flattening.
+
+    1. Cancel every resting order, so nothing new can fill mid-liquidation.
+    2. Close every open position.
+    3. Report both.
+
+    Step 2 did not exist. The protocol cancelled unfilled orders and stopped,
+    which meant it could not reduce exposure at all -- a filled order is a
+    position, and nothing here could touch one. A test comment claimed this
+    called kalshi_client.close_all_positions(); no such method existed.
+
+    Cancelling first is deliberate: flattening while orders are still resting
+    invites a fill against the exit.
     """
     log_critical("INITIATING RAGNAROK PROTOCOL...", AgentType.HAND)
 
-    # 1. Fetch Open Orders
-    # Kalshi API V2: GET /portfolio/orders?status=active
-    path = "/portfolio/orders"
-    params = {"status": "active"}
+    cancelled_count, orders_found = await _cancel_all_orders()
+    positions_closed, positions_found = await _close_all_positions()
 
-    response = await kalshi_client.request("GET", path, params=params)
+    log_critical(
+        f"RAGNAROK COMPLETE. Cancelled {cancelled_count}/{orders_found} orders, "
+        f"closed {positions_closed}/{positions_found} positions.",
+        AgentType.HAND,
+    )
 
-    if not response or "orders" not in response:
-        log_warning("No active orders found or API failed.", AgentType.HAND)
-        return {"status": "success", "orders_cancelled": 0, "message": "No active orders found."}
+    return {
+        "status": "success",
+        "orders_found": orders_found,
+        "orders_cancelled": cancelled_count,
+        "positions_found": positions_found,
+        "positions_closed": positions_closed,
+        "message": (
+            f"Ragnarok complete. Cancelled {cancelled_count} orders, "
+            f"closed {positions_closed} positions."
+        ),
+    }
 
-    orders = response["orders"]
+
+async def _cancel_all_orders() -> tuple[int, int]:
+    """Cancel every resting order. Returns (cancelled, found).
+
+    Having no orders to cancel is not a reason to stop: the positions below
+    still need closing, and in a real emergency the orders have usually already
+    filled, which is exactly why there are positions.
+    """
+    try:
+        response = await kalshi_client.request(
+            "GET", "/portfolio/orders", params={"status": "active"}
+        )
+    except Exception as e:  # noqa: BLE001 - emergency path must not raise
+        log_error(f"Ragnarok could not read orders: {e}", AgentType.HAND)
+        return (0, 0)
+
+    orders = (response or {}).get("orders") or []
     if not orders:
         log_info("No active orders to cancel.", AgentType.HAND)
-        return {"status": "success", "orders_cancelled": 0, "message": "No active orders."}
+        return (0, 0)
 
     log_critical(f"Found {len(orders)} active orders. CANCELLING ALL.", AgentType.HAND)
 
-    # 2. Cancel All Orders
-    cancelled_count = 0
-    tasks = []
-
-    async def cancel_order(order_id: str):
-        # DELETE /portfolio/orders/{order_id}
-        c_path = f"/portfolio/orders/{order_id}"
-        c_res = await kalshi_client.request("DELETE", c_path)
-        if c_res:
+    async def cancel_one(order_id: str) -> bool:
+        try:
+            result = await kalshi_client.request("DELETE", f"/portfolio/orders/{order_id}")
+        except Exception as e:  # noqa: BLE001
+            log_error(f"Failed to cancel order {order_id}: {e}", AgentType.HAND)
+            return False
+        if result:
             log_info(f"Cancelled order {order_id}", AgentType.HAND)
             return True
         log_error(f"Failed to cancel order {order_id}", AgentType.HAND)
         return False
 
-    for order in orders:
-        order_id = order.get("order_id")
-        if order_id:
-            tasks.append(cancel_order(order_id))
-
+    tasks = [cancel_one(o["order_id"]) for o in orders if o.get("order_id")]
     results = await asyncio.gather(*tasks)
-    cancelled_count = sum(1 for r in results if r)
+    return (sum(1 for r in results if r), len(orders))
 
-    log_critical(f"RAGNAROK COMPLETE. Cancelled {cancelled_count}/{len(orders)} orders.", AgentType.HAND)
 
-    return {
-        "status": "success",
-        "orders_found": len(orders),
-        "orders_cancelled": cancelled_count,
-        "message": f"Ragnarok complete. Cancelled {cancelled_count} orders."
-    }
+async def _close_all_positions() -> tuple[int, int]:
+    """Sell every open holding. Returns (closed, found).
+
+    Never raises: this runs on the emergency path, and a failure to read
+    positions must not prevent the order cancellations above from being
+    reported.
+    """
+    try:
+        positions = await kalshi_client.get_positions()
+    except Exception as e:  # noqa: BLE001 - emergency path must not raise
+        log_error(f"Ragnarok could not read positions: {e}", AgentType.HAND)
+        return (0, 0)
+
+    open_positions = [p for p in positions if p.get("position")]
+    if not open_positions:
+        log_info("No open positions to close.", AgentType.HAND)
+        return (0, 0)
+
+    log_critical(f"Closing {len(open_positions)} open positions.", AgentType.HAND)
+
+    async def close_one(position: dict) -> bool:
+        ticker = position.get("ticker") or position.get("market_id")
+        count = abs(int(position.get("position", 0)))
+        if not ticker or count <= 0:
+            return False
+        try:
+            result = await kalshi_client.close_position(ticker, count)
+        except Exception as e:  # noqa: BLE001
+            log_error(f"Failed to close {ticker}: {e}", AgentType.HAND)
+            return False
+        if result:
+            log_info(f"Closed {count} contracts of {ticker}", AgentType.HAND)
+            return True
+        log_error(f"Failed to close {ticker}", AgentType.HAND)
+        return False
+
+    results = await asyncio.gather(*[close_one(p) for p in open_positions])
+    return (sum(1 for r in results if r), len(open_positions))

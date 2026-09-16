@@ -160,6 +160,7 @@ class KalshiClient:
         type: str,
         price: int,
         count: int,
+        action: str = "buy",
     ) -> dict | None:
         """Place an order on Kalshi.
 
@@ -169,6 +170,9 @@ class KalshiClient:
             type: 'limit' or 'market'
             price: Price in cents (1-99)
             count: Number of contracts
+            action: 'buy' or 'sell'. The field was previously absent entirely,
+                which left the engine unable to express a sell at all -- there
+                was no way to exit a position once entered.
 
         Returns:
             Order response dict or None on failure
@@ -176,12 +180,42 @@ class KalshiClient:
         path = "/portfolio/orders"
         json_data = {
             "market_id": ticker,
+            "action": action.lower(),
             "side": side.lower(),
             "type": type.lower(),
             "price": price,
             "count": count,
         }
         return await self.request("POST", path, json_data=json_data)
+
+    async def get_positions(self) -> list[dict]:
+        """Open positions.
+
+        The client had no way to read these, so the engine could not know what
+        it held: it could not avoid doubling into a market, size against
+        existing exposure, or close anything.
+        """
+        res = await self.request("GET", "/portfolio/positions")
+        if res and "market_positions" in res:
+            return res["market_positions"]
+        if res and "positions" in res:
+            return res["positions"]
+        return []
+
+    async def close_position(self, ticker: str, count: int, side: str = "yes") -> dict | None:
+        """Flatten a holding by selling it back.
+
+        Uses a marketable limit at the extreme tick so an emergency exit is not
+        left resting in the book. Getting out matters more than the last cent.
+        """
+        return await self.place_order(
+            ticker=ticker,
+            side=side,
+            type="limit",
+            price=1 if side.lower() == "yes" else 99,
+            count=count,
+            action="sell",
+        )
 
     async def close(self):
         if self._session and not self._session.closed:
