@@ -37,6 +37,31 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 
+def _force_utf8_stdio() -> None:
+    """Make stdout able to carry the emoji this module prints.
+
+    A stock Windows console is cp1252. The startup banner contains emoji, so
+    the very first print raised UnicodeEncodeError and killed the engine
+    before any agent started -- then the shutdown handler raised again trying
+    to log the failure. Reconfiguring here rather than at a call site means
+    importing this module is enough to make its own output safe.
+    """
+    if sys.platform != "win32":
+        return
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            # A redirected or already-detached stream; rich falls back to
+            # ASCII box drawing on its own.
+            pass
+
+
+_force_utf8_stdio()
+
 # Initialize Rich Console
 console = Console()
 
