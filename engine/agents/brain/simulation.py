@@ -20,7 +20,10 @@ below expresses.
 
 
 # Returned when no usable probability exists, to force a veto upstream.
-NO_ESTIMATE = {"win_rate": 0.0, "ev": -999.0, "variance": 999.0, "edge": -999.0}
+NO_ESTIMATE = {
+    "win_rate": 0.0, "ev": -999.0, "variance": 999.0, "edge": -999.0,
+    "side": "yes", "side_price": 0.5, "side_probability": 0.0,
+}
 
 
 def run_simulation(
@@ -47,14 +50,43 @@ def run_simulation(
         return dict(NO_ESTIMATE)
 
     price = opportunity.get("kalshi_price", 0.5)
+    side, side_price, side_probability, edge = best_side(probability, price)
 
-    edge = probability - price
     return {
-        "win_rate": float(probability),
+        "win_rate": float(side_probability),
         "ev": float(edge),
         "variance": float(probability * (1.0 - probability)),
         "edge": float(edge),
+        "side": side,
+        "side_price": float(side_price),
+        "side_probability": float(side_probability),
     }
+
+
+def best_side(probability: float, yes_price: float) -> tuple[str, float, float, float]:
+    """Pick the side of the contract worth buying, and its edge.
+
+    A Kalshi market has two sides that always sum to 1. Holding YES at k pays 1
+    when the event happens; holding NO at (1 - k) pays 1 when it does not.
+
+        buy YES  edge = p - k
+        buy NO   edge = (1 - p) - (1 - k) = k - p
+
+    The engine only ever bought YES, so it could express "this is too cheap"
+    and never "this is too expensive". Every market it judged overpriced -- half
+    of all disagreements with the market, and exactly as tradeable -- was
+    discarded rather than shorted.
+
+    Returns (side, price of that side, probability of that side, edge). The
+    edge is the larger of the two, and is negative only when the estimate
+    matches the price, where neither side is worth buying.
+    """
+    yes_edge = probability - yes_price
+    no_edge = yes_price - probability
+
+    if no_edge > yes_edge:
+        return ("no", 1.0 - yes_price, 1.0 - probability, no_edge)
+    return ("yes", yes_price, probability, yes_edge)
 
 
 def kelly_fraction(probability: float, price: float) -> float:
@@ -62,8 +94,12 @@ def kelly_fraction(probability: float, price: float) -> float:
 
         f* = (p - k) / (1 - k)
 
-    Zero when there is no edge, and never negative -- this engine only buys,
-    so a negative edge means "do not trade", not "trade the other way".
+    Takes the price and probability OF THE SIDE BEING BOUGHT, so it serves NO
+    positions unchanged: pass (1 - p) and (1 - k) and the same formula applies.
+
+    Zero when there is no edge, and never negative -- a negative edge means
+    "do not buy this side", and best_side() has already chosen which side that
+    question is being asked about.
     """
     if price >= 1.0 or price <= 0.0:
         return 0.0

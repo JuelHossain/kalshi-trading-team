@@ -41,15 +41,24 @@ def test_simulation_low_prob_high_payoff(brain_agent):
     print(f"Low Prob EV: {result['ev']}")
     assert result["ev"] > 0.05
 
-def test_simulation_negative_ev(brain_agent):
-    """Test Case 3: 50/50 Coin Flip with negative EV"""
-    opportunity = {
-        "kalshi_price": 0.6,
-        "vegas_prob": 0.5
-    }
-    
+def test_an_overpriced_market_becomes_a_no_trade(brain_agent):
+    """An estimate below the price is a NO opportunity, not a dead one.
+
+    This asserted ev < -0.05 and treated the market as untradeable. That
+    encoded the buy-YES-only assumption: at 60c with a 50% estimate the market
+    is overpriced by 10c, which is exactly as tradeable as being underpriced by
+    10c -- you buy NO at 40c instead.
+    """
+    opportunity = {"kalshi_price": 0.6, "vegas_prob": 0.5}
+
     result = brain_agent.run_simulation(opportunity)
-    
-    # EV = (0.5 * 0.4) - (0.5 * 0.6) = 0.2 - 0.3 = -0.1
-    print(f"Neg Prob EV: {result['ev']}")
-    assert result["ev"] < -0.05
+
+    assert result["side"] == "no"
+    assert result["ev"] == pytest.approx(0.1)          # 0.6 - 0.5
+    assert result["side_price"] == pytest.approx(0.4)   # 1 - 0.6
+    assert result["side_probability"] == pytest.approx(0.5)
+
+
+def test_a_fairly_priced_market_has_no_edge_either_way(brain_agent):
+    result = brain_agent.run_simulation({"kalshi_price": 0.5, "vegas_prob": 0.5})
+    assert result["ev"] == pytest.approx(0.0)

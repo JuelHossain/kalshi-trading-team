@@ -205,6 +205,9 @@ class BrainAgent(BaseAgent):
         # 3. Decision
         variance = sim_result.get("variance", 1)
         ev = sim_result.get("ev", 0)
+        side = sim_result.get("side", "yes")
+        side_price = sim_result.get("side_price", 0.5)
+        side_probability = sim_result.get("side_probability", estimated_prob)
 
         # Only log and publish if we have valid data
         if variance == 999.0:
@@ -235,7 +238,7 @@ class BrainAgent(BaseAgent):
         # Gate on edge, not variance. p(1-p) peaks at exactly the old 0.25
         # threshold, so the variance test could never reject anything.
         if confidence >= self.CONFIDENCE_THRESHOLD and ev >= self.MIN_EDGE:
-            await self.log(f"[OK] APPROVED: {ticker} | Pushing to execution.")
+            await self.log(f"[OK] APPROVED: {ticker} | Buying {side.upper()} @ {side_price*100:.0f}c | Pushing to execution.")
             record_decision(
                 ticker, opportunity.get("kalshi_price", 0.5),
                 outcome="APPROVED", estimated_probability=estimated_prob,
@@ -248,6 +251,9 @@ class BrainAgent(BaseAgent):
                     "variance": variance,
                     "ev": ev,
                     "estimated_probability": estimated_prob,
+                    "side": side,
+                    "side_price": side_price,
+                    "side_probability": side_probability,
                     "debate_reasoning": debate_result.get("reasoning", ""),
                 }
             )
@@ -328,6 +334,9 @@ class BrainAgent(BaseAgent):
                     confidence=execution_package["confidence"],
                     monte_carlo_ev=execution_package["monte_carlo_ev"],
                     estimated_probability=target.get("estimated_probability"),
+                    side=str(target.get("side", "yes")).upper(),
+                    side_price=target.get("side_price"),
+                    side_probability=target.get("side_probability"),
                     reasoning=execution_package["reasoning"],
                     suggested_count=execution_package["suggested_size"] or 10,
                     status="PENDING"

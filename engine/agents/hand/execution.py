@@ -13,8 +13,19 @@ from core.constants import (
 from agents.brain.simulation import kelly_fraction
 
 
-async def snipe_check(kalshi_client, ticker: str, log_callback, max_stake_cents: int = HAND_MAX_STAKE_CENTS) -> dict:
-    """Analyze order book for best entry with zero slippage"""
+async def snipe_check(
+    kalshi_client,
+    ticker: str,
+    log_callback,
+    max_stake_cents: int = HAND_MAX_STAKE_CENTS,
+    side: str = "yes",
+) -> dict:
+    """Analyze order book for best entry with zero slippage.
+
+    Kalshi quotes one book; the NO side is its mirror, so a NO ask at price x
+    is a YES bid at (100 - x). Prices are mirrored rather than fetching a
+    second book.
+    """
     if not kalshi_client:
         await log_callback("Kalshi client unavailable. Cannot perform snipe check.", level="ERROR")
         return {"valid": False, "reason": "Kalshi client unavailable"}
@@ -23,8 +34,15 @@ async def snipe_check(kalshi_client, ticker: str, log_callback, max_stake_cents:
         orderbook = await kalshi_client.get_orderbook(ticker)
 
         # Find best bid/ask spread
-        best_bid = orderbook.get("bids", [{}])[0].get("price", 45)
-        best_ask = orderbook.get("asks", [{}])[0].get("price", 55)
+        raw_bid = orderbook.get("bids", [{}])[0].get("price", 45)
+        raw_ask = orderbook.get("asks", [{}])[0].get("price", 55)
+
+        if side.lower() == "no":
+            # Buying NO means crossing the YES bid, mirrored: 100 - bid.
+            best_bid, best_ask = 100 - raw_ask, 100 - raw_bid
+        else:
+            best_bid, best_ask = raw_bid, raw_ask
+
         spread = best_ask - best_bid
 
         if spread > 5:  # More than 5¢ spread = potential slippage
@@ -39,9 +57,11 @@ async def snipe_check(kalshi_client, ticker: str, log_callback, max_stake_cents:
         available_volume_cents = 0
 
         # Aggregate volume within the actual spread
-        for ask in orderbook.get("asks", []):
-            price = ask.get("price", 100)
-            count = ask.get("count", 0)
+        depth_levels = orderbook.get("bids" if side.lower() == "no" else "asks", [])
+        for level in depth_levels:
+            raw_price = level.get("price", 100)
+            price = 100 - raw_price if side.lower() == "no" else raw_price
+            count = level.get("count", 0)
 
             if price <= best_ask:
                 available_volume_cents += (price * count)
@@ -104,9 +124,14 @@ async def execute_order(
     price: int,
     stake: int,
     max_stake_cents: int = HAND_MAX_STAKE_CENTS,
-    log_callback=None
+    log_callback=None,
+    side: str = "yes",
 ) -> dict:
-    """Place limit order on Kalshi v2 with comprehensive pre-trade validation."""
+    """Place limit order on Kalshi v2 with comprehensive pre-trade validation.
+
+    `side` is "yes" or "no". `price` is the price of that side, so the
+    validation below is unchanged: both sides quote 1-99c.
+    """
 
     # === PRE-TRADE VALIDATION ===
 
@@ -156,7 +181,7 @@ async def execute_order(
     try:
         result = await kalshi_client.place_order(
             ticker=ticker,
-            side="yes",
+            side=side.lower(),
             type="limit",
             price=price,
             count=contract_count,

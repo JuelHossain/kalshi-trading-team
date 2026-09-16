@@ -167,6 +167,9 @@ class HandAgent(BaseAgent):
                         "confidence": signal_model.confidence,
                         "ev": signal_model.monte_carlo_ev,
                         "estimated_probability": signal_model.estimated_probability,
+                        "side": (signal_model.side or "YES").lower(),
+                        "side_price": signal_model.side_price,
+                        "side_probability": signal_model.side_probability,
                         "reasoning": signal_model.reasoning,
                         "suggested_size": signal_model.suggested_count,
                         "market_data": signal_model.target_opportunity.market_data.raw_response
@@ -192,16 +195,24 @@ class HandAgent(BaseAgent):
             )
             return
 
+        side = target.get("side", "yes")
+
         # 1. Snipe Check (Order Book Analysis)
-        snipe_result = await exec_snipe_check(self.kalshi_client, ticker, self.log, self.MAX_STAKE_CENTS)
+        snipe_result = await exec_snipe_check(
+            self.kalshi_client, ticker, self.log, self.MAX_STAKE_CENTS, side=side
+        )
         if not snipe_result.get("valid"):
             await self.log(f"Snipe check failed: {snipe_result.get('reason')}", level="ERROR")
             return
 
         entry_price = snipe_result.get("entry_price", 50)
 
-        # 2. Kelly Sizing, against the price actually available in the book
-        probability = target.get("estimated_probability")
+        # 2. Kelly Sizing, against the price actually available in the book.
+        # side_probability is the probability of the side being bought: for NO
+        # that is (1 - p), which is what Kelly needs.
+        probability = target.get("side_probability")
+        if probability is None:
+            probability = target.get("estimated_probability")
         stake = exec_calculate_kelly_stake(
             confidence,
             ev,
@@ -219,7 +230,7 @@ class HandAgent(BaseAgent):
             return
         await self.log(
             f"Kelly sizing: ${stake/100:.2f} "
-            f"(p={probability:.2f} @ {entry_price}c, edge {ev:+.3f})"
+            f"({side.upper()} p={probability:.2f} @ {entry_price}c, edge {ev:+.3f})"
         )
 
         # 3. Execute Order
@@ -230,11 +241,12 @@ class HandAgent(BaseAgent):
             price=entry_price,
             stake=stake,
             max_stake_cents=self.MAX_STAKE_CENTS,
-            log_callback=self.log
+            log_callback=self.log,
+            side=side,
         )
 
         if order_result.get("success"):
-            await self.log(f"ORDER EXECUTED: {ticker} @ {entry_price}¢ for ${stake/100:.2f}")
+            await self.log(f"ORDER EXECUTED: {side.upper()} {ticker} @ {entry_price}¢ for ${stake/100:.2f}")
 
             # 4. Check for Vault Lock
             should_lock, current_profit = check_profit_lock_threshold(self.vault, self.PROFIT_LOCK_THRESHOLD)

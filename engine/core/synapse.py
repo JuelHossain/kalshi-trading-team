@@ -47,6 +47,10 @@ class ExecutionSignal(BaseModel):
     # The Brain's probability estimate. The Hand needs it to size the position:
     # Kelly is (p - k)/(1 - k), so edge alone is not enough.
     estimated_probability: float | None = None
+    # The side's own price and probability. For NO these are (1-k) and (1-p),
+    # so the Hand sizes and prices the side it is actually buying.
+    side_price: float | None = None
+    side_probability: float | None = None
     reasoning: str
     suggested_count: int
     status: str = "PENDING"  # PENDING, EXECUTED, FAILED, CANCELLED
