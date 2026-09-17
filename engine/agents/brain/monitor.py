@@ -176,7 +176,16 @@ async def handle_restock_trigger(
 
             if should_request:
                 await log_callback(f"Dumped {dumped_count} opportunities. Requesting restock from Senses...")
-                await bus.publish("REQUEST_RESTOCK", {}, "BRAIN")
+                # Scheduled, not awaited. EventBus.publish gathers every
+                # subscriber, so awaiting this parks the Brain until Senses
+                # has finished a full market scan -- paging Kalshi and
+                # running a web search per market. That is the stall behind
+                # "Found 1 opportunities. Processing batch..." never being
+                # followed by a completion line: the only loop draining the
+                # opportunity queue was blocked inside the request that
+                # refills it. Restock is a notification; nothing here needs
+                # its result.
+                fire_and_forget(bus.publish("REQUEST_RESTOCK", {}, "BRAIN"))
                 return (True, now)  # Reset counter and update time
             if exec_size >= 10:
                 await log_callback(f"Flow Control: Execution queue at limit ({exec_size}/10). NOT requesting restock.", level="WARN")
