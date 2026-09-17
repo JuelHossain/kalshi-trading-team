@@ -41,3 +41,7 @@ test_report*.txt
 *_audit_report.md
 # Local venv for this worktree
 .venv311/
+
+# SQLite WAL sidecars next to the runtime databases
+*.db-wal
+*.db-shm

@@ -137,19 +137,16 @@ def event_loop():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def test_db():
-    """Create a temporary SQLite database for testing isolation."""
-    db_path = "test_ghost_memory.db"
-    if os.path.exists(db_path):
-        os.remove(db_path)
+async def test_db(tmp_path):
+    """A fresh SQLite path for one test.
 
-    yield db_path
-
-    if os.path.exists(db_path):
-        try:
-            os.remove(db_path)
-        except PermissionError:
-            pass  # DB might still be locking on some systems
+    This used to be a fixed filename in the working directory, deleted at
+    setup and teardown. Two problems: a queue from the previous test could
+    still hold the file open, so the delete at setup raised on Windows and
+    took the next test down with it; and interrupted runs left dozens of
+    test_ghost_memory_*.db files behind. A per-test tmp_path has neither.
+    """
+    return str(tmp_path / "test_ghost_memory.db")
 
 
 @pytest_asyncio.fixture(scope="function")

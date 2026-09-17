@@ -460,6 +460,8 @@ class GhostEngine:
                 log_error(f"Error during agent teardown: {e}")
 
         await kalshi_client.close()
+        if getattr(self, "synapse", None) is not None:
+            self.synapse.close()
 
         # Show shutdown message
         self.display.show_shutdown_message()
