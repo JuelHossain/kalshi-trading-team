@@ -98,6 +98,36 @@ def record_decision(
 
 
 @retry_sqlite()
+def record_fill(ticker: str, stake_cents: int, order_id: str | None) -> int:
+    """Attach an executed order to its APPROVED decision. Returns rows updated.
+
+    stake_cents and order_id existed as columns from the start and nothing
+    ever wrote them: five paper fills in one run left zero filled rows. Without
+    this, realised P&L cannot be computed from the ledger, which is the one
+    thing a paper soak exists to measure.
+
+    Targets the most recent APPROVED row for the ticker that has no order
+    yet, so two fills on one market attach to two decisions rather than the
+    second overwriting the first.
+    """
+    try:
+        with _connect() as conn:
+            cur = conn.execute(
+                """UPDATE decisions
+                      SET stake_cents = ?, order_id = ?
+                    WHERE id = (
+                        SELECT id FROM decisions
+                         WHERE ticker = ? AND outcome = 'APPROVED' AND order_id IS NULL
+                         ORDER BY id DESC LIMIT 1
+                    )""",
+                (int(stake_cents), order_id, ticker),
+            )
+            return cur.rowcount
+    except Exception:  # noqa: BLE001 - the ledger must not break the engine
+        return 0
+
+
+@retry_sqlite()
 def record_settlement(ticker: str, settled_yes: bool) -> int:
     """Fill in how a market resolved. Returns rows updated."""
     try:

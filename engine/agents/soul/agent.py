@@ -96,12 +96,19 @@ class SoulAgent(BaseAgent):
         outcome = payload.get("outcome", "unknown")
         details = payload.get("details", "")
 
+        # Only a settled outcome is a lesson. The Hand publishes TRADE_RESULT
+        # with outcome "pending" the moment an order fills, before the game
+        # is played; the old else-branch filed every one of those as a loss
+        # and evolve_instructions then rewrote the trading rules from a
+        # mistakes log full of trades that had not resolved.
         if outcome == "win":
             self.strengths_list.append(details)
             await self.log(f"Win recorded. Strength: {details[:50]}...")
-        else:
+        elif outcome == "loss":
             self.mistakes_log.append(details)
             await self.log(f"Loss recorded. Lesson: {details[:50]}...")
+        else:
+            await self.log(f"Trade opened, outcome {outcome}: {details[:50]}", level="DEBUG")
 
     async def evolve_instructions(self):
         """Use Gemini to rewrite trading instructions based on history"""

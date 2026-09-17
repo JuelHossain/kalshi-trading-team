@@ -86,9 +86,15 @@ def is_today_market(market: dict) -> bool:
 
 
 async def fetch_kalshi_markets(
-    kalshi_client, log_callback, needed: int = 30
+    kalshi_client, log_callback, needed: int = 30, exclude=frozenset()
 ) -> list[dict]:
     """Return up to `needed` tradeable markets, best volume first.
+
+    `exclude` is a set of tickers to skip -- typically those queued recently.
+    Restock re-fetched the top of the same volume ranking every time, so the
+    same ten NFL markets were analysed cycle after cycle: a grounded Gemini
+    call each, and the same approval reaching the Hand again. Paging continues
+    past excluded tickers until `needed` new ones are found.
 
     Walks pages only until the stock buffer can be filled. The buffer is
     then drained a batch at a time across cycles, so one restock covers
@@ -118,7 +124,10 @@ async def fetch_kalshi_markets(
                 break
 
             seen += len(page)
-            tradeable.extend(m for m in page if is_tradeable(m))
+            tradeable.extend(
+                m for m in page
+                if is_tradeable(m) and m.get("ticker") not in exclude
+            )
 
             if len(tradeable) >= needed or not cursor:
                 break
@@ -215,7 +224,8 @@ async def surveillance_loop(
 
         # 1. Fetch Kalshi markets
         markets = await fetch_kalshi_markets(
-            senses_agent.kalshi_client, log_callback, needed=stock_buffer_size
+            senses_agent.kalshi_client, log_callback, needed=stock_buffer_size,
+            exclude=senses_agent.recently_queued(),
         )
 
         if not markets:

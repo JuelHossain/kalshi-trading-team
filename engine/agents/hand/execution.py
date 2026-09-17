@@ -5,6 +5,7 @@ Handles trade validation, order placement, and notifications.
 import os
 
 import aiohttp
+from core import trading_mode
 from core.constants import (
     HAND_KELLY_FRACTION,
     HAND_MAX_STAKE_CENTS,
@@ -317,6 +318,13 @@ async def has_open_position(kalshi_client, ticker: str) -> bool:
     it" and the trade is skipped. Declining a good trade costs an opportunity;
     doubling blindly into one costs money.
     """
+    # Paper fills never reach Kalshi's portfolio. Without this, a paper run
+    # read an empty demo book, answered "not held", and doubled into two
+    # markets in its first successful cycle. Checked first and unconditionally:
+    # a paper holding is a holding.
+    if trading_mode.paper_position(ticker) != 0:
+        return True
+
     if not kalshi_client:
         return False
 

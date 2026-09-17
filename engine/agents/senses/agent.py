@@ -5,6 +5,8 @@ Role: 24/7 Passive Observer
 Core SensesAgent class with market scanning capabilities.
 """
 import asyncio
+import time
+import os
 from typing import Any
 
 from agents.base import BaseAgent
@@ -95,9 +97,33 @@ class SensesAgent(BaseAgent):
         self.is_scanning = False
         await self.log("Surveillance paused. Cycle complete.")
 
+    # How long a ticker stays excluded from re-queueing after it was queued.
+    # Session-scoped and time-bounded: a market vetoed at 09:00 may deserve a
+    # fresh look hours later, but not on the very next restock. Restart
+    # forgets this; the Hand's position guard is what survives a restart.
+    REQUEUE_AFTER_SECONDS = float(os.getenv("SENSES_REQUEUE_AFTER_SECONDS", "21600"))
+
+    def _queued_at(self) -> dict[str, float]:
+        if not hasattr(self, "_queued_at_map"):
+            self._queued_at_map: dict[str, float] = {}
+        return self._queued_at_map
+
+    def mark_queued(self, ticker: str) -> None:
+        """Remember that `ticker` was queued now."""
+        self._queued_at()[ticker] = time.time()
+
+    def recently_queued(self) -> frozenset[str]:
+        """Tickers queued within REQUEUE_AFTER_SECONDS. Expired ones drop out."""
+        cutoff = time.time() - self.REQUEUE_AFTER_SECONDS
+        live = self._queued_at()
+        for t in [t for t, at in live.items() if at < cutoff]:
+            del live[t]
+        return frozenset(live)
+
     async def queue_opportunity(self, opportunity: dict):
         """Add opportunity to Synapse queue (primary) and legacy queue (fallback)"""
         ticker = opportunity.get("ticker", "UNKNOWN")
+        self.mark_queued(ticker)
         volume = opportunity.get("volume", 0)
 
         # Synapse Integration (Primary Queue)
@@ -177,7 +203,8 @@ class SensesAgent(BaseAgent):
             # truncates. Re-sorting here on "volume" -- a key Kalshi no
             # longer sends -- scored every market as 0 and undid the order.
             markets = await fetch_kalshi_markets(
-                self.kalshi_client, self.log, needed=self.STOCK_BUFFER_SIZE
+                self.kalshi_client, self.log, needed=self.STOCK_BUFFER_SIZE,
+                exclude=self.recently_queued(),
             )
             if markets:
                 self.market_stock = markets

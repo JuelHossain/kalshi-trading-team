@@ -7,7 +7,9 @@ Core HandAgent class with trade execution capabilities.
 from typing import Any
 
 from agents.base import BaseAgent
+from core import trading_mode
 from core.bus import EventBus
+from core.ledger import record_fill
 from core.constants import HAND_MAX_STAKE_CENTS, HAND_PROFIT_LOCK_THRESHOLD
 from core.ledger import record_decision
 
@@ -65,13 +67,19 @@ class HandAgent(BaseAgent):
             return 0
 
         try:
-            positions = await self.kalshi_client.get_positions()
+            positions = list(await self.kalshi_client.get_positions() or [])
         except Exception as e:  # noqa: BLE001 - a failed review must not break the cycle
             await self.log(f"Could not read positions for exit review: {e}", level="ERROR")
-            return 0
+            positions = []
+
+        # Paper fills never reach Kalshi's portfolio, so the exit policy could
+        # not see anything a paper run held. They are reviewed alongside, and
+        # closing one goes through the same place_order path, which records
+        # the paper sell.
+        positions = trading_mode.paper_positions() + positions
 
         closed = 0
-        for position in positions or []:
+        for position in positions:
             ticker = position.get("ticker") or position.get("market_id")
             quantity = position.get("position")
             if not ticker or not quantity:
@@ -262,6 +270,7 @@ class HandAgent(BaseAgent):
 
         if order_result.get("success"):
             await self.log(f"ORDER EXECUTED: {side.upper()} {ticker} @ {entry_price}¢ for ${stake/100:.2f}")
+            record_fill(ticker, stake, order_result.get("order_id"))
 
             # 4. Check for Vault Lock
             should_lock, current_profit = check_profit_lock_threshold(self.vault, self.PROFIT_LOCK_THRESHOLD)
