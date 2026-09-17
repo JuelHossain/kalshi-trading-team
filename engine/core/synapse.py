@@ -196,6 +196,27 @@ class PersistentQueue(Generic[T]):
         finally:
             conn.close()
 
+    async def clear(self) -> int:
+        """Remove every row. Returns how many were removed.
+
+        The table name is fixed at construction and checked against
+        ALLOWED_TABLES, so it is not attacker-controlled here.
+        """
+        async with self._lock:
+            return await asyncio.get_event_loop().run_in_executor(
+                None, self._clear_sync
+            )
+
+    def _clear_sync(self) -> int:
+        conn = sqlite3.connect(self.db_path)
+        try:
+            cursor = conn.cursor()
+            removed = cursor.execute(f"DELETE FROM {self.table_name}").rowcount
+            conn.commit()
+            return max(0, removed)
+        finally:
+            conn.close()
+
 # -------------------------------------------------------------------------
 # 3. Synapse Manager (The Central Nervous System)
 # -------------------------------------------------------------------------
@@ -224,6 +245,25 @@ class Synapse:
             db_path, "queue_errors", SynapseError
         )
 
-    async def clear_all(self):
-        """Emergency Wipe (Kill Switch Reset)"""
-        # ... logic to truncate tables ...
+    async def drain_errors(self) -> int:
+        """Empty the error box and report how many entries were cleared.
+
+        authorize_cycle halts while this box is non-empty. That latch is
+        deliberate, but without a drain a single recoverable error stopped
+        every future cycle permanently. Deliberately narrow: the opportunity
+        and execution queues are untouched, so acknowledging an error cannot
+        silently discard pending work.
+        """
+        return await self.errors.clear()
+
+    async def clear_all(self) -> dict[str, int]:
+        """Emergency wipe of every queue. Returns per-queue removal counts.
+
+        Previously a stub with no body, so an emergency reset reported
+        success while leaving all three queues exactly as they were.
+        """
+        return {
+            "opportunities": await self.opportunities.clear(),
+            "executions": await self.executions.clear(),
+            "errors": await self.errors.clear(),
+        }

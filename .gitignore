@@ -39,3 +39,5 @@ engine/venv/
 brain_debug.txt
 test_report*.txt
 *_audit_report.md
+# Local venv for this worktree
+.venv311/

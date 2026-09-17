@@ -153,10 +153,35 @@ def deactivate_kill_switch(engine):
 
 def reset_system(engine):
     async def handler(request):
+        """Return the engine to a state where a cycle can be authorised.
+
+        This used to set engine.running = False, which is the condition of
+        the main loop -- so the endpoint named "reset" terminated the engine
+        instead of resetting it. Shutting down is what /kill-switch is for.
+
+        It also has to drain the error box: authorize_cycle halts while that
+        box is non-empty and nothing else empties it, so one recoverable
+        error latched the engine off until someone deleted rows from SQLite
+        by hand. The opportunity and execution queues are deliberately left
+        alone -- acknowledging an error must not discard pending work.
+        """
         engine.manual_kill_switch = False
         engine.is_processing = False
-        engine.running = False
-        return web.json_response({"status": "reset"})
+
+        errors_cleared = 0
+        if getattr(engine, "synapse", None):
+            errors_cleared = await engine.synapse.drain_errors()
+
+        # A failed pre-flight latches this separately, and it halts cycles too.
+        soul = getattr(engine, "soul", None)
+        if soul is not None:
+            soul.is_locked_down = False
+
+        return web.json_response({
+            "status": "reset",
+            "errors_cleared": errors_cleared,
+            "running": engine.running,
+        })
     return handler
 
 
