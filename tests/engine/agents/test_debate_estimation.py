@@ -24,8 +24,14 @@ def _client(payload: str):
     client = MagicMock()
     sent = {}
 
-    def generate_content(model=None, contents=None):
+    def generate_content(model=None, contents=None, config=None):
+        # config carries the Google Search grounding tool. It must be
+        # accepted here: a stub that rejects it raises TypeError, the
+        # production code treats that as a model failure and silently falls
+        # back to OpenRouter, and the prompt assertions below then read an
+        # empty dict rather than failing on the real reason.
         sent["prompt"] = contents
+        sent["config"] = config
         return MagicMock(text=payload)
 
     client.models.generate_content = generate_content
@@ -125,3 +131,16 @@ class TestProbabilityValidation:
 
         assert result["estimated_probability"] is None
         assert result["confidence"] == 0.0
+
+
+class TestGroundingReachesTheModel:
+    """The estimate is only as current as the information behind it."""
+
+    @pytest.mark.asyncio
+    async def test_the_search_tool_is_passed_to_gemini(self):
+        client = _client(GOOD)
+        await _run(client, OPPORTUNITY)
+
+        config = client.sent["config"]
+        assert config is not None, "grounding config was not passed"
+        assert config.tools[0].google_search is not None

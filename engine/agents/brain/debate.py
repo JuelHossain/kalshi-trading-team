@@ -11,6 +11,41 @@ from core.ai_utils import GEMINI_AVAILABLE
 from core.error_dispatcher import ErrorSeverity
 from core.logger import get_logger
 
+# Google Search grounding for the probability estimate. On by default:
+# without it the model answers from training data, which on a dated event is
+# guesswork wearing a confidence score.
+#
+# Measured on the same NFL market, same model, same prompt:
+#   ungrounded  p=0.38 confidence=45  "Assuming the matchup takes place..."
+#   grounded    p=0.25 confidence=85  "Consensus betting markets list the
+#                                      Rams as ~7.5-point home favorites"
+# The real Kalshi price was 0.26. Ungrounded estimates sat below the 85%
+# confidence threshold, so the engine vetoed everything and never traded.
+#
+# Set BRAIN_SEARCH_GROUNDING=false to get the old behaviour for comparison.
+GROUNDING_ENABLED = os.getenv("BRAIN_SEARCH_GROUNDING", "true").strip().lower() not in (
+    "false", "0", "no"
+)
+
+
+def build_grounding_config():
+    """Return a generate_content config enabling Google Search, or None.
+
+    None means "call the model without a config", which is the ungrounded
+    path. Returning None on ImportError keeps an SDK change from taking the
+    Brain offline -- a degraded estimate still beats no estimate, and the
+    confidence threshold is what stops a bad one reaching the Hand.
+    """
+    if not GROUNDING_ENABLED:
+        return None
+    try:
+        from google.genai import types
+    except ImportError:
+        return None
+    return types.GenerateContentConfig(
+        tools=[types.Tool(google_search=types.GoogleSearch())]
+    )
+
 
 def load_personas(base_path: str = "ai-env/personas") -> dict[str, str]:
     """
@@ -160,9 +195,11 @@ Context: {full_context}
 {f"Today's Trading Instructions: {trading_instructions[:500]}" if trading_instructions else ""}
 
 TASK:
-Estimate the TRUE probability of this event occurring, from your knowledge of the
-world and the Context above. You are NOT being shown any market price, and you
-should not guess at one -- estimate the event on its merits alone.
+Estimate the TRUE probability of this event occurring. Search for current
+information about it -- form, injuries, standings, recent reporting, whatever
+bears on the outcome -- rather than relying on memory, which may be stale or
+may predate the event entirely. You are NOT being shown any market price, and
+you should not guess at one -- estimate the event on its merits alone.
 
 1. OPTIMIST: argue why the event is more likely than it first appears.
 2. CRITIC: argue why it is less likely than it first appears.
@@ -190,8 +227,12 @@ Respond in JSON format:
     try:
         try:
             # Primary: Google Gemini API
+            grounding = build_grounding_config()
             response = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: client.models.generate_content(model=gemini_model, contents=prompt)
+                None,
+                lambda: client.models.generate_content(
+                    model=gemini_model, contents=prompt, config=grounding
+                ),
             )
             text = response.text
         except Exception as e:
