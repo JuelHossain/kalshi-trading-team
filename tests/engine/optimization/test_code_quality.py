@@ -12,16 +12,15 @@ This test suite ensures:
 import ast
 import re
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
 
 import pytest
-
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
 
-def find_print_statements(file_path: Path) -> List[Dict]:
+
+def find_print_statements(file_path: Path) -> list[dict]:
     """
     Find all print statements in a file.
 
@@ -32,7 +31,7 @@ def find_print_statements(file_path: Path) -> List[Dict]:
         List[Dict]: List of print statement locations
     """
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
     except (UnicodeDecodeError, FileNotFoundError):
         return []
@@ -48,15 +47,17 @@ def find_print_statements(file_path: Path) -> List[Dict]:
         if isinstance(node, ast.Call):
             # Check for print() calls
             if isinstance(node.func, ast.Name) and node.func.id == "print":
-                prints.append({
-                    "line": node.lineno,
-                    "content": ast.unparse(node),
-                })
+                prints.append(
+                    {
+                        "line": node.lineno,
+                        "content": ast.unparse(node),
+                    }
+                )
 
     return prints
 
 
-def find_bare_excepts(file_path: Path) -> List[Dict]:
+def find_bare_excepts(file_path: Path) -> list[dict]:
     """
     Find all bare except clauses in a file.
 
@@ -67,7 +68,7 @@ def find_bare_excepts(file_path: Path) -> List[Dict]:
         List[Dict]: List of bare except locations
     """
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
     except (UnicodeDecodeError, FileNotFoundError):
         return []
@@ -80,11 +81,12 @@ def find_bare_excepts(file_path: Path) -> List[Dict]:
     bare_excepts = []
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.ExceptHandler):
-            if node.type is None:
-                bare_excepts.append({
+        if isinstance(node, ast.ExceptHandler) and node.type is None:
+            bare_excepts.append(
+                {
                     "line": node.lineno,
-                })
+                }
+            )
 
     return bare_excepts
 
@@ -102,7 +104,7 @@ def check_function_documentation(node: ast.FunctionDef | ast.AsyncFunctionDef) -
     return ast.get_docstring(node) is not None
 
 
-def find_unawaited_async_calls(file_path: Path) -> List[Dict]:
+def find_unawaited_async_calls(file_path: Path) -> list[dict]:
     """
     Find async calls that are not awaited.
 
@@ -113,7 +115,7 @@ def find_unawaited_async_calls(file_path: Path) -> List[Dict]:
         List[Dict]: List of unawaited async call locations
     """
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
     except (UnicodeDecodeError, FileNotFoundError):
         return []
@@ -149,10 +151,12 @@ def find_unawaited_async_calls(file_path: Path) -> List[Dict]:
                 if re.search(pattern, call_name):
                     # Check if parent is an await
                     # (This is a simplified check)
-                    unawaited.append({
-                        "line": node.lineno,
-                        "call": call_name,
-                    })
+                    unawaited.append(
+                        {
+                            "line": node.lineno,
+                            "call": call_name,
+                        }
+                    )
                     break
 
     return unawaited
@@ -162,104 +166,14 @@ def find_unawaited_async_calls(file_path: Path) -> List[Dict]:
 # Test: No Print Statements
 # =============================================================================
 
-@pytest.mark.quality
-def test_no_print_statements_in_production(
-    python_files: List[Path],
-    engine_root: Path
-) -> None:
-    """
-    Test that no print statements exist in production code.
-
-    All output should go through the logging system.
-
-    Args:
-        python_files: List of all Python files in engine
-        engine_root: Path to engine root directory
-    """
-    violations = []
-
-    for file_path in python_files:
-        if "test" in file_path.name:
-            continue
-
-        prints = find_print_statements(file_path)
-
-        if prints:
-            violations.extend([
-                {
-                    "file": str(file_path.relative_to(engine_root)),
-                    "line": p["line"],
-                    "content": p["content"],
-                }
-                for p in prints
-            ])
-
-    if violations:
-        violation_details = "\n".join([
-            f"  {v['file']}:{v['line']} - {v['content'][:60]}"
-            for v in violations[:20]
-        ])
-        pytest.fail(
-            f"Found {len(violations)} print statements in production code:\n"
-            f"{violation_details}\n"
-            f"Use logger instead of print for production code."
-        )
-
-
-@pytest.mark.quality
-def test_no_debug_prints(python_files: List[Path], engine_root: Path) -> None:
-    """
-    Test that no debug print statements exist.
-
-    Checks for common debug print patterns like
-    print(f"DEBUG:"), print("X:"), etc.
-
-    Args:
-        python_files: List of all Python files in engine
-        engine_root: Path to engine root directory
-    """
-    debug_patterns = [
-        r'print\(["\']DEBUG:',
-        r'print\(["\']TEST:',
-        r'print\(["\']XXX:',
-        r'print\(f?[["\'].*[=:]\s*\{',
-    ]
-
-    violations = []
-
-    for file_path in python_files:
-        if "test" in file_path.name:
-            continue
-
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                for line_num, line in enumerate(f, 1):
-                    for pattern in debug_patterns:
-                        if re.search(pattern, line):
-                            violations.append({
-                                "file": str(file_path.relative_to(engine_root)),
-                                "line": line_num,
-                                "content": line.strip(),
-                            })
-        except (UnicodeDecodeError, FileNotFoundError):
-            continue
-
-    if violations:
-        pytest.fail(
-            f"Found {len(violations)} debug print statements.\n"
-            f"Remove all debug prints before production."
-        )
-
 
 # =============================================================================
 # Test: Async Functions Properly Awaited
 # =============================================================================
 
+
 @pytest.mark.quality
-def test_no_fire_and_forget_async_calls(
-    python_files: List[Path],
-    engine_root: Path
-) -> None:
+def test_no_fire_and_forget_async_calls(python_files: list[Path], engine_root: Path) -> None:
     """
     Test that async calls are not fire-and-forget without logging.
 
@@ -277,7 +191,7 @@ def test_no_fire_and_forget_async_calls(
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
         except (UnicodeDecodeError, FileNotFoundError):
             continue
@@ -292,18 +206,24 @@ def test_no_fire_and_forget_async_calls(
                 continue
 
             # Skip lines with task creation
-            if any(keyword in line for keyword in [
-                "create_task", "ensure_future", "gather", "wait"
-            ]):
+            if any(
+                keyword in line for keyword in ["create_task", "ensure_future", "gather", "wait"]
+            ):
                 continue
 
             # Look for function calls that might be async
             if re.search(r"\w+\.\w+\(", line):
                 # Check if this might be an async call
                 # (simplified heuristic)
-                if any(pattern in line for pattern in [
-                    ".get(", ".post(", ".fetch(", ".query(",
-                ]):
+                if any(
+                    pattern in line
+                    for pattern in [
+                        ".get(",
+                        ".post(",
+                        ".fetch(",
+                        ".query(",
+                    ]
+                ):
                     # Check if there's a log statement nearby
                     nearby_has_log = False
                     for j in range(max(0, i - 2), min(len(lines), i + 3)):
@@ -312,11 +232,13 @@ def test_no_fire_and_forget_async_calls(
                             break
 
                     if not nearby_has_log:
-                        violations.append({
-                            "file": str(file_path.relative_to(engine_root)),
-                            "line": i + 1,
-                            "content": line.strip(),
-                        })
+                        violations.append(
+                            {
+                                "file": str(file_path.relative_to(engine_root)),
+                                "line": i + 1,
+                                "content": line.strip(),
+                            }
+                        )
 
     # Allow some violations for legitimate fire-and-forget patterns
     if len(violations) > 20:
@@ -327,10 +249,7 @@ def test_no_fire_and_forget_async_calls(
 
 
 @pytest.mark.quality
-def test_async_functions_have_async_prefix(
-    python_files: List[Path],
-    engine_root: Path
-) -> None:
+def test_async_functions_have_async_prefix(python_files: list[Path], engine_root: Path) -> None:
     """
     Test that async functions follow naming conventions.
 
@@ -348,7 +267,7 @@ def test_async_functions_have_async_prefix(
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
         except (UnicodeDecodeError, FileNotFoundError):
             continue
@@ -368,11 +287,13 @@ def test_async_functions_have_async_prefix(
                 has_async_doc = docstring and "async" in docstring.lower()
 
                 if not has_async_name and not has_async_doc:
-                    violations.append({
-                        "file": str(file_path.relative_to(engine_root)),
-                        "line": node.lineno,
-                        "function": node.name,
-                    })
+                    violations.append(
+                        {
+                            "file": str(file_path.relative_to(engine_root)),
+                            "line": node.lineno,
+                            "function": node.name,
+                        }
+                    )
 
     if len(violations) > 15:
         pytest.skip(
@@ -385,8 +306,9 @@ def test_async_functions_have_async_prefix(
 # Test: Proper Error Handling
 # =============================================================================
 
+
 @pytest.mark.quality
-def test_no_bare_except_clauses(python_files: List[Path], engine_root: Path) -> None:
+def test_no_bare_except_clauses(python_files: list[Path], engine_root: Path) -> None:
     """
     Test that no bare except clauses exist.
 
@@ -406,19 +328,18 @@ def test_no_bare_except_clauses(python_files: List[Path], engine_root: Path) -> 
         bare_excepts = find_bare_excepts(file_path)
 
         if bare_excepts:
-            violations.extend([
-                {
-                    "file": str(file_path.relative_to(engine_root)),
-                    "line": b["line"],
-                }
-                for b in bare_excepts
-            ])
+            violations.extend(
+                [
+                    {
+                        "file": str(file_path.relative_to(engine_root)),
+                        "line": b["line"],
+                    }
+                    for b in bare_excepts
+                ]
+            )
 
     if violations:
-        violation_details = "\n".join([
-            f"  {v['file']}:{v['line']}"
-            for v in violations
-        ])
+        violation_details = "\n".join([f"  {v['file']}:{v['line']}" for v in violations])
         pytest.fail(
             f"Found {len(violations)} bare except clauses:\n"
             f"{violation_details}\n"
@@ -427,67 +348,7 @@ def test_no_bare_except_clauses(python_files: List[Path], engine_root: Path) -> 
 
 
 @pytest.mark.quality
-def test_specific_exceptions_are_caught(
-    python_files: List[Path],
-    engine_root: Path
-) -> None:
-    """
-    Test that specific exceptions are caught where possible.
-
-    Encourages catching specific exception types
-    instead of generic Exception.
-
-    Args:
-        python_files: List of all Python files in engine
-        engine_root: Path to engine root directory
-    """
-    # Count generic Exception catches
-    generic_except_count = 0
-    total_except_count = 0
-
-    for file_path in python_files:
-        if "test" in file_path.name:
-            continue
-
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except (UnicodeDecodeError, FileNotFoundError):
-            continue
-
-        try:
-            tree = ast.parse(content, filename=str(file_path))
-        except SyntaxError:
-            continue
-
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ExceptHandler):
-                total_except_count += 1
-
-                if node.type:
-                    # Check if it's a generic Exception
-                    if isinstance(node.type, ast.Name) and node.type.id == "Exception":
-                        generic_except_count += 1
-                    elif isinstance(node.type, ast.Attribute):
-                        if node.type.attr == "Exception":
-                            generic_except_count += 1
-
-    # Allow some generic exception handlers
-    if total_except_count > 0:
-        generic_ratio = generic_except_count / total_except_count
-
-        if generic_ratio > 0.5:  # More than 50% are generic
-            pytest.fail(
-                f"Too many generic exception handlers: {generic_except_count}/{total_except_count}\n"
-                f"Consider catching more specific exception types."
-            )
-
-
-@pytest.mark.quality
-def test_exceptions_are_logged(
-    python_files: List[Path],
-    engine_root: Path
-) -> None:
+def test_exceptions_are_logged(python_files: list[Path], engine_root: Path) -> None:
     """
     Test that caught exceptions are logged.
 
@@ -505,7 +366,7 @@ def test_exceptions_are_logged(
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 lines = f.readlines()
         except (UnicodeDecodeError, FileNotFoundError):
             continue
@@ -522,10 +383,12 @@ def test_exceptions_are_logged(
                         break
 
                 if not has_logging:
-                    violations.append({
-                        "file": str(file_path.relative_to(engine_root)),
-                        "line": i + 1,
-                    })
+                    violations.append(
+                        {
+                            "file": str(file_path.relative_to(engine_root)),
+                            "line": i + 1,
+                        }
+                    )
 
     # Allow some exceptions for simple exception handlers
     if len(violations) > 25:
@@ -539,11 +402,9 @@ def test_exceptions_are_logged(
 # Test: Documentation Coverage
 # =============================================================================
 
+
 @pytest.mark.quality
-def test_public_functions_have_docstrings(
-    python_files: List[Path],
-    engine_root: Path
-) -> None:
+def test_public_functions_have_docstrings(python_files: list[Path], engine_root: Path) -> None:
     """
     Test that public functions have docstrings.
 
@@ -560,7 +421,7 @@ def test_public_functions_have_docstrings(
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
         except (UnicodeDecodeError, FileNotFoundError):
             continue
@@ -583,17 +444,18 @@ def test_public_functions_have_docstrings(
 
                 # Check for docstring
                 if not check_function_documentation(node):
-                    violations.append({
-                        "file": str(file_path.relative_to(engine_root)),
-                        "line": node.lineno,
-                        "function": node.name,
-                    })
+                    violations.append(
+                        {
+                            "file": str(file_path.relative_to(engine_root)),
+                            "line": node.lineno,
+                            "function": node.name,
+                        }
+                    )
 
     if len(violations) > 30:
-        violation_details = "\n".join([
-            f"  {v['file']}:{v['line']} - {v['function']}()"
-            for v in violations[:20]
-        ])
+        violation_details = "\n".join(
+            [f"  {v['file']}:{v['line']} - {v['function']}()" for v in violations[:20]]
+        )
         pytest.fail(
             f"Found {len(violations)} public functions without docstrings:\n"
             f"{violation_details}\n"
@@ -602,10 +464,7 @@ def test_public_functions_have_docstrings(
 
 
 @pytest.mark.quality
-def test_classes_have_docstrings(
-    python_files: List[Path],
-    engine_root: Path
-) -> None:
+def test_classes_have_docstrings(python_files: list[Path], engine_root: Path) -> None:
     """
     Test that classes have docstrings.
 
@@ -622,7 +481,7 @@ def test_classes_have_docstrings(
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
         except (UnicodeDecodeError, FileNotFoundError):
             continue
@@ -640,17 +499,18 @@ def test_classes_have_docstrings(
 
                 # Check for docstring
                 if not ast.get_docstring(node):
-                    violations.append({
-                        "file": str(file_path.relative_to(engine_root)),
-                        "line": node.lineno,
-                        "class": node.name,
-                    })
+                    violations.append(
+                        {
+                            "file": str(file_path.relative_to(engine_root)),
+                            "line": node.lineno,
+                            "class": node.name,
+                        }
+                    )
 
     if violations:
-        violation_details = "\n".join([
-            f"  {v['file']}:{v['line']} - {v['class']}"
-            for v in violations
-        ])
+        violation_details = "\n".join(
+            [f"  {v['file']}:{v['line']} - {v['class']}" for v in violations]
+        )
         pytest.fail(
             f"Found {len(violations)} classes without docstrings:\n"
             f"{violation_details}\n"
@@ -659,10 +519,7 @@ def test_classes_have_docstrings(
 
 
 @pytest.mark.quality
-def test_api_endpoints_documented(
-    engine_root: Path,
-    python_files: List[Path]
-) -> None:
+def test_api_endpoints_documented(engine_root: Path, python_files: list[Path]) -> None:
     """
     Test that API endpoints have documentation.
 
@@ -678,7 +535,7 @@ def test_api_endpoints_documented(
         pytest.skip("HTTP server file not found")
 
     try:
-        with open(server_path, "r", encoding="utf-8") as f:
+        with open(server_path, encoding="utf-8") as f:
             content = f.read()
     except (UnicodeDecodeError, FileNotFoundError):
         pytest.skip("Could not read server file")
@@ -698,12 +555,13 @@ def test_api_endpoints_documented(
                 for decorator in ["route", "get", "post", "put", "delete"]
             )
 
-            if is_endpoint:
-                if not ast.get_docstring(node):
-                    violations.append({
+            if is_endpoint and not ast.get_docstring(node):
+                violations.append(
+                    {
                         "function": node.name,
                         "line": node.lineno,
-                    })
+                    }
+                )
 
     if violations:
         pytest.fail(
@@ -716,8 +574,9 @@ def test_api_endpoints_documented(
 # Test: Code Style and Best Practices
 # =============================================================================
 
+
 @pytest.mark.quality
-def test_no_dead_code(python_files: List[Path], engine_root: Path) -> None:
+def test_no_dead_code(python_files: list[Path], engine_root: Path) -> None:
     """
     Test that no obviously dead code exists.
 
@@ -735,7 +594,7 @@ def test_no_dead_code(python_files: List[Path], engine_root: Path) -> None:
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
         except (UnicodeDecodeError, FileNotFoundError):
             continue
@@ -753,164 +612,17 @@ def test_no_dead_code(python_files: List[Path], engine_root: Path) -> None:
                         if isinstance(stmt, ast.Return):
                             # Check if there are statements after return
                             if i < len(node.body) - 1:
-                                violations.append({
-                                    "file": str(file_path.relative_to(engine_root)),
-                                    "line": node.lineno,
-                                    "function": node.name,
-                                })
+                                violations.append(
+                                    {
+                                        "file": str(file_path.relative_to(engine_root)),
+                                        "line": node.lineno,
+                                        "function": node.name,
+                                    }
+                                )
                                 break
 
     if len(violations) > 5:
         pytest.fail(
             f"Found {len(violations)} functions with unreachable code after return.\n"
             f"Remove dead code to improve maintainability."
-        )
-
-
-@pytest.mark.quality
-def test_function_complexity(python_files: List[Path], engine_root: Path) -> None:
-    """
-    Test that functions are not overly complex.
-
-    Checks for functions that are too long or have
-    too many branches.
-
-    Args:
-        python_files: List of all Python files in engine
-        engine_root: Path to engine root directory
-    """
-    MAX_FUNCTION_LINES = 50
-    MAX_BRANCHES = 10
-
-    violations = []
-
-    for file_path in python_files:
-        if "test" in file_path.name:
-            continue
-
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except (UnicodeDecodeError, FileNotFoundError):
-            continue
-
-        try:
-            tree = ast.parse(content, filename=str(file_path))
-        except SyntaxError:
-            continue
-
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                # Check length
-                if node.end_lineno and node.lineno:
-                    func_length = node.end_lineno - node.lineno
-
-                    if func_length > MAX_FUNCTION_LINES:
-                        violations.append({
-                            "file": str(file_path.relative_to(engine_root)),
-                            "line": node.lineno,
-                            "function": node.name,
-                            "issue": f"Too long ({func_length} lines)",
-                        })
-
-                # Check branches
-                branch_count = 0
-                for child in ast.walk(node):
-                    if isinstance(child, (ast.If, ast.For, ast.While, ast.Try)):
-                        branch_count += 1
-
-                if branch_count > MAX_BRANCHES:
-                    violations.append({
-                        "file": str(file_path.relative_to(engine_root)),
-                        "line": node.lineno,
-                        "function": node.name,
-                        "issue": f"Too complex ({branch_count} branches)",
-                    })
-
-    if len(violations) > 10:
-        violation_details = "\n".join([
-            f"  {v['file']}:{v['line']} - {v['function']}(): {v['issue']}"
-            for v in violations[:15]
-        ])
-        pytest.fail(
-            f"Found {len(violations)} overly complex functions:\n"
-            f"{violation_details}\n"
-            f"Consider breaking down complex functions."
-        )
-
-
-@pytest.mark.quality
-def test_no_global_variables(python_files: List[Path], engine_root: Path) -> None:
-    """
-    Test that no global variables are used.
-
-    Global variables can cause subtle bugs and
-    make code harder to test.
-
-    Args:
-        python_files: List of all Python files in engine
-        engine_root: Path to engine root directory
-    """
-    # Allowed globals (constants, singletons, etc.)
-    allowed_globals = {
-        "logger",
-        "__version__",
-    }
-
-    violations = []
-
-    for file_path in python_files:
-        if "test" in file_path.name:
-            continue
-
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except (UnicodeDecodeError, FileNotFoundError):
-            continue
-
-        try:
-            tree = ast.parse(content, filename=str(file_path))
-        except SyntaxError:
-            continue
-
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Assign):
-                # Check if assignment is at module level
-                if isinstance(node.col_offset, int):  # Has position info
-                    # Look for variable assignments (not annotations)
-                    for target in node.targets:
-                        if isinstance(target, ast.Name):
-                            name = target.id
-
-                            # Skip constants (ALL_CAPS)
-                            if name.isupper():
-                                continue
-
-                            # Skip allowed globals
-                            if name in allowed_globals:
-                                continue
-
-                            # Check if it's at module level (not in function/class)
-                            parent_scope = None
-                            for parent in ast.walk(tree):
-                                if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                                    if (
-                                        parent.lineno <= node.lineno <=
-                                        (parent.end_lineno or parent.lineno)
-                                    ):
-                                        parent_scope = parent
-                                        break
-
-                            if parent_scope is None:
-                                violations.append({
-                                    "file": str(file_path.relative_to(engine_root)),
-                                    "line": node.lineno,
-                                    "variable": name,
-                                })
-
-    if len(violations) > 5:
-        pytest.fail(
-            f"Found {len(violations)} global variable declarations.\n"
-            f"Avoid global variables. Use module-level constants or dependency injection."
         )

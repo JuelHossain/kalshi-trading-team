@@ -2,6 +2,7 @@
 HTTP route handlers for Ghost Engine.
 Extracted from main.py for better organization.
 """
+
 import asyncio
 import json
 import sqlite3
@@ -16,6 +17,7 @@ from core.event_formatter import (
     format_state_event,
     format_vault_event,
 )
+from core.shared_utils import fire_and_forget
 
 
 def register_all_routes(app, engine):
@@ -76,6 +78,7 @@ def register_all_routes(app, engine):
 
     # Auth routes
     from core.auth import login_handler, logout_handler, verify_handler
+
     app.router.add_post("/auth/login", login_handler)
     app.router.add_get("/auth/verify", verify_handler)
     app.router.add_post("/auth/logout", logout_handler)
@@ -92,11 +95,15 @@ def register_all_routes(app, engine):
 # Route Handlers
 # ==============================================================================
 
+
 def trigger_cycle(engine):
+    """POST /trigger: start one cycle. Body {"isPaperTrading": bool}."""
+
     async def handler(request):
+        """Schedule the cycle and answer immediately with its id."""
         data = await request.json()
         is_paper = data.get("isPaperTrading", True)
-        asyncio.create_task(engine.execute_single_cycle(is_paper))
+        fire_and_forget(engine.execute_single_cycle(is_paper))
         return web.json_response(
             {
                 "status": "triggered",
@@ -104,11 +111,15 @@ def trigger_cycle(engine):
                 "isProcessing": engine.is_processing,
             }
         )
+
     return handler
 
 
 def activate_kill_switch(engine):
+    """POST /kill-switch: halt authorisation of every cycle until deactivated."""
+
     async def handler(request):
+        """Set the manual kill switch and log it at ERROR so it is impossible to miss."""
         engine.manual_kill_switch = True
         # FIX: Immediate Halt (Atomicity)
         engine.is_processing = False
@@ -129,11 +140,15 @@ def activate_kill_switch(engine):
         return web.json_response(
             {"status": "killed", "message": "Manual Kill Switch Activated. Engine Halted."}
         )
+
     return handler
 
 
 def deactivate_kill_switch(engine):
+    """POST /deactivate-kill-switch: lift the manual kill switch."""
+
     async def handler(request):
+        """Clear the manual kill switch and log it."""
         engine.manual_kill_switch = False
         await engine.bus.publish(
             "SYSTEM_LOG",
@@ -145,13 +160,14 @@ def deactivate_kill_switch(engine):
             },
             "GHOST",
         )
-        return web.json_response(
-            {"status": "active", "message": "Manual Kill Switch Deactivated."}
-        )
+        return web.json_response({"status": "active", "message": "Manual Kill Switch Deactivated."})
+
     return handler
 
 
 def reset_system(engine):
+    """POST /reset: return the engine to a runnable state without stopping it."""
+
     async def handler(request):
         """Return the engine to a state where a cycle can be authorised.
 
@@ -177,15 +193,20 @@ def reset_system(engine):
         if soul is not None:
             soul.is_locked_down = False
 
-        return web.json_response({
-            "status": "reset",
-            "errors_cleared": errors_cleared,
-            "running": engine.running,
-        })
+        return web.json_response(
+            {
+                "status": "reset",
+                "errors_cleared": errors_cleared,
+                "running": engine.running,
+            }
+        )
+
     return handler
 
 
 def cancel_cycle(engine):
+    """POST /cancel: stop the running cycle, stop autopilot, release vault reservations."""
+
     async def handler(request):
         """Gracefully cancel the current cycle and disable autopilot."""
         # Always allow cancellation to ensure we can stop runaway loops
@@ -217,12 +238,18 @@ def cancel_cycle(engine):
             "GHOST",
         )
 
-        return web.json_response({"status": "cancelled", "message": "Cycle cancelled and Autopilot disabled."})
+        return web.json_response(
+            {"status": "cancelled", "message": "Cycle cancelled and Autopilot disabled."}
+        )
+
     return handler
 
 
 def health_check(engine):
+    """GET /health: process liveness, agent count, cycle number, balance."""
+
     async def handler(request):
+        """Answer from in-memory state; never touches Kalshi."""
         return web.json_response(
             {
                 "status": "healthy",
@@ -231,41 +258,61 @@ def health_check(engine):
                 "balance": engine.vault.current_balance / 100,
             }
         )
+
     return handler
 
 
 def start_autopilot(engine):
+    """POST /autopilot/start: let Soul start a new cycle after each completes."""
+
     async def handler(request):
         """Enable autonomous cycle looping."""
         data = await request.json()
         is_paper = data.get("isPaperTrading", True)
-        await engine.bus.publish("SYSTEM_CONTROL", {"action": "START_AUTOPILOT", "isPaperTrading": is_paper}, "HTTP")
+        await engine.bus.publish(
+            "SYSTEM_CONTROL", {"action": "START_AUTOPILOT", "isPaperTrading": is_paper}, "HTTP"
+        )
         return web.json_response({"status": "autopilot_started", "mode": "AUTOPILOT"})
+
     return handler
 
 
 def stop_autopilot(engine):
+    """POST /autopilot/stop: finish the current cycle, then stop."""
+
     async def handler(request):
         """Disable autonomous cycle looping (Graceful Pause)."""
         await engine.bus.publish("SYSTEM_CONTROL", {"action": "STOP_AUTOPILOT"}, "HTTP")
         return web.json_response({"status": "autopilot_stopped", "mode": "MANUAL"})
+
     return handler
 
 
 def autopilot_status(engine):
+    """GET /autopilot/status: whether autopilot is on."""
+
     async def handler(request):
         """Get current autopilot status."""
-        return web.json_response({
-            "autopilot_enabled": engine.soul.autopilot_enabled if hasattr(engine, "soul") else False,
-            "is_paper_trading": engine.soul.is_paper_trading if hasattr(engine, "soul") else True,
-            "is_locked_down": engine.soul.is_locked_down if hasattr(engine, "soul") else False,
-            "is_processing": engine.is_processing,
-            "cycle_count": engine.cycle_count,
-        })
+        return web.json_response(
+            {
+                "autopilot_enabled": (
+                    engine.soul.autopilot_enabled if hasattr(engine, "soul") else False
+                ),
+                "is_paper_trading": (
+                    engine.soul.is_paper_trading if hasattr(engine, "soul") else True
+                ),
+                "is_locked_down": engine.soul.is_locked_down if hasattr(engine, "soul") else False,
+                "is_processing": engine.is_processing,
+                "cycle_count": engine.cycle_count,
+            }
+        )
+
     return handler
 
 
 def stream_logs(engine):
+    """GET /stream: server-sent events (LOG, VAULT, SIMULATION, STATE, ERROR)."""
+
     async def handler(request):
         """SSE stream for real-time logs with proper error handling."""
         response = web.StreamResponse(
@@ -306,10 +353,13 @@ def stream_logs(engine):
                 pass  # Already removed
 
         return response
+
     return handler
 
 
 def auth_handler(engine):
+    """POST /auth: the original dashboard's login check; see core.auth for the real flow."""
+
     async def handler(request):
         """Handle authentication check."""
         from core.auth import auth_manager
@@ -317,26 +367,32 @@ def auth_handler(engine):
         # Return actual session data from auth_manager
         # In 2-tier architecture, we check the auth_manager session state
         if auth_manager.authenticated:
-            return web.json_response({
-                "isAuthenticated": True,
-                "user": {
-                    "id": "user_1",
-                    "email": "trader@sentient-alpha.com" if auth_manager.is_production else "demo@kalshi.com",
-                    "name": "Sentient Trader" if auth_manager.is_production else "Demo Trader"
-                },
-                "mode": auth_manager.mode,
-                "is_production": auth_manager.is_production
-            })
-        return web.json_response({
-            "isAuthenticated": False,
-            "user": None,
-            "mode": "demo",
-            "is_production": False
-        })
+            return web.json_response(
+                {
+                    "isAuthenticated": True,
+                    "user": {
+                        "id": "user_1",
+                        "email": (
+                            "trader@sentient-alpha.com"
+                            if auth_manager.is_production
+                            else "demo@kalshi.com"
+                        ),
+                        "name": "Sentient Trader" if auth_manager.is_production else "Demo Trader",
+                    },
+                    "mode": auth_manager.mode,
+                    "is_production": auth_manager.is_production,
+                }
+            )
+        return web.json_response(
+            {"isAuthenticated": False, "user": None, "mode": "demo", "is_production": False}
+        )
+
     return handler
 
 
 def get_pnl(engine):
+    """GET /pnl: balance history for the dashboard chart."""
+
     async def handler(request):
         """Get PnL history (simulated for now)."""
         # In a real scenario, query database for balance history
@@ -349,37 +405,42 @@ def get_pnl(engine):
             ts = now.timestamp() - (i * 3600)
             # Simulated fluctuation
             val = current_balance - (i * 5)
-            history.append({
-                "timestamp": datetime.fromtimestamp(ts).isoformat(),
-                "balance": val
-            })
+            history.append({"timestamp": datetime.fromtimestamp(ts).isoformat(), "balance": val})
 
-        return web.json_response({
-            "currentBalance": current_balance,
-            "history": history[::-1] # Oldest first
-        })
+        return web.json_response(
+            {"currentBalance": current_balance, "history": history[::-1]}  # Oldest first
+        )
+
     return handler
 
 
 def get_pnl_heatmap(engine):
+    """GET /pnl/heatmap: daily P&L for the dashboard heatmap."""
+
     async def handler(request):
         """Get daily PnL heatmap."""
         # Mock data for heatmap
         heatmap = []
         import random
+
         today = datetime.now()
-        for i in range(30): # Last 30 days
+        for i in range(30):  # Last 30 days
             date = today.timestamp() - (i * 86400)
-            heatmap.append({
-                "date": datetime.fromtimestamp(date).strftime("%Y-%m-%d"),
-                "pnl": random.uniform(-50, 100),
-                "count": random.randint(1, 10)
-            })
+            heatmap.append(
+                {
+                    "date": datetime.fromtimestamp(date).strftime("%Y-%m-%d"),
+                    "pnl": random.uniform(-50, 100),
+                    "count": random.randint(1, 10),
+                }
+            )
         return web.json_response({"heatmap": heatmap})
+
     return handler
 
 
 def get_synapse_queues(engine):
+    """GET /synapse/queues: sizes of the opportunity, execution and error queues."""
+
     async def handler(request):
         """Get current Synapse queue states for real-time logistics visualization."""
         # Get queue sizes
@@ -403,18 +464,21 @@ def get_synapse_queues(engine):
             """)
             for row in cursor.fetchall():
                 from core.synapse import Opportunity
+
                 opp = Opportunity.model_validate_json(row[0])
-                opportunities.append({
-                    "id": opp.id,
-                    "ticker": opp.ticker,
-                    "title": opp.market_data.title,
-                    "subtitle": opp.market_data.subtitle,
-                    "yes_price": opp.market_data.yes_price,
-                    "no_price": opp.market_data.no_price,
-                    "volume": opp.market_data.volume,
-                    "expiration": opp.market_data.expiration,
-                    "timestamp": opp.timestamp.isoformat()
-                })
+                opportunities.append(
+                    {
+                        "id": opp.id,
+                        "ticker": opp.ticker,
+                        "title": opp.market_data.title,
+                        "subtitle": opp.market_data.subtitle,
+                        "yes_price": opp.market_data.yes_price,
+                        "no_price": opp.market_data.no_price,
+                        "volume": opp.market_data.volume,
+                        "expiration": opp.market_data.expiration,
+                        "timestamp": opp.timestamp.isoformat(),
+                    }
+                )
 
             # Get last 10 executions
             cursor.execute("""
@@ -425,40 +489,46 @@ def get_synapse_queues(engine):
             """)
             for row in cursor.fetchall():
                 from core.synapse import ExecutionSignal
+
                 exec_sig = ExecutionSignal.model_validate_json(row[0])
-                executions.append({
-                    "id": exec_sig.id,
-                    "ticker": exec_sig.target_opportunity.ticker,
-                    "title": exec_sig.target_opportunity.market_data.title,
-                    "subtitle": exec_sig.target_opportunity.market_data.subtitle,
-                    "action": exec_sig.action,
-                    "side": exec_sig.side,
-                    "confidence": exec_sig.confidence,
-                    "suggested_count": exec_sig.suggested_count,
-                    "reasoning": exec_sig.reasoning[:100] + "..." if len(exec_sig.reasoning) > 100 else exec_sig.reasoning,
-                    "timestamp": exec_sig.target_opportunity.timestamp.isoformat()
-                })
+                executions.append(
+                    {
+                        "id": exec_sig.id,
+                        "ticker": exec_sig.target_opportunity.ticker,
+                        "title": exec_sig.target_opportunity.market_data.title,
+                        "subtitle": exec_sig.target_opportunity.market_data.subtitle,
+                        "action": exec_sig.action,
+                        "side": exec_sig.side,
+                        "confidence": exec_sig.confidence,
+                        "suggested_count": exec_sig.suggested_count,
+                        "reasoning": (
+                            exec_sig.reasoning[:100] + "..."
+                            if len(exec_sig.reasoning) > 100
+                            else exec_sig.reasoning
+                        ),
+                        "timestamp": exec_sig.target_opportunity.timestamp.isoformat(),
+                    }
+                )
         finally:
             conn.close()
 
-        return web.json_response({
-            "opportunities": {
-                "size": opp_size,
-                "items": opportunities
-            },
-            "executions": {
-                "size": exec_size,
-                "items": executions
-            },
-            "flow_control": {
-                "execution_queue_at_limit": exec_size >= MAX_EXECUTION_QUEUE_SIZE,
-                "limit": MAX_EXECUTION_QUEUE_SIZE
+        return web.json_response(
+            {
+                "opportunities": {"size": opp_size, "items": opportunities},
+                "executions": {"size": exec_size, "items": executions},
+                "flow_control": {
+                    "execution_queue_at_limit": exec_size >= MAX_EXECUTION_QUEUE_SIZE,
+                    "limit": MAX_EXECUTION_QUEUE_SIZE,
+                },
             }
-        })
+        )
+
     return handler
 
 
 def get_env_health(engine):
+    """GET /env-health: which optional services are configured and reachable."""
+
     async def handler(request):
         """Verify 'Stay Alive' environment integrity."""
         import os
@@ -477,27 +547,33 @@ def get_env_health(engine):
                 with open(soul_path) as f:
                     lines = f.readlines()
                     # Find the last snapshot (lines starting with **Snapshot**)
-                    snapshots = [l for l in lines if l.startswith("**Snapshot**")]
+                    snapshots = [ln for ln in lines if ln.startswith("**Snapshot**")]
                     if snapshots:
                         last_snapshot = snapshots[-1].replace("**Snapshot**: ", "").strip()
             except Exception as e:
                 last_snapshot = f"Error reading soul: {e}"
 
-        return web.json_response({
-            "symlinks": {
-                "opencode_skills": "OK" if opencode_skills_ok else "BROKEN",
-                "agent_workflows": "OK" if agent_workflows_ok else "BROKEN"
-            },
-            "project_soul": {
-                "exists": soul_exists,
-                "last_intuition": last_snapshot
-            },
-            "status": "HEALTHY" if (opencode_skills_ok and agent_workflows_ok and soul_exists) else "DEGRADED"
-        })
+        return web.json_response(
+            {
+                "symlinks": {
+                    "opencode_skills": "OK" if opencode_skills_ok else "BROKEN",
+                    "agent_workflows": "OK" if agent_workflows_ok else "BROKEN",
+                },
+                "project_soul": {"exists": soul_exists, "last_intuition": last_snapshot},
+                "status": (
+                    "HEALTHY"
+                    if (opencode_skills_ok and agent_workflows_ok and soul_exists)
+                    else "DEGRADED"
+                ),
+            }
+        )
+
     return handler
 
 
 def trigger_ragnarok(engine):
+    """POST /ragnarok: cancel every open order and flatten every position."""
+
     async def handler(request):
         """Emergency protocol to liquidate all positions and lock the vault."""
         from core.safety import execute_ragnarok
@@ -514,7 +590,13 @@ def trigger_ragnarok(engine):
             },
             "GHOST",
         )
-        return web.json_response({"status": "ragnarok_executed", "message": "Emergency liquidation complete. Vault locked."})
+        return web.json_response(
+            {
+                "status": "ragnarok_executed",
+                "message": "Emergency liquidation complete. Vault locked.",
+            }
+        )
+
     return handler
 
 
@@ -525,7 +607,6 @@ def register_sse_subscriptions(engine):
     Args:
         engine: GhostEngine instance
     """
-    import asyncio
 
     async def _broadcast_to_sse(message):
         """Broadcast bus events to all SSE clients."""
@@ -543,7 +624,9 @@ def register_sse_subscriptions(engine):
         elif event_type == "SYSTEM_STATE":
             formatted_event = format_state_event(payload)
         elif event_type == "SYSTEM_ERROR":
-            formatted_event = format_error_event(payload, engine.cycle_count, AGENT_TO_PHASE, AGENT_NAME_TO_ID)
+            formatted_event = format_error_event(
+                payload, engine.cycle_count, AGENT_TO_PHASE, AGENT_NAME_TO_ID
+            )
 
         if formatted_event:
             # Use list() to create a snapshot since we might modify during iteration
@@ -555,8 +638,8 @@ def register_sse_subscriptions(engine):
                     engine.sse_clients.discard(queue)
 
     # Subscribe to bus events for SSE broadcast
-    asyncio.create_task(engine.bus.subscribe("SYSTEM_LOG", _broadcast_to_sse))
-    asyncio.create_task(engine.bus.subscribe("VAULT_UPDATE", _broadcast_to_sse))
-    asyncio.create_task(engine.bus.subscribe("SIM_RESULT", _broadcast_to_sse))
-    asyncio.create_task(engine.bus.subscribe("SYSTEM_STATE", _broadcast_to_sse))
-    asyncio.create_task(engine.bus.subscribe("SYSTEM_ERROR", _broadcast_to_sse))
+    fire_and_forget(engine.bus.subscribe("SYSTEM_LOG", _broadcast_to_sse))
+    fire_and_forget(engine.bus.subscribe("VAULT_UPDATE", _broadcast_to_sse))
+    fire_and_forget(engine.bus.subscribe("SIM_RESULT", _broadcast_to_sse))
+    fire_and_forget(engine.bus.subscribe("SYSTEM_STATE", _broadcast_to_sse))
+    fire_and_forget(engine.bus.subscribe("SYSTEM_ERROR", _broadcast_to_sse))

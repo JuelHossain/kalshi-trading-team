@@ -11,7 +11,6 @@ The price is not needed in the prompt: EV and sizing are computed in Python.
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from agents.brain.debate import (
     _normalise_confidence,
     _validate_probability,
@@ -58,7 +57,9 @@ OPPORTUNITY = {
     "market_data": {"title": "Will X happen?", "subtitle": "by Friday"},
 }
 
-GOOD = '{"optimist":"a","critic":"b","judge_verdict":"c","estimated_probability":0.75,"confidence":85}'
+GOOD = (
+    '{"optimist":"a","critic":"b","judge_verdict":"c","estimated_probability":0.75,"confidence":85}'
+)
 
 
 class TestThePromptIsPriceBlind:
@@ -82,7 +83,6 @@ class TestThePromptIsPriceBlind:
         assert "KXTEST-01" in prompt
         assert "Will X happen?" in prompt
         assert "by Friday" in prompt
-
 
 
 class TestConfidenceScale:

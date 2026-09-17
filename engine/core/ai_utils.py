@@ -2,6 +2,7 @@
 Shared AI Utilities for Agents
 Centralizes Gemini initialization and AI client setup.
 """
+
 import os
 
 from core.ai_client import AIClient
@@ -10,15 +11,13 @@ from core.shared_utils import fire_and_forget
 
 try:
     from google import genai
+
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
 
 
-def initialize_gemini_client(
-    log_callback=None,
-    bus: EventBus = None
-) -> tuple:
+def initialize_gemini_client(log_callback=None, bus: EventBus = None) -> tuple:
     """
     Initialize Gemini client with OpenRouter fallback.
 
@@ -45,10 +44,10 @@ def initialize_gemini_client(
         # Initialize AI client with OpenRouter fallback
         ai_client = AIClient(
             openrouter_key=openrouter_key,
-            log_callback=lambda msg, level="INFO": fire_and_forget(
-                log_callback(msg, level=level)
-            ) if log_callback else None,
-            bus=bus
+            log_callback=lambda msg, level="INFO": (
+                fire_and_forget(log_callback(msg, level=level)) if log_callback else None
+            ),
+            bus=bus,
         )
 
         # Default model

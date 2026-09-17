@@ -12,12 +12,10 @@ probability, so it can actually reject a trade.
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from agents.brain import debate as debate_module
 from agents.brain.debate import run_debate_ensemble
 
-# Fixtures shared with the trade-cycle tests.
-from tests.engine.integration.test_trade_cycle import _opportunity, cycle  # noqa: F401
+from tests.engine.support import _opportunity
 
 
 def _estimates(*probabilities, confidence=0.9):

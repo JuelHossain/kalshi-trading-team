@@ -14,10 +14,10 @@ idle one:
     created. The loop could never see a later STOP_AUTOPILOT, so the flag
     that exists to stop it did nothing.
 """
+
 import asyncio
 
 import pytest
-
 from agents.brain.monitor import _should_stop
 
 
@@ -25,7 +25,9 @@ class TestStopFlagIsLive:
     def test_a_callable_is_re_read_each_time(self):
         """A bool snapshot is why STOP_AUTOPILOT never stopped the loop."""
         state = {"stop": False}
-        flag = lambda: state["stop"]  # noqa: E731
+
+        def flag():
+            return state["stop"]
 
         assert _should_stop(flag) is False
         state["stop"] = True

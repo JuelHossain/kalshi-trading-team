@@ -17,6 +17,4 @@ supabase==2.31.0  # optional analytics sink
 psutil==7.2.2  # process health metrics
 ddgs==9.16.0  # DuckDuckGo search for market context
 numpy==2.5.3  # Monte Carlo simulation
-ruff==0.16.7  # linter
-black==26.5.1  # formatter
 rich==15.0.0  # CLI display system

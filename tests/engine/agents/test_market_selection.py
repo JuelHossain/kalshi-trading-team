@@ -9,8 +9,8 @@ combo shard with Volume: 0, and the Brain then scored them. Two causes:
     coin flip regardless of its real price. The Brain was comparing its
     estimate against a number nobody quoted.
 """
-import pytest
 
+import pytest
 from agents.senses.scanner import (
     MAX_SPREAD_CENTS,
     MIN_VOLUME,

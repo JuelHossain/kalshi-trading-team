@@ -7,7 +7,6 @@ no agent could be constructed.
 """
 
 import pytest
-
 from core.error_manager import ErrorManager, get_error_manager, set_error_manager
 
 
@@ -39,8 +38,8 @@ def test_set_error_manager_is_observed_by_get():
 
 def test_agent_constructs_without_injected_manager():
     """BaseAgent falls back to get_error_manager(); this was the real-world impact."""
-    from core.bus import EventBus
     from agents.base import BaseAgent
+    from core.bus import EventBus
 
     agent = BaseAgent("test-agent", 1, EventBus())
     assert isinstance(agent.error_manager, ErrorManager)

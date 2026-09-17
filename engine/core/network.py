@@ -1,3 +1,12 @@
+"""The Kalshi API client.
+
+Signs every request with RSA-PSS, selects the demo or production host from
+KALSHI_ENV (demo unless production is asked for by name), retries only on
+transient statuses, and funnels every order through place_order -- the one
+place that consults trading_mode and returns a simulated fill in paper mode.
+Prices and sizes arrive as decimal strings in dollars.
+"""
+
 import asyncio
 import base64
 import json
@@ -10,6 +19,14 @@ from core.display import AgentType, log_error, log_warning
 from core.lazy import lazy
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
+
+
+class KalshiAPIError(RuntimeError):
+    """Kalshi answered with a non-retryable status.
+
+    Distinct from a connection failure so the retry loop can tell them apart:
+    a 401 or 404 is a definitive answer, not a transient fault.
+    """
 
 
 class KalshiClient:
@@ -74,6 +91,7 @@ class KalshiClient:
                 log_error(f"Crypto Init Failed: {e}", AgentType.GATEWAY)
 
     async def get_session(self) -> aiohttp.ClientSession:
+        """Lazily create the shared aiohttp session: 5s total timeout, 10 connections."""
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=5.0), connector=aiohttp.TCPConnector(limit=10)
@@ -136,7 +154,7 @@ class KalshiClient:
                         wait = (2**attempt) + (time.time() % 1)
                         log_warning(
                             f"Attempt {attempt+1} failed ({resp.status}). Retrying in {wait:.2f}s...",
-                            AgentType.GATEWAY
+                            AgentType.GATEWAY,
                         )
                         await asyncio.sleep(wait)
                         continue
@@ -144,15 +162,20 @@ class KalshiClient:
                     error_text = await resp.text()
                     error_msg = f"API Error {resp.status} ({method} {path}): {error_text}"
                     log_error(error_msg, AgentType.GATEWAY)
-                    raise RuntimeError(error_msg)
+                    raise KalshiAPIError(error_msg)
 
+            except KalshiAPIError:
+                # A definitive answer from Kalshi. Retrying a 4xx three times with
+                # sleeps only delayed the same answer and then mislabelled it as a
+                # connection error.
+                raise
             except Exception as e:
                 error_msg = f"Connection Error after {attempt + 1} attempts: {e}"
                 log_error(error_msg, AgentType.GATEWAY)
                 if attempt < retries - 1:
                     await asyncio.sleep(1)
                     continue
-                raise RuntimeError(error_msg)
+                raise RuntimeError(error_msg) from e
 
         raise RuntimeError(f"Request failed after {retries} retries: {method} {path}")
 
@@ -210,6 +233,7 @@ class KalshiClient:
         raise RuntimeError("Failed to get balance: invalid response format")
 
     async def get_orderbook(self, ticker: str) -> dict | None:
+        """GET /markets/{ticker}/orderbook. hand.execution.parse_orderbook knows the shape."""
         path = f"/markets/{ticker}/orderbook"
         return await self.request("GET", path)
 
@@ -286,6 +310,7 @@ class KalshiClient:
         )
 
     async def close(self):
+        """Close the shared session. Safe to call more than once."""
         if self._session and not self._session.closed:
             await self._session.close()
 

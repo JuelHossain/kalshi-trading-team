@@ -1,8 +1,8 @@
+import asyncio
 import os
 import sys
+
 import pytest
-import asyncio
-import sqlite3
 import pytest_asyncio
 from dotenv import load_dotenv
 
@@ -74,10 +74,15 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(skip_live)
 
 
-from engine.core.bus import EventBus
-from engine.core.synapse import Synapse
-from engine.core.network import kalshi_client
-from engine.core.vault import RecursiveVault
+from unittest.mock import AsyncMock
+
+from agents.brain import BrainAgent
+from agents.hand import HandAgent
+from core.bus import EventBus
+from core.network import kalshi_client
+from core.synapse import Synapse
+from core.vault import RecursiveVault
+
 
 @pytest.fixture(autouse=True)
 def block_network(request, monkeypatch):
@@ -88,9 +93,12 @@ def block_network(request, monkeypatch):
     Every HTTP method funnels through request(), so blocking that single method
     covers every module that imported the client, however it was bound.
 
-    Tests marked `live` opt out and use the real client.
+    Tests marked `live` opt out and use the real client. Tests marked
+    `network_internals` opt out because they exercise request() itself
+    against a fake session -- the retry and error-classification logic
+    cannot be tested through a blocked request().
     """
-    if "live" in request.keywords:
+    if "live" in request.keywords or "network_internals" in request.keywords:
         return
 
     from core.network import KalshiClient
@@ -127,28 +135,32 @@ def event_loop():
     yield loop
     loop.close()
 
+
 @pytest_asyncio.fixture(scope="function")
 async def test_db():
     """Create a temporary SQLite database for testing isolation."""
     db_path = "test_ghost_memory.db"
     if os.path.exists(db_path):
         os.remove(db_path)
-    
+
     yield db_path
-    
+
     if os.path.exists(db_path):
         try:
             os.remove(db_path)
         except PermissionError:
-            pass # DB might still be locking on some systems
+            pass  # DB might still be locking on some systems
+
 
 @pytest_asyncio.fixture(scope="function")
 async def bus():
     return EventBus()
 
+
 @pytest_asyncio.fixture(scope="function")
 async def synapse(test_db):
     return Synapse(db_path=test_db)
+
 
 @pytest_asyncio.fixture(scope="function")
 async def vault(test_db):
@@ -158,16 +170,17 @@ async def vault(test_db):
     await v.initialize(100000)  # $1000
     yield v
 
+
 @pytest_asyncio.fixture(scope="function")
 async def k_client():
     """Real Kalshi client authenticated with Demo credentials from .env."""
     # Ensure we ARE in paper trading mode for safety
     os.environ["IS_PRODUCTION"] = "false"
-    
+
     # Check if we have credentials
     if not has_real_credentials("KALSHI_DEMO_KEY_ID", "KALSHI_DEMO_PRIVATE_KEY"):
         pytest.skip("Kalshi Demo credentials not found in engine/.env")
-        
+
     # Re-initialize to ensure it picks up the latest env (if needed)
     # kalshi_client is a singleton, so we just use the existing one
     # but we should ensure it's logged in.
@@ -175,7 +188,39 @@ async def k_client():
         await kalshi_client.get_balance()
     except Exception as e:
         pytest.fail(f"Failed to authenticate with Kalshi Demo: {e}")
-        
+
     yield kalshi_client
-    # We don't close the client here as it might be used by other tests 
+    # We don't close the client here as it might be used by other tests
     # and it's a singleton in the engine.
+
+
+# Shared by the trade-cycle, exit-policy, no-side and duplicate-exposure tests.
+# Lived in test_trade_cycle.py and was imported from there; pytest finds it
+# here without any module having to import a fixture by name.
+@pytest.fixture
+def cycle(test_db):
+    """A Brain and Hand wired to one bus, one synapse and a funded vault."""
+    bus = EventBus()
+    synapse = Synapse(db_path=test_db)
+    vault = RecursiveVault(test_mode=True)
+
+    kalshi = AsyncMock()
+    kalshi.get_balance = AsyncMock(return_value=100_000)  # $1000
+    kalshi.get_orderbook = AsyncMock(
+        return_value={
+            "bids": [{"price": 48, "count": 400}],
+            "asks": [{"price": 51, "count": 400}],
+        }
+    )
+    kalshi.place_order = AsyncMock(return_value={"order_id": "integration-order-1"})
+
+    brain = BrainAgent(3, bus, synapse=synapse)
+    hand = HandAgent(4, bus, vault=vault, kalshi_client=kalshi, synapse=synapse)
+    return {
+        "bus": bus,
+        "synapse": synapse,
+        "vault": vault,
+        "kalshi": kalshi,
+        "brain": brain,
+        "hand": hand,
+    }

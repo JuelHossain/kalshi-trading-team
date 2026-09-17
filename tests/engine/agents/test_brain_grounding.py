@@ -12,22 +12,24 @@ safe, but useless. Worse, ungrounded confidence is not honest: elsewhere the
 same model priced a central-bank market at 0.01 with 95% confidence by citing
 a rate decision from the wrong year.
 """
+
 import importlib
 
 import pytest
-
 from agents.brain import debate
 
 
 @pytest.fixture
 def reload_debate(monkeypatch):
     """Re-import the module so the env var is read at import time."""
+
     def _reload(value: str | None):
         if value is None:
             monkeypatch.delenv("BRAIN_SEARCH_GROUNDING", raising=False)
         else:
             monkeypatch.setenv("BRAIN_SEARCH_GROUNDING", value)
         return importlib.reload(debate)
+
     yield _reload
     monkeypatch.delenv("BRAIN_SEARCH_GROUNDING", raising=False)
     importlib.reload(debate)
@@ -84,7 +86,6 @@ class TestGroundingIsNotLoadBearing:
 class TestPromptDoesNotLeakThePrice:
     def test_the_prompt_asks_the_model_to_search(self):
         """Without this instruction the model answers from memory."""
-        source = importlib.resources.files  # noqa: F841  (kept for clarity)
         from pathlib import Path
 
         text = Path(debate.__file__).read_text(encoding="utf-8")
@@ -95,6 +96,6 @@ class TestPromptDoesNotLeakThePrice:
         from pathlib import Path
 
         text = Path(debate.__file__).read_text(encoding="utf-8")
-        prompt_region = text[text.index('prompt = f"""'):text.index('OUTPUT RULES')]
+        prompt_region = text[text.index('prompt = f"""') : text.index("OUTPUT RULES")]
         assert "kalshi_price" not in prompt_region
         assert "Current Kalshi Price" not in prompt_region

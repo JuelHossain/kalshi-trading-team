@@ -4,6 +4,7 @@ Role: Executive Director & Self-Healing Core
 
 Core SoulAgent class with evolution and lifecycle management.
 """
+
 import asyncio
 from typing import Any
 
@@ -23,7 +24,14 @@ from .evolution import evolve_instructions, generate_with_fallback
 class SoulAgent(BaseAgent):
     """The Executive Director - System, Memory & Evolution"""
 
-    def __init__(self, agent_id: int, bus: EventBus, vault: RecursiveVault, synapse: Synapse = None, error_manager=None):
+    def __init__(
+        self,
+        agent_id: int,
+        bus: EventBus,
+        vault: RecursiveVault,
+        synapse: Synapse = None,
+        error_manager=None,
+    ):
         super().__init__("SOUL", agent_id, bus, synapse, error_manager)
         self.vault = vault
         self.trading_instructions = ""
@@ -35,14 +43,14 @@ class SoulAgent(BaseAgent):
         self.is_paper_trading = True
 
         # Initialize Gemini for self-evolution
-        self.client, self.ai_client, self.gemini_model, self._gemini_available = initialize_gemini_client(
-            log_callback=self.log,
-            bus=self.bus
+        self.client, self.ai_client, self.gemini_model, self._gemini_available = (
+            initialize_gemini_client(log_callback=self.log, bus=self.bus)
         )
 
         self._first_run = True
 
     async def setup(self):
+        """Subscribe to cycle lifecycle, trade results and control events."""
         await self.log("Soul awakening. Executive Director online.")
 
         await self.bus.subscribe("CYCLE_START", self.on_cycle_start)
@@ -118,7 +126,7 @@ class SoulAgent(BaseAgent):
             trading_instructions=self.trading_instructions,
             strengths_list=self.strengths_list,
             mistakes_log=self.mistakes_log,
-            log_callback=self.log
+            log_callback=self.log,
         )
 
         if new_instructions:
@@ -130,8 +138,12 @@ class SoulAgent(BaseAgent):
         if action == "START_AUTOPILOT":
             self.autopilot_enabled = True
             self.is_paper_trading = message.payload.get("isPaperTrading", True)
-            await self.log(f"AUTOPILOT ENABLED (Paper: {self.is_paper_trading}). Starting autonomous loop...")
-            await self.bus.publish("REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name)
+            await self.log(
+                f"AUTOPILOT ENABLED (Paper: {self.is_paper_trading}). Starting autonomous loop..."
+            )
+            await self.bus.publish(
+                "REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name
+            )
         elif action == "STOP_AUTOPILOT":
             if self.autopilot_enabled:
                 self.autopilot_enabled = False
@@ -144,7 +156,9 @@ class SoulAgent(BaseAgent):
             await asyncio.sleep(self.autopilot_delay)
 
             if self.autopilot_enabled and not self.is_locked_down:
-                await self.bus.publish("REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name)
+                await self.bus.publish(
+                    "REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name
+                )
 
     async def on_system_lockdown(self, message):
         """Handle system lockdown by disabling autopilot immediately"""
@@ -182,9 +196,8 @@ class SoulAgent(BaseAgent):
         # 1. Kalshi API Check
         try:
             balance = await kalshi_client.get_balance()
-            if balance == 0:
-                if not await kalshi_client.get_active_markets(limit=1):
-                    errors.append("Kalshi API unreachable or 0 balance/markets.")
+            if balance == 0 and not await kalshi_client.get_active_markets(limit=1):
+                errors.append("Kalshi API unreachable or 0 balance/markets.")
         except Exception as e:
             errors.append(f"Kalshi API Error: {e}")
 
@@ -218,11 +231,17 @@ class SoulAgent(BaseAgent):
                 code="SYSTEM_INIT_FAILED",
                 message=f"Pre-flight API Failures: {error_msg}",
                 severity=ErrorSeverity.CRITICAL,
-                hint="Check API keys for Kalshi/Gemini/OpenRouter and DB connection"
+                hint="Check API keys for Kalshi/Gemini/OpenRouter and DB connection",
             )
 
             self.is_locked_down = True
-            await self.bus.publish("SYSTEM_LOCKDOWN", {"reason": f"API Check Failed: {error_msg}"}, self.name)
-            await self.bus.publish("SYSTEM_FATAL", {"message": f"Pre-flight Check Failed: {error_msg}"}, self.name)
+            await self.bus.publish(
+                "SYSTEM_LOCKDOWN", {"reason": f"API Check Failed: {error_msg}"}, self.name
+            )
+            await self.bus.publish(
+                "SYSTEM_FATAL", {"message": f"Pre-flight Check Failed: {error_msg}"}, self.name
+            )
         else:
-            await self.log("PRE-FLIGHT API CHECK PASSED (Kalshi, Supabase, Gemini)", level="SUCCESS")
+            await self.log(
+                "PRE-FLIGHT API CHECK PASSED (Kalshi, Supabase, Gemini)", level="SUCCESS"
+            )

@@ -5,8 +5,8 @@ has_open_position read Kalshi's portfolio, where a simulated fill never
 appears, got an empty book, and answered "not held". The guard against
 concentrating exposure was blind in exactly the mode meant to prove it.
 """
-import pytest
 
+import pytest
 from agents.hand.execution import has_open_position
 from agents.hand.exits import average_entry_price_cents
 from core import trading_mode

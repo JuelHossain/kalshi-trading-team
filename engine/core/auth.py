@@ -18,9 +18,19 @@ from core.lazy import lazy
 
 # API Path Constants
 _DIRECT_PATHS = {
-    "/health", "/auth", "/pnl", "/pnl/heatmap", "/stream",
-    "/trigger", "/cancel", "/kill-switch", "/deactivate-kill-switch",
-    "/reset", "/autopilot/start", "/autopilot/stop", "/autopilot/status",
+    "/health",
+    "/auth",
+    "/pnl",
+    "/pnl/heatmap",
+    "/stream",
+    "/trigger",
+    "/cancel",
+    "/kill-switch",
+    "/deactivate-kill-switch",
+    "/reset",
+    "/autopilot/start",
+    "/autopilot/stop",
+    "/autopilot/status",
     "/synapse/queues",
 }
 _API_PREFIX = "/api"
@@ -78,7 +88,9 @@ class AuthManager:
 
     async def middleware(self, app, handler):
         """aiohttp middleware for authentication."""
+
         async def middleware_handler(request):
+            """Let public paths through; require the API key on everything else."""
             # Skip auth for public paths
             if self.is_public_path(request.path):
                 return await handler(request)
@@ -90,7 +102,6 @@ class AuthManager:
             return await handler(request)
 
         return middleware_handler
-
 
 
 # Global auth manager instance
@@ -115,9 +126,7 @@ async def login_handler(request: web.Request) -> web.Response:
         # Password is required for all access
         if not password:
             return error_response(
-                "Password required",
-                "Empty password not allowed. Demo mode has been removed.",
-                401
+                "Password required", "Empty password not allowed. Demo mode has been removed.", 401
             )
 
         # Constant-time compare so response timing cannot leak the password.
@@ -146,10 +155,7 @@ async def verify_handler(request: web.Request) -> web.Response:
         return auth_response(False, MODE_PRODUCTION, False, "Not authenticated")
 
     return auth_response(
-        auth_manager.authenticated,
-        auth_manager.mode,
-        auth_manager.is_production,
-        "Authenticated"
+        auth_manager.authenticated, auth_manager.mode, auth_manager.is_production, "Authenticated"
     )
 
 

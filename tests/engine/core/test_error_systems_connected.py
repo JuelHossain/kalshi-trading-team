@@ -13,7 +13,6 @@ BaseAgent held both objects and passed neither to the other.
 from unittest.mock import AsyncMock
 
 import pytest
-
 from core.bus import EventBus
 from core.error_codes import ErrorDomain, ErrorSeverity
 from core.error_dispatcher import ErrorDispatcher
@@ -132,6 +131,4 @@ class TestShutdownIsIdempotent:
         await engine.shutdown("first")
         await engine.shutdown("second")
 
-        assert agent.teardown.await_count == 1, (
-            "the second shutdown repeated the teardown"
-        )
+        assert agent.teardown.await_count == 1, "the second shutdown repeated the teardown"

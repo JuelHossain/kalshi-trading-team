@@ -1,7 +1,10 @@
-import pytest
 import os
+
+import pytest
+
 from engine.agents.brain import BrainAgent
-from engine.core.synapse import Opportunity, MarketData
+from engine.core.synapse import MarketData, Opportunity
+
 
 @pytest.mark.asyncio
 async def test_brain_real_gemini_analysis(bus, synapse):
@@ -22,7 +25,7 @@ async def test_brain_real_gemini_analysis(bus, synapse):
         yes_price=50,
         no_price=50,
         volume=100,
-        expiration="2026-12-31"
+        expiration="2026-12-31",
     )
     opp = Opportunity(ticker="TEST-BRAIN-AI", market_data=md)
     await synapse.opportunities.push(opp)
@@ -34,8 +37,8 @@ async def test_brain_real_gemini_analysis(bus, synapse):
     size = await synapse.executions.size()
     if size == 0:
         # Add diagnostic output for debugging
-        print(f"\n[BRAIN] No execution queued. AI likely vetoed the trade.")
-        print(f"[BRAIN] Check if GEMINI_API_KEY is set and valid")
+        print("\n[BRAIN] No execution queued. AI likely vetoed the trade.")
+        print("[BRAIN] Check if GEMINI_API_KEY is set and valid")
         pytest.fail("Execution queue empty - AI likely returned low confidence")
 
     assert size == 1

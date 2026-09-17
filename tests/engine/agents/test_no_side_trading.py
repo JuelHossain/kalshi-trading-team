@@ -13,21 +13,19 @@ YES edge.
 from unittest.mock import AsyncMock
 
 import pytest
+from agents.brain.simulation import best_side, kelly_fraction
 
-from agents.brain.simulation import best_side, kelly_fraction, run_simulation
-
-# Fixtures shared with the trade-cycle tests.
-from tests.engine.integration.test_trade_cycle import _debate, _opportunity, cycle  # noqa: F401
+from tests.engine.support import _debate, _opportunity
 
 
 class TestSideSelection:
     @pytest.mark.parametrize(
         "probability,price,expected",
         [
-            (0.90, 0.50, "yes"),   # far underpriced
-            (0.55, 0.50, "yes"),   # slightly underpriced
-            (0.45, 0.50, "no"),    # slightly overpriced
-            (0.10, 0.50, "no"),    # far overpriced
+            (0.90, 0.50, "yes"),  # far underpriced
+            (0.55, 0.50, "yes"),  # slightly underpriced
+            (0.45, 0.50, "no"),  # slightly overpriced
+            (0.10, 0.50, "no"),  # far overpriced
             (0.30, 0.80, "no"),
             (0.80, 0.30, "yes"),
         ],
@@ -47,7 +45,7 @@ class TestSideSelection:
     def test_the_no_side_carries_mirrored_price_and_probability(self):
         side, side_price, side_probability, _ = best_side(0.30, 0.70)
         assert side == "no"
-        assert side_price == pytest.approx(0.30)        # 1 - 0.70
+        assert side_price == pytest.approx(0.30)  # 1 - 0.70
         assert side_probability == pytest.approx(0.70)  # 1 - 0.30
 
     def test_kelly_works_unchanged_on_the_no_side(self):
@@ -87,7 +85,10 @@ class TestTheHandPlacesNoOrders:
         await cycle["vault"].initialize(100_000)
         # Tight book so the snipe check passes on either side.
         kalshi.get_orderbook = AsyncMock(
-            return_value={"bids": [{"price": 68, "count": 800}], "asks": [{"price": 71, "count": 800}]}
+            return_value={
+                "bids": [{"price": 68, "count": 800}],
+                "asks": [{"price": 71, "count": 800}],
+            }
         )
 
         cycle["brain"].run_debate = _debate(probability=0.20)
@@ -103,7 +104,10 @@ class TestTheHandPlacesNoOrders:
         hand, kalshi = cycle["hand"], cycle["kalshi"]
         await cycle["vault"].initialize(100_000)
         kalshi.get_orderbook = AsyncMock(
-            return_value={"bids": [{"price": 68, "count": 800}], "asks": [{"price": 71, "count": 800}]}
+            return_value={
+                "bids": [{"price": 68, "count": 800}],
+                "asks": [{"price": 71, "count": 800}],
+            }
         )
 
         cycle["brain"].run_debate = _debate(probability=0.20)

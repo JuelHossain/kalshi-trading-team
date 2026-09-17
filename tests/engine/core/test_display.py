@@ -4,35 +4,34 @@ Tests cover startup banner, progress display, agent status table,
 error display, log levels, and live dashboard.
 """
 
-import pytest
-import sys
 import os
+import sys
 import time
 from io import StringIO
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
-from datetime import datetime
+from unittest.mock import Mock, patch
+
+import pytest
 
 # Add the engine directory to the path
 engine_dir = Path(__file__).parent.parent.parent / "engine"
 sys.path.insert(0, str(engine_dir))
 
 from core.display import (
-    GhostDisplay,
     AgentType,
+    GhostDisplay,
     get_display,
-    show_startup_banner,
-    show_agent_status,
-    update_agent_status,
-    log_debug,
-    log_info,
-    log_warning,
-    log_error,
     log_critical,
+    log_debug,
+    log_error,
+    log_info,
     log_success,
+    log_warning,
+    show_agent_status,
     show_error,
+    show_startup_banner,
+    update_agent_status,
 )
-
 from rich.console import Console
 
 
@@ -108,11 +107,11 @@ class TestAgentInfo:
         from core.display import AGENT_INFO
 
         for agent_type, info in AGENT_INFO.items():
-            assert hasattr(info, 'id')
-            assert hasattr(info, 'name')
-            assert hasattr(info, 'description')
-            assert hasattr(info, 'emoji')
-            assert hasattr(info, 'color')
+            assert hasattr(info, "id")
+            assert hasattr(info, "name")
+            assert hasattr(info, "description")
+            assert hasattr(info, "emoji")
+            assert hasattr(info, "color")
             assert info.id == agent_type
 
     def test_soul_agent_info(self):
@@ -295,7 +294,7 @@ class TestProgressDisplay:
         display.console = Mock()
 
         # Mock the progress to avoid actual console output
-        with patch('core.display.Progress') as mock_progress:
+        with patch("core.display.Progress") as mock_progress:
             mock_progress.return_value.__enter__ = Mock()
             mock_progress.return_value.__exit__ = Mock(return_value=False)
 
@@ -314,7 +313,7 @@ class TestAgentThinking:
         display.console = Mock()
 
         # Mock the status context to avoid actual console output
-        with patch.object(display.console, 'status') as mock_status:
+        with patch.object(display.console, "status") as mock_status:
             mock_status.return_value.__enter__ = Mock()
             mock_status.return_value.__exit__ = Mock(return_value=False)
 
@@ -442,18 +441,18 @@ class TestStartupBannerDisplay:
 
         # GATEWAY might appear elsewhere, but not in the pillars section
         # This is a basic check - the implementation filters it out
-        lines = output.split('\n')
+        lines = output.split("\n")
         pillars_section = False
         gateway_in_pillars = False
 
         for line in lines:
-            if '4 PILLARS' in line:
+            if "4 PILLARS" in line:
                 pillars_section = True
-            if pillars_section and 'GATEWAY' in line and 'HTTP Interface' in line:
+            if pillars_section and "GATEWAY" in line and "HTTP Interface" in line:
                 gateway_in_pillars = True
                 break
             # End of pillars section (rough heuristic)
-            if pillars_section and line.strip() == '':
+            if pillars_section and line.strip() == "":
                 break
 
         # GATEWAY should not be in the pillars table
@@ -465,7 +464,7 @@ class TestStartupBannerDisplay:
         output = display.console.file.getvalue()
 
         # Check for newlines (simplified check)
-        assert output.count('\n') > 5  # Should have multiple newlines
+        assert output.count("\n") > 5  # Should have multiple newlines
 
 
 class TestProgressDisplayDetailed:
@@ -480,7 +479,7 @@ class TestProgressDisplayDetailed:
 
     def test_cycle_progress_creates_four_tasks(self, display):
         """Cycle progress should create tasks for all 4 phases."""
-        with patch('core.display.Progress') as mock_progress:
+        with patch("core.display.Progress") as mock_progress:
             mock_progress.return_value.__enter__ = Mock()
             mock_progress.return_value.__exit__ = Mock(return_value=False)
 
@@ -491,7 +490,7 @@ class TestProgressDisplayDetailed:
 
     def test_cycle_progress_displays_cycle_header(self, display):
         """Cycle progress should display the cycle number and mode."""
-        with patch('core.display.Progress') as mock_progress:
+        with patch("core.display.Progress") as mock_progress:
             mock_progress.return_value.__enter__ = Mock()
             mock_progress.return_value.__exit__ = Mock(return_value=False)
 
@@ -502,7 +501,7 @@ class TestProgressDisplayDetailed:
 
     def test_cycle_progress_paper_trading_mode(self, display):
         """Paper trading mode should be displayed correctly."""
-        with patch('core.display.Progress') as mock_progress:
+        with patch("core.display.Progress") as mock_progress:
             mock_progress.return_value.__enter__ = Mock()
             mock_progress.return_value.__exit__ = Mock(return_value=False)
 
@@ -513,7 +512,7 @@ class TestProgressDisplayDetailed:
 
     def test_cycle_progress_shows_trading_cycle_title(self, display):
         """Progress should show the trading cycle title."""
-        with patch('core.display.Progress') as mock_progress:
+        with patch("core.display.Progress") as mock_progress:
             mock_progress.return_value.__enter__ = Mock()
             mock_progress.return_value.__exit__ = Mock(return_value=False)
 
@@ -524,7 +523,7 @@ class TestProgressDisplayDetailed:
 
     def test_cycle_progress_complete_message(self, display):
         """Progress should show completion message."""
-        with patch('core.display.Progress') as mock_progress:
+        with patch("core.display.Progress") as mock_progress:
             mock_progress.return_value.__enter__ = Mock()
             mock_progress.return_value.__exit__ = Mock(return_value=False)
 
@@ -535,24 +534,19 @@ class TestProgressDisplayDetailed:
 
     def test_cycle_progress_tracker_updates_phases(self, display):
         """Progress tracker should be able to update phases."""
-        with patch('core.display.Progress') as mock_progress:
+        with patch("core.display.Progress") as mock_progress:
             mock_progress_instance = Mock()
             mock_progress_instance.__enter__ = Mock(return_value=None)
             mock_progress_instance.__exit__ = Mock(return_value=False)
             mock_progress.return_value = mock_progress_instance
 
             # Mock the tasks and methods
-            mock_tasks = {
-                "soul": Mock(),
-                "senses": Mock(),
-                "brain": Mock(),
-                "hand": Mock()
-            }
+            mock_tasks = {"soul": Mock(), "senses": Mock(), "brain": Mock(), "hand": Mock()}
             mock_progress_instance.tasks = {
                 mock_tasks["soul"]: Mock(completed=0),
                 mock_tasks["senses"]: Mock(completed=0),
                 mock_tasks["brain"]: Mock(completed=0),
-                mock_tasks["hand"]: Mock(completed=0)
+                mock_tasks["hand"]: Mock(completed=0),
             }
 
             with display.cycle_progress(cycle_num=1) as tracker:
@@ -567,7 +561,7 @@ class TestProgressDisplayDetailed:
 
     def test_cycle_progress_tracker_complete_phase(self, display):
         """Tracker should be able to mark phases as complete."""
-        with patch('core.display.Progress') as mock_progress:
+        with patch("core.display.Progress") as mock_progress:
             mock_progress_instance = Mock()
             mock_progress_instance.__enter__ = Mock(return_value=None)
             mock_progress_instance.__exit__ = Mock(return_value=False)
@@ -584,7 +578,7 @@ class TestProgressDisplayDetailed:
 
     def test_cycle_progress_all_agents_represented(self, display):
         """Progress should include all 4 main agents."""
-        with patch('core.display.Progress') as mock_progress:
+        with patch("core.display.Progress") as mock_progress:
             mock_progress.return_value.__enter__ = Mock()
             mock_progress.return_value.__exit__ = Mock(return_value=False)
 
@@ -707,20 +701,14 @@ class TestErrorDisplayDetailed:
 
     def test_error_panel_displays_title(self, display):
         """Error panel should display the error title."""
-        display.show_error(
-            title="Test Error",
-            message="This is a test error message"
-        )
+        display.show_error(title="Test Error", message="This is a test error message")
         output = display.console.file.getvalue()
 
         assert "Test Error" in output
 
     def test_error_panel_displays_message(self, display):
         """Error panel should display the error message."""
-        display.show_error(
-            title="Test Error",
-            message="This is a test error message"
-        )
+        display.show_error(title="Test Error", message="This is a test error message")
         output = display.console.file.getvalue()
 
         assert "This is a test error message" in output
@@ -728,9 +716,7 @@ class TestErrorDisplayDetailed:
     def test_error_panel_with_context(self, display):
         """Error panel should display context when provided."""
         display.show_error(
-            title="Test Error",
-            message="Error occurred",
-            context="During market scan at 10:30 AM"
+            title="Test Error", message="Error occurred", context="During market scan at 10:30 AM"
         )
         output = display.console.file.getvalue()
 
@@ -740,9 +726,7 @@ class TestErrorDisplayDetailed:
     def test_error_panel_with_hint(self, display):
         """Error panel should display hint when provided."""
         display.show_error(
-            title="Test Error",
-            message="Error occurred",
-            hint="Check your network connection"
+            title="Test Error", message="Error occurred", hint="Check your network connection"
         )
         output = display.console.file.getvalue()
 
@@ -751,22 +735,14 @@ class TestErrorDisplayDetailed:
 
     def test_error_panel_with_agent(self, display):
         """Error panel should display agent information."""
-        display.show_error(
-            title="Test Error",
-            message="Agent error",
-            agent=AgentType.BRAIN
-        )
+        display.show_error(title="Test Error", message="Agent error", agent=AgentType.BRAIN)
         output = display.console.file.getvalue()
 
         assert "BRAIN" in output or "🧠" in output
 
     def test_error_warning_severity(self, display):
         """Warning severity should display correctly."""
-        display.show_error(
-            title="Warning",
-            message="Warning message",
-            severity="WARNING"
-        )
+        display.show_error(title="Warning", message="Warning message", severity="WARNING")
         output = display.console.file.getvalue()
 
         assert "WARNING" in output or "⚠️" in output
@@ -774,9 +750,7 @@ class TestErrorDisplayDetailed:
     def test_error_critical_severity(self, display):
         """Critical severity should display correctly."""
         display.show_error(
-            title="Critical Error",
-            message="Critical error message",
-            severity="CRITICAL"
+            title="Critical Error", message="Critical error message", severity="CRITICAL"
         )
         output = display.console.file.getvalue()
 
@@ -784,24 +758,18 @@ class TestErrorDisplayDetailed:
 
     def test_error_default_severity(self, display):
         """Default severity should be ERROR."""
-        display.show_error(
-            title="Error",
-            message="Error message"
-        )
+        display.show_error(title="Error", message="Error message")
         output = display.console.file.getvalue()
 
         assert "ERROR" in output or "❌" in output
 
     def test_error_panel_proper_spacing(self, display):
         """Error panel should have proper spacing."""
-        display.show_error(
-            title="Test Error",
-            message="Test message"
-        )
+        display.show_error(title="Test Error", message="Test message")
         output = display.console.file.getvalue()
 
         # Should have multiple newlines for spacing
-        assert output.count('\n') >= 2
+        assert output.count("\n") >= 2
 
     def test_error_panel_complete_information(self, display):
         """Error panel with all fields should display correctly."""
@@ -811,7 +779,7 @@ class TestErrorDisplayDetailed:
             context="Complete context information",
             hint="Complete hint information",
             severity="ERROR",
-            agent=AgentType.SOUL
+            agent=AgentType.SOUL,
         )
         output = display.console.file.getvalue()
 
@@ -979,7 +947,7 @@ class TestLiveDashboardDetailed:
         # Check that layout exists and has the expected structure
         assert display.layout is not None
         # The layout is a Rich Layout object, check if it has the regions
-        assert hasattr(display.layout, 'split')
+        assert hasattr(display.layout, "split")
         display.stop_live_dashboard()
 
     def test_dashboard_has_main_section(self, display):
@@ -1127,6 +1095,7 @@ class TestConvenienceFunctionsDetailed:
     def reset_display(self):
         """Reset the global display instance before each test."""
         import core.display
+
         core.display._display = None
         yield
         core.display._display = None
@@ -1146,6 +1115,7 @@ class TestConvenienceFunctionsDetailed:
     def test_get_display_creates_new_instance_if_none(self, reset_display):
         """get_display should create new instance if none exists."""
         import core.display
+
         core.display._display = None
 
         display = get_display()
@@ -1156,6 +1126,7 @@ class TestConvenienceFunctionsDetailed:
     def test_show_startup_banner_convenience(self, mock_console, reset_display):
         """Convenience function should show startup banner."""
         import core.display
+
         core.display._display = GhostDisplay()
         core.display._display.console = mock_console
 
@@ -1167,6 +1138,7 @@ class TestConvenienceFunctionsDetailed:
     def test_show_agent_status_convenience(self, mock_console, reset_display):
         """Convenience function should show agent status."""
         import core.display
+
         core.display._display = GhostDisplay()
         core.display._display.console = mock_console
 
@@ -1178,6 +1150,7 @@ class TestConvenienceFunctionsDetailed:
     def test_update_agent_status_convenience(self, reset_display):
         """Convenience function should update agent status."""
         import core.display
+
         core.display._display = GhostDisplay()
 
         update_agent_status(AgentType.BRAIN, "THINKING")
@@ -1187,6 +1160,7 @@ class TestConvenienceFunctionsDetailed:
     def test_log_debug_convenience(self, mock_console, reset_display):
         """Convenience function should log debug message."""
         import core.display
+
         core.display._display = GhostDisplay()
         core.display._display.console = mock_console
 
@@ -1198,6 +1172,7 @@ class TestConvenienceFunctionsDetailed:
     def test_log_info_convenience(self, mock_console, reset_display):
         """Convenience function should log info message."""
         import core.display
+
         core.display._display = GhostDisplay()
         core.display._display.console = mock_console
 
@@ -1209,6 +1184,7 @@ class TestConvenienceFunctionsDetailed:
     def test_log_warning_convenience(self, mock_console, reset_display):
         """Convenience function should log warning message."""
         import core.display
+
         core.display._display = GhostDisplay()
         core.display._display.console = mock_console
 
@@ -1220,6 +1196,7 @@ class TestConvenienceFunctionsDetailed:
     def test_log_error_convenience(self, mock_console, reset_display):
         """Convenience function should log error message."""
         import core.display
+
         core.display._display = GhostDisplay()
         core.display._display.console = mock_console
 
@@ -1231,6 +1208,7 @@ class TestConvenienceFunctionsDetailed:
     def test_log_critical_convenience(self, mock_console, reset_display):
         """Convenience function should log critical message."""
         import core.display
+
         core.display._display = GhostDisplay()
         core.display._display.console = mock_console
 
@@ -1242,6 +1220,7 @@ class TestConvenienceFunctionsDetailed:
     def test_log_success_convenience(self, mock_console, reset_display):
         """Convenience function should log success message."""
         import core.display
+
         core.display._display = GhostDisplay()
         core.display._display.console = mock_console
 
@@ -1253,6 +1232,7 @@ class TestConvenienceFunctionsDetailed:
     def test_show_error_convenience(self, mock_console, reset_display):
         """Convenience function should show error panel."""
         import core.display
+
         core.display._display = GhostDisplay()
         core.display._display.console = mock_console
 
@@ -1310,7 +1290,7 @@ class TestDisplayIntegrationDetailed:
             context="During BRAIN phase",
             hint="Check market data feed",
             severity="ERROR",
-            agent=AgentType.BRAIN
+            agent=AgentType.BRAIN,
         )
 
         output = display.console.file.getvalue()

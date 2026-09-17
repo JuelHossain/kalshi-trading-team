@@ -4,6 +4,7 @@ Role: 24/7 Passive Observer
 
 Core SensesAgent class with market scanning capabilities.
 """
+
 import os
 import time
 from typing import Any
@@ -11,7 +12,7 @@ from typing import Any
 from agents.base import BaseAgent
 from core.bus import EventBus
 from core.constants import (
-        SENSES_QUEUE_BATCH_SIZE,
+    SENSES_QUEUE_BATCH_SIZE,
     SENSES_STOCK_BUFFER_SIZE,
 )
 from core.flow_control import check_execution_queue_limit, check_opportunity_queue_limit
@@ -26,7 +27,14 @@ class SensesAgent(BaseAgent):
     STOCK_BUFFER_SIZE = SENSES_STOCK_BUFFER_SIZE
     QUEUE_BATCH_SIZE = SENSES_QUEUE_BATCH_SIZE
 
-    def __init__(self, agent_id: int, bus: EventBus, kalshi_client=None, synapse: Synapse = None, error_manager=None):
+    def __init__(
+        self,
+        agent_id: int,
+        bus: EventBus,
+        kalshi_client=None,
+        synapse: Synapse = None,
+        error_manager=None,
+    ):
         super().__init__("SENSES", agent_id, bus, synapse, error_manager)
         self.kalshi_client = kalshi_client
 
@@ -36,6 +44,7 @@ class SensesAgent(BaseAgent):
         self._dumped_count = 0
 
     async def setup(self):
+        """Subscribe to pre-flight completion and restock requests."""
         await self.log("Senses online. 24/7 passive surveillance activated.")
         await self.bus.subscribe("PREFLIGHT_COMPLETE", self.start_scan)
         await self.bus.subscribe("CYCLE_END", self.stop_scan)
@@ -56,7 +65,7 @@ class SensesAgent(BaseAgent):
             queue_batch_size=self.QUEUE_BATCH_SIZE,
             log_callback=self.log,
             log_error_callback=self.log_error,
-            bus=self.bus
+            bus=self.bus,
         )
         await self.log("Initial scan complete. Senses entering STANDBY mode.", level="SUCCESS")
 
@@ -106,7 +115,7 @@ class SensesAgent(BaseAgent):
                     no_price=m_data.get("no_price", 0),
                     volume=int(m_data.get("volume", 0)),
                     expiration=m_data.get("expiration_time", ""),
-                    raw_response=m_data
+                    raw_response=m_data,
                 )
 
                 opp_model = Opportunity(
@@ -118,11 +127,12 @@ class SensesAgent(BaseAgent):
                 await self.synapse.opportunities.push(opp_model)
 
                 queue_size = await self.synapse.opportunities.size()
-                await self.log(f"[OK] Queued to Synapse: {ticker} (Queue Size: {queue_size}) | Volume: {volume}")
+                await self.log(
+                    f"[OK] Queued to Synapse: {ticker} (Queue Size: {queue_size}) | Volume: {volume}"
+                )
 
             except Exception as e:
                 await self.log(f"[FAIL] Synapse Push Failed for {ticker}: {e}", level="ERROR")
-
 
     async def on_restock_request(self, message):
         """Handle restock request from Brain"""
@@ -132,14 +142,20 @@ class SensesAgent(BaseAgent):
         if self.synapse:
             is_at_limit, opp_queue_size = await check_opportunity_queue_limit(self.synapse)
             if is_at_limit:
-                await self.log(f"Flow Control: Opportunity queue still has {opp_queue_size} items. Skipping restock.", level="WARN")
+                await self.log(
+                    f"Flow Control: Opportunity queue still has {opp_queue_size} items. Skipping restock.",
+                    level="WARN",
+                )
                 return
 
         # FLOW CONTROL: Check execution queue
         if self.synapse:
             is_at_limit, exec_size = await check_execution_queue_limit(self.synapse)
             if is_at_limit:
-                await self.log(f"Flow Control: Execution queue at limit ({exec_size}/10). Skipping restock.", level="WARN")
+                await self.log(
+                    f"Flow Control: Execution queue at limit ({exec_size}/10). Skipping restock.",
+                    level="WARN",
+                )
                 return
 
         # If stock is low, pull fresh from Kalshi
@@ -149,7 +165,9 @@ class SensesAgent(BaseAgent):
             # truncates. Re-sorting here on "volume" -- a key Kalshi no
             # longer sends -- scored every market as 0 and undid the order.
             markets = await fetch_kalshi_markets(
-                self.kalshi_client, self.log, needed=self.STOCK_BUFFER_SIZE,
+                self.kalshi_client,
+                self.log,
+                needed=self.STOCK_BUFFER_SIZE,
                 exclude=self.recently_queued(),
             )
             if markets:
@@ -165,7 +183,7 @@ class SensesAgent(BaseAgent):
             queue_batch_size=self.QUEUE_BATCH_SIZE,
             synapse=self.synapse,
             log_callback=self.log,
-            queue_opportunity_callback=self.queue_opportunity
+            queue_opportunity_callback=self.queue_opportunity,
         )
 
         if queued > 0:
@@ -174,7 +192,9 @@ class SensesAgent(BaseAgent):
                 {"count": queued, "source": "SENSES"},
                 self.name,
             )
-            await self.log(f"Restocked: {queued} opportunities. Senses returning to STANDBY.", level="SUCCESS")
+            await self.log(
+                f"Restocked: {queued} opportunities. Senses returning to STANDBY.", level="SUCCESS"
+            )
 
     async def surveillance_loop(self):
         """Main surveillance loop - wrapper for scanner.surveillance_loop"""
@@ -186,8 +206,8 @@ class SensesAgent(BaseAgent):
             queue_batch_size=self.QUEUE_BATCH_SIZE,
             log_callback=self.log,
             log_error_callback=self.log,
-            bus=self.bus
+            bus=self.bus,
         )
 
     async def on_tick(self, payload: dict[str, Any]):
-        pass
+        """Senses scans on request, not on ticks."""

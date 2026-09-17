@@ -32,13 +32,16 @@ class BacktestResult:
 
     @property
     def hit_rate(self) -> float | None:
+        """Fraction of scored decisions that resolved in the engine's favour."""
         return self.wins / self.traded if self.traded else None
 
     @property
     def return_per_trade(self) -> float | None:
+        """Mean realised return per $1 staked, across every scored decision."""
         return self.total_return / self.traded if self.traded else None
 
     def summary(self) -> str:
+        """One block of text summarising the scored run, for the CLI and the runbook."""
         if not self.traded:
             return f"{self.n} markets scored, 0 passed the filters -- nothing to judge."
         return (

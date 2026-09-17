@@ -6,10 +6,10 @@ same tickers came back, cost a grounded Gemini call each, and the same
 approval reached the Hand a second time -- which, with the position guard
 blind to paper fills, became a second position.
 """
+
 import time
 
 import pytest
-
 from agents.senses.agent import SensesAgent
 from agents.senses.scanner import fetch_kalshi_markets
 
@@ -30,8 +30,9 @@ class _PagedClient:
         self.pages = pages
         self.calls = 0
 
-    async def get_markets_page(self, limit, status="open", min_close_ts=None,
-                               max_close_ts=None, cursor=None):
+    async def get_markets_page(
+        self, limit, status="open", min_close_ts=None, max_close_ts=None, cursor=None
+    ):
         idx = int(cursor) if cursor else 0
         self.calls += 1
         page = self.pages[idx] if idx < len(self.pages) else []
@@ -83,10 +84,12 @@ class TestFetchPagesPastExcludedTickers:
     @pytest.mark.asyncio
     async def test_the_regression_it_keeps_paging_to_find_new_markets(self):
         """If the whole first page was queued last time, look further."""
-        client = _PagedClient([
-            [_market("A"), _market("B")],
-            [_market("C"), _market("D")],
-        ])
+        client = _PagedClient(
+            [
+                [_market("A"), _market("B")],
+                [_market("C"), _market("D")],
+            ]
+        )
 
         got = await fetch_kalshi_markets(client, _log, needed=2, exclude={"A", "B"})
 
@@ -95,10 +98,12 @@ class TestFetchPagesPastExcludedTickers:
 
     @pytest.mark.asyncio
     async def test_it_stops_as_soon_as_it_has_enough(self):
-        client = _PagedClient([
-            [_market("A"), _market("B")],
-            [_market("C")],
-        ])
+        client = _PagedClient(
+            [
+                [_market("A"), _market("B")],
+                [_market("C")],
+            ]
+        )
 
         got = await fetch_kalshi_markets(client, _log, needed=2)
 

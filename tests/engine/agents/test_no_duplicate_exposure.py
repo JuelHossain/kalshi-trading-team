@@ -8,11 +8,10 @@ in a holding the engine could neither see nor close.
 from unittest.mock import AsyncMock
 
 import pytest
-
 from agents.hand.execution import has_open_position
 
 # Fixtures and helpers shared with the trade-cycle tests.
-from tests.engine.integration.test_trade_cycle import _debate, _opportunity, cycle  # noqa: F401
+from tests.engine.support import _debate, _opportunity
 
 
 @pytest.fixture

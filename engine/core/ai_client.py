@@ -24,10 +24,7 @@ class AIClient:
     ]
 
     def __init__(
-        self,
-        openrouter_key: str | None = None,
-        log_callback: Any = None,
-        bus: Any = None
+        self, openrouter_key: str | None = None, log_callback: Any = None, bus: Any = None
     ):
         """
         Initialize the AI client.
@@ -58,7 +55,7 @@ class AIClient:
             result = self._log(message, level)
             if inspect.isawaitable(result):
                 await result
-        except Exception:  # noqa: BLE001 - logging must not raise
+        except Exception:
             pass
 
     async def _call_openrouter(self, prompt: str) -> str | None:
@@ -77,27 +74,24 @@ class AIClient:
         """
         if not self.openrouter_key:
             await self._emit("OpenRouter API key not configured", "ERROR")
-            raise ValueError("OpenRouter API key not configured. Set OPENROUTER_API_KEY in environment.")
+            raise ValueError(
+                "OpenRouter API key not configured. Set OPENROUTER_API_KEY in environment."
+            )
 
         headers = {
             "Authorization": f"Bearer {self.openrouter_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://kalshi-trading.com",
-            "X-Title": "Kalshi Trading Engine"
+            "X-Title": "Kalshi Trading Engine",
         }
 
         errors = []
         async with aiohttp.ClientSession() as session:
             for model in self.OPENROUTER_MODELS:
-                data = {
-                    "model": model,
-                    "messages": [{"role": "user", "content": prompt}]
-                }
+                data = {"model": model, "messages": [{"role": "user", "content": prompt}]}
                 try:
                     async with session.post(
-                        "https://openrouter.ai/api/v1/chat/completions",
-                        headers=headers,
-                        json=data
+                        "https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data
                     ) as resp:
                         if resp.status == 200:
                             result = await resp.json()
@@ -105,7 +99,9 @@ class AIClient:
                             await self._emit(f"OpenRouter ({model}) SUCCESS")
                             return content
                         error_text = await resp.text()
-                        error_msg = f"Model {model} failed with status {resp.status}: {error_text[:100]}"
+                        error_msg = (
+                            f"Model {model} failed with status {resp.status}: {error_text[:100]}"
+                        )
                         errors.append(error_msg)
                         await self._emit(error_msg, "WARN")
                 except Exception as e:

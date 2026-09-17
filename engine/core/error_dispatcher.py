@@ -12,28 +12,30 @@ Features:
 - Actionable error hints for users
 - Error code tracking for analytics
 """
-import asyncio
+
 import hashlib
 import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from core.error_codes import Colors, ErrorCodes, ErrorDomain, ErrorSeverity
+from core.shared_utils import fire_and_forget
 
 
 @dataclass
 class ErrorEvent:
     """Structured error event for logging and broadcasting"""
-    code: str                           # Error code (e.g., "INTELLIGENCE_AI_UNAVAILABLE")
-    message: str                         # Human-readable error message
-    severity: ErrorSeverity              # Error severity level
-    domain: ErrorDomain                  # Error domain
-    agent_name: str                      # Agent that raised the error
+
+    code: str  # Error code (e.g., "INTELLIGENCE_AI_UNAVAILABLE")
+    message: str  # Human-readable error message
+    severity: ErrorSeverity  # Error severity level
+    domain: ErrorDomain  # Error domain
+    agent_name: str  # Agent that raised the error
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     correlation_id: str | None = None  # For distributed tracing
     context: dict = field(default_factory=dict)  # Additional context
-    hint: str | None = None           # Actionable hint for user
-    stack_trace: str | None = None    # Stack trace (only for exceptions)
+    hint: str | None = None  # Actionable hint for user
+    stack_trace: str | None = None  # Stack trace (only for exceptions)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for SSE broadcasting"""
@@ -47,7 +49,7 @@ class ErrorEvent:
             "correlation_id": self.correlation_id,
             "context": self.context,
             "hint": self.hint,
-            "stack_trace": self.stack_trace
+            "stack_trace": self.stack_trace,
         }
 
 
@@ -118,8 +120,7 @@ class ErrorDispatcher:
 
         # Clean old hashes
         old_hashes = [
-            h for h, ts in self._error_timestamps.items()
-            if now - ts > self.DEDUPLICATION_WINDOW
+            h for h, ts in self._error_timestamps.items() if now - ts > self.DEDUPLICATION_WINDOW
         ]
         for h in old_hashes:
             del self._error_timestamps[h]
@@ -154,7 +155,7 @@ class ErrorDispatcher:
         parts = [
             f"{color}[{error.agent_name}][{severity_str}]{Colors.RESET}",
             f"{Colors.BOLD}{error.code}{Colors.RESET}",
-            f"{error.message}"
+            f"{error.message}",
         ]
 
         if error.hint:
@@ -174,7 +175,7 @@ class ErrorDispatcher:
         domain: ErrorDomain | None = None,
         context: dict | None = None,
         exception: Exception | None = None,
-        hint: str | None = None
+        hint: str | None = None,
     ) -> ErrorEvent:
         """
         Dispatch an error to terminal and frontend
@@ -213,14 +214,16 @@ class ErrorDispatcher:
             agent_name=self.agent_name,
             context=context or {},
             hint=final_hint,
-            stack_trace=traceback.format_exc() if exception else None
+            stack_trace=traceback.format_exc() if exception else None,
         )
 
         # Check for deduplication
         error_hash = self._generate_hash(code, final_message)
         if self._is_duplicate(error_hash):
             # Still log locally but don't broadcast
-            print(f"{Colors.GRAY}[{error.agent_name}] Duplicate error suppressed: {code}{Colors.RESET}")
+            print(
+                f"{Colors.GRAY}[{error.agent_name}] Duplicate error suppressed: {code}{Colors.RESET}"
+            )
             return error
 
         # Log to terminal
@@ -228,7 +231,7 @@ class ErrorDispatcher:
 
         # Broadcast to frontend via EventBus (non-blocking)
         if self.event_bus:
-            asyncio.create_task(self._broadcast_error(error))
+            fire_and_forget(self._broadcast_error(error))
 
         # Log to Synapse if available
         if self.synapse:
@@ -237,7 +240,7 @@ class ErrorDispatcher:
                 await self._log_to_synapse(error)
             else:
                 # Non-critical: Fire-and-forget
-                asyncio.create_task(self._log_to_synapse(error))
+                fire_and_forget(self._log_to_synapse(error))
 
         # Hand the error to the policy layer. This is what makes severity mean
         # something: the manager escalates, counts, and can halt the engine.
@@ -266,18 +269,14 @@ class ErrorDispatcher:
                 context=error.context,
                 hint=error.hint,
             )
-        except Exception as e:  # noqa: BLE001 - reporting must not mask the error
+        except Exception as e:
             print(f"[ErrorDispatcher] Could not register error with manager: {e}")
 
     async def _broadcast_error(self, error: ErrorEvent):
         """Broadcast error to frontend via EventBus"""
         try:
             if self.event_bus:
-                await self.event_bus.publish(
-                    "SYSTEM_ERROR",
-                    error.to_dict(),
-                    self.agent_name
-                )
+                await self.event_bus.publish("SYSTEM_ERROR", error.to_dict(), self.agent_name)
         except Exception as e:
             # Don't crash if broadcasting fails
             print(f"{Colors.RED}[ERROR_DISPATCHER] Failed to broadcast error: {e}{Colors.RESET}")
@@ -286,6 +285,7 @@ class ErrorDispatcher:
         """Log error to Synapse for persistent storage"""
         try:
             from core.synapse import SynapseError
+
             if self.synapse:
                 # Map ErrorEvent to SynapseError Pydantic model
                 synapse_error = SynapseError(
@@ -296,7 +296,7 @@ class ErrorDispatcher:
                     domain=error.domain.value,
                     hint=error.hint,
                     context=error.context,
-                    stack_trace=error.stack_trace
+                    stack_trace=error.stack_trace,
                 )
                 await self.synapse.errors.push(synapse_error)
         except Exception as e:

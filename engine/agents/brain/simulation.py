@@ -18,11 +18,15 @@ risk signal. The real gate is the size of the edge, which is what `min_edge`
 below expresses.
 """
 
-
 # Returned when no usable probability exists, to force a veto upstream.
 NO_ESTIMATE = {
-    "win_rate": 0.0, "ev": -999.0, "variance": 999.0, "edge": -999.0,
-    "side": "yes", "side_price": 0.5, "side_probability": 0.0,
+    "win_rate": 0.0,
+    "ev": -999.0,
+    "variance": 999.0,
+    "edge": -999.0,
+    "side": "yes",
+    "side_price": 0.5,
+    "side_probability": 0.0,
 }
 
 

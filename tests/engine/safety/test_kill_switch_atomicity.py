@@ -9,17 +9,18 @@ This test demonstrates:
 2. The fix (AFTER): Immediate halt guarantees cycle stops
 """
 
-import pytest
 import asyncio
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add engine directory to path
 engine_dir = Path(__file__).parent.parent.parent.parent / "engine"
 sys.path.insert(0, str(engine_dir))
 
 from unittest.mock import AsyncMock, MagicMock
-from aiohttp import web
+
 from main import GhostEngine
 
 
@@ -177,10 +178,7 @@ class TestKillSwitchAtomicity:
             engine.running = False
 
         # Run both concurrently
-        await asyncio.gather(
-            start_cycle(),
-            activate_kill_switch()
-        )
+        await asyncio.gather(start_cycle(), activate_kill_switch())
 
         # Verify final state
         assert engine.manual_kill_switch is True

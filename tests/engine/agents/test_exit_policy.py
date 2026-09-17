@@ -10,11 +10,9 @@ certainly lost, and holding it converts "near-certainly" into "certainly".
 from unittest.mock import AsyncMock
 
 import pytest
-
 from agents.hand.exits import HOLD, average_entry_price_cents, evaluate_exit
 
 # Fixtures shared with the trade-cycle tests.
-from tests.engine.integration.test_trade_cycle import cycle  # noqa: F401
 
 
 class TestStopLoss:
@@ -81,7 +79,12 @@ class TestEntryPriceRecovery:
 
     @pytest.mark.parametrize(
         "row",
-        [{"position": 0, "market_exposure": 600}, {"position": 10}, {}, {"position": 10, "market_exposure": 0}],
+        [
+            {"position": 0, "market_exposure": 600},
+            {"position": 10},
+            {},
+            {"position": 10, "market_exposure": 0},
+        ],
     )
     def test_unrecoverable_rows_return_none(self, row):
         """None must propagate to a hold, not a guessed entry price."""

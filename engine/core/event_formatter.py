@@ -10,11 +10,8 @@ from datetime import datetime
 # EVENT FORMATTING
 # ==============================================================================
 
-def format_log_event(
-    payload: dict,
-    cycle_count: int,
-    agent_to_phase: dict[int, int]
-) -> dict:
+
+def format_log_event(payload: dict, cycle_count: int, agent_to_phase: dict[int, int]) -> dict:
     """
     Format a SYSTEM_LOG event for SSE streaming.
 
@@ -53,10 +50,7 @@ def format_vault_event(payload: dict) -> dict:
     Returns:
         Formatted event dict for SSE
     """
-    return {
-        "type": "VAULT",
-        "state": payload
-    }
+    return {"type": "VAULT", "state": payload}
 
 
 def format_simulation_event(payload: dict) -> dict:
@@ -69,10 +63,7 @@ def format_simulation_event(payload: dict) -> dict:
     Returns:
         Formatted event dict for SSE
     """
-    return {
-        "type": "SIMULATION",
-        "state": payload
-    }
+    return {"type": "SIMULATION", "state": payload}
 
 
 def format_state_event(payload: dict) -> dict:
@@ -85,17 +76,14 @@ def format_state_event(payload: dict) -> dict:
     Returns:
         Formatted event dict for SSE
     """
-    return {
-        "type": "STATE",
-        "state": payload
-    }
+    return {"type": "STATE", "state": payload}
 
 
 def format_error_event(
     payload: dict,
     cycle_count: int,
     agent_to_phase: dict[int, int],
-    agent_name_to_id: dict[str, int]
+    agent_name_to_id: dict[str, int],
 ) -> dict:
     """
     Format a SYSTEM_ERROR event for SSE streaming.
@@ -127,14 +115,12 @@ def format_error_event(
             "domain": payload.get("domain", "SYSTEM"),
             "hint": payload.get("hint", ""),
             "context": payload.get("context", {}),
-        }
+        },
     }
 
 
 def format_gateway_log_event(
-    payload: dict,
-    cycle_count: int,
-    agent_to_phase: dict[int, int]
+    payload: dict, cycle_count: int, agent_to_phase: dict[int, int]
 ) -> dict:
     """
     Format a log event for Gateway (slightly different structure).

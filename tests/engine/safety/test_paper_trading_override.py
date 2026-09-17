@@ -7,6 +7,8 @@ with the comment "Default to paper trading", but nothing read it, so the
 process-level safety setting had no effect at all.
 """
 
+import contextlib
+
 import pytest
 
 
@@ -48,10 +50,8 @@ async def _run(eng, seen, requested):
     # try/finally, so the in-progress flag is not cleared for us here. The
     # engine does reset it on a real exception (main.py finally block).
     eng.is_processing = False
-    try:
+    with contextlib.suppress(_Stop):
         await eng.execute_single_cycle(is_paper_trading=requested)
-    except _Stop:
-        pass
     return seen.get("is_paper")
 
 
@@ -100,9 +100,9 @@ async def test_cycle_arms_the_order_path_for_live(engine, monkeypatch):
     trading_mode.set_live(False)
 
     assert await _run(eng, seen, requested=False) is False
-    assert trading_mode.is_live() is True, (
-        "cycle reported LIVE but the order path was left in paper mode"
-    )
+    assert (
+        trading_mode.is_live() is True
+    ), "cycle reported LIVE but the order path was left in paper mode"
 
 
 @pytest.mark.asyncio
@@ -115,9 +115,9 @@ async def test_cycle_disarms_the_order_path_for_paper(engine, monkeypatch):
     trading_mode.set_live(True)
 
     assert await _run(eng, seen, requested=True) is True
-    assert trading_mode.is_live() is False, (
-        "cycle reported PAPER while the order path was still armed for live"
-    )
+    assert (
+        trading_mode.is_live() is False
+    ), "cycle reported PAPER while the order path was still armed for live"
 
 
 @pytest.mark.asyncio
@@ -130,6 +130,6 @@ async def test_override_disarms_the_order_path(engine, monkeypatch):
     trading_mode.set_live(True)
 
     assert await _run(eng, seen, requested=False) is True
-    assert trading_mode.is_live() is False, (
-        "IS_PAPER_TRADING relabelled the cycle but left live orders armed"
-    )
+    assert (
+        trading_mode.is_live() is False
+    ), "IS_PAPER_TRADING relabelled the cycle but left live orders armed"

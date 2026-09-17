@@ -54,7 +54,9 @@ def _coerce(row: dict, index: int) -> dict:
         try:
             out[field] = float(value)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"Row {index} ({out['ticker']}): {field}={value!r} is not a number") from exc
+            raise ValueError(
+                f"Row {index} ({out['ticker']}): {field}={value!r} is not a number"
+            ) from exc
 
     settled = row.get("settled_yes")
     if settled in (None, ""):
@@ -97,9 +99,7 @@ def format_report(result: BacktestResult) -> str:
     if result.brier is not None:
         skilled = result.brier < 0.25
         verdict = (
-            "better than always guessing 50%"
-            if skilled
-            else "NO BETTER than always guessing 50%"
+            "better than always guessing 50%" if skilled else "NO BETTER than always guessing 50%"
         )
         lines.append(f"Brier {result.brier:.4f} -- {verdict}.")
 

@@ -7,11 +7,7 @@ from core.bus import EventBus
 from core.vault import RecursiveVault
 
 
-async def publish_vault_state(
-    bus: EventBus,
-    vault: RecursiveVault,
-    agent_name: str
-):
+async def publish_vault_state(bus: EventBus, vault: RecursiveVault, agent_name: str):
     """
     Publish vault state to bus for UI consumption.
 
@@ -46,17 +42,11 @@ def check_hard_floor_breach(vault: RecursiveVault) -> tuple[bool, str]:
     if vault.current_balance < vault.HARD_FLOOR_CENTS:
         balance_dollars = vault.current_balance / 100
         floor_dollars = vault.HARD_FLOOR_CENTS / 100
-        return (
-            True,
-            f"Balance ${balance_dollars:.2f} below ${floor_dollars:.2f} floor. LOCKDOWN."
-        )
+        return (True, f"Balance ${balance_dollars:.2f} below ${floor_dollars:.2f} floor. LOCKDOWN.")
     return (False, "")
 
 
-def check_profit_lock_threshold(
-    vault: RecursiveVault,
-    threshold_cents: int
-) -> tuple[bool, int]:
+def check_profit_lock_threshold(vault: RecursiveVault, threshold_cents: int) -> tuple[bool, int]:
     """
     Check if profit threshold has been reached for locking principal.
 

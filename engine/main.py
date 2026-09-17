@@ -58,7 +58,7 @@ from core.error_codes import ErrorDomain, ErrorSeverity
 from core.error_manager import ErrorManager, set_error_manager
 from core.logger import get_logger
 from core.network import kalshi_client
-from core.shared_utils import get_env_bool
+from core.shared_utils import fire_and_forget, get_env_bool
 from core.synapse import Synapse
 from core.vault import RecursiveVault
 from http_api.routes import register_all_routes, register_sse_subscriptions
@@ -68,7 +68,6 @@ from http_api.server import setup_middlewares, start_server
 
 # Initialize Logger
 logger = get_logger("GHOST")
-
 
 
 class GhostEngine:
@@ -104,9 +103,8 @@ class GhostEngine:
         )
         set_error_manager(self.error_manager)
 
-
-
     async def initialize_system(self):
+        """Build the agents, queues and vault, and subscribe the engine-level handlers."""
         # Show the Rich startup banner
         show_startup_banner()
 
@@ -124,10 +122,25 @@ class GhostEngine:
         try:
             # Initialize 4 Mega-Agents using a helper pattern
             agent_configs = [
-                (SoulAgent, AGENT_ID_SOUL, AgentType.SOUL, {"vault": self.vault, "synapse": self.synapse}),
-                (SensesAgent, AGENT_ID_SENSES, AgentType.SENSES, {"kalshi_client": kalshi_client, "synapse": self.synapse}),
+                (
+                    SoulAgent,
+                    AGENT_ID_SOUL,
+                    AgentType.SOUL,
+                    {"vault": self.vault, "synapse": self.synapse},
+                ),
+                (
+                    SensesAgent,
+                    AGENT_ID_SENSES,
+                    AgentType.SENSES,
+                    {"kalshi_client": kalshi_client, "synapse": self.synapse},
+                ),
                 (BrainAgent, AGENT_ID_BRAIN, AgentType.BRAIN, {"synapse": self.synapse}),
-                (HandAgent, AGENT_ID_HAND, AgentType.HAND, {"vault": self.vault, "kalshi_client": kalshi_client, "synapse": self.synapse}),
+                (
+                    HandAgent,
+                    AGENT_ID_HAND,
+                    AgentType.HAND,
+                    {"vault": self.vault, "kalshi_client": kalshi_client, "synapse": self.synapse},
+                ),
                 (GatewayAgent, AGENT_ID_GATEWAY, AgentType.GATEWAY, {"vault": self.vault}),
             ]
 
@@ -148,7 +161,7 @@ class GhostEngine:
                 message=str(e),
                 context="Failed to initialize one or more Mega-Agents during system startup.",
                 hint="Check agent configurations and dependencies.",
-                severity="ERROR"
+                severity="ERROR",
             )
             # Register critical error with ErrorManager (will shutdown engine)
             await self.error_manager.register_error(
@@ -158,7 +171,7 @@ class GhostEngine:
                 domain=ErrorDomain.SYSTEM,
                 agent_name="GHOST",
                 exception=e,
-                hint="Check agent configurations and dependencies"
+                hint="Check agent configurations and dependencies",
             )
 
         # Initialize Vault with Real Balance
@@ -168,14 +181,16 @@ class GhostEngine:
             await self.vault.initialize(real_balance)
             update_agent_status(AgentType.SOUL, "BALANCE_LOADED")
         except Exception as e:
-            log_warning(f"Failed to fetch balance: {e}. Defaulting to $0 (Safety Mode).", AgentType.SOUL)
+            log_warning(
+                f"Failed to fetch balance: {e}. Defaulting to $0 (Safety Mode).", AgentType.SOUL
+            )
             show_error(
                 title="Balance Fetch Failed",
                 message=str(e),
                 context="Could not fetch real balance from Kalshi API. Using $0 default.",
                 hint="Check API credentials and network connection.",
                 severity="WARNING",
-                agent=AgentType.SOUL
+                agent=AgentType.SOUL,
             )
             await self.vault.initialize(0)
 
@@ -199,7 +214,9 @@ class GhostEngine:
         if self.last_cycle_time:
             elapsed = (datetime.now() - self.last_cycle_time).total_seconds()
             if elapsed < MIN_CYCLE_INTERVAL_SECONDS:
-                logger.warning(f"Rate limit: Wait {MIN_CYCLE_INTERVAL_SECONDS - elapsed:.0f}s before next cycle.")
+                logger.warning(
+                    f"Rate limit: Wait {MIN_CYCLE_INTERVAL_SECONDS - elapsed:.0f}s before next cycle."
+                )
                 return False
 
         if self.manual_kill_switch:
@@ -229,7 +246,9 @@ class GhostEngine:
             self.vault.current_balance = real_balance
 
             if real_balance < self.vault.HARD_FLOOR_CENTS:
-                return self._halt(f"HARD FLOOR BREACH (${real_balance/100:.2f} < ${self.vault.HARD_FLOOR_CENTS/100:.2f}). EMERGENCY LOCKDOWN.")
+                return self._halt(
+                    f"HARD FLOOR BREACH (${real_balance/100:.2f} < ${self.vault.HARD_FLOOR_CENTS/100:.2f}). EMERGENCY LOCKDOWN."
+                )
                 return False
         except Exception:
             # Fallback to vault cache if API fails
@@ -358,14 +377,19 @@ class GhostEngine:
                     message=str(e),
                     context=f"Trading cycle #{self.cycle_count} encountered an error during execution.",
                     hint="Check agent logs and system state for details.",
-                    severity="ERROR"
+                    severity="ERROR",
                 )
 
             finally:
                 self.is_processing = False
 
                 # Reset agent statuses
-                for agent_type in [AgentType.SOUL, AgentType.SENSES, AgentType.BRAIN, AgentType.HAND]:
+                for agent_type in [
+                    AgentType.SOUL,
+                    AgentType.SENSES,
+                    AgentType.BRAIN,
+                    AgentType.HAND,
+                ]:
                     update_agent_status(agent_type, "IDLE")
 
                 await self.bus.publish(
@@ -379,10 +403,10 @@ class GhostEngine:
     async def _handle_cycle_request(self, message):
         """Handle incoming request to start a new cycle"""
         if not self.is_processing and self.running:
-             # Default to live trading unless specified
-             is_paper = message.payload.get("isPaperTrading", True)
-             # Use ensure_future or call directly (it's already guarded by is_processing)
-             asyncio.create_task(self.execute_single_cycle(is_paper_trading=is_paper))
+            # Default to live trading unless specified
+            is_paper = message.payload.get("isPaperTrading", True)
+            # Use ensure_future or call directly (it's already guarded by is_processing)
+            fire_and_forget(self.execute_single_cycle(is_paper_trading=is_paper))
 
     async def _handle_system_fatal(self, message):
         """Handle fatal errors by shutting down the entire engine immediately."""
@@ -430,7 +454,7 @@ class GhostEngine:
         # Shutdown all agents
         for agent in self.agents:
             try:
-                if hasattr(agent, 'teardown'):
+                if hasattr(agent, "teardown"):
                     await agent.teardown()
             except Exception as e:
                 log_error(f"Error during agent teardown: {e}")
@@ -465,6 +489,7 @@ class GhostEngine:
             await asyncio.sleep(1)
 
     def start(self):
+        """Create the event loop and run until shutdown; signal handlers where the platform allows."""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 

@@ -2,6 +2,7 @@
 Instruction Evolution Logic for Soul Agent
 Self-optimization through AI-generated trading instructions.
 """
+
 import asyncio
 import functools
 
@@ -36,7 +37,7 @@ async def evolve_instructions(
     trading_instructions: str,
     strengths_list: list,
     mistakes_log: list,
-    log_callback
+    log_callback,
 ) -> str:
     """
     Use Gemini to rewrite trading instructions based on history.

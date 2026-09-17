@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from agents.hand import HandAgent
-from core.vault import RecursiveVault
 from core.constants import HARD_FLOOR_CENTS
+from core.vault import RecursiveVault
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ def hand_agent(mock_bus, mock_vault):
         bus=mock_bus,
         vault=mock_vault,
         kalshi_client=None,  # tests that need one attach a mock explicitly
-        synapse=None
+        synapse=None,
     )
     return agent
 
@@ -261,12 +261,18 @@ class TestKellyCriterion:
         """A wiring mistake must not silently produce a mis-sized live order."""
         mock_vault.get_available_balance = lambda: 100_000
 
-        assert hand_agent.calculate_kelly_stake(
-            confidence=0.9, ev=0.2, probability=None, price_cents=50
-        ) == 0
-        assert hand_agent.calculate_kelly_stake(
-            confidence=0.9, ev=0.2, probability=0.7, price_cents=None
-        ) == 0
+        assert (
+            hand_agent.calculate_kelly_stake(
+                confidence=0.9, ev=0.2, probability=None, price_cents=50
+            )
+            == 0
+        )
+        assert (
+            hand_agent.calculate_kelly_stake(
+                confidence=0.9, ev=0.2, probability=0.7, price_cents=None
+            )
+            == 0
+        )
 
 
 class TestSnipeCheck:
@@ -279,7 +285,7 @@ class TestSnipeCheck:
         mock_client = AsyncMock()
         mock_client.get_orderbook.return_value = {
             "bids": [{"price": 45}],
-            "asks": [{"price": 60}]  # 15 cent spread
+            "asks": [{"price": 60}],  # 15 cent spread
         }
         hand_agent.kalshi_client = mock_client
 

@@ -12,7 +12,6 @@ method did not exist.
 from unittest.mock import AsyncMock
 
 import pytest
-
 from core.safety import execute_ragnarok
 
 

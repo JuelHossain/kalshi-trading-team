@@ -1,3 +1,11 @@
+"""Capital rules: the balance, what is reserved, and when to stop.
+
+Tracks the live balance and outstanding reservations, enforces a hard
+floor below which no cycle runs, trips a kill switch at 85% of principal,
+and locks the principal once the day's profit clears its threshold so the
+engine trades only house money from then on.
+"""
+
 import asyncio
 import os
 
@@ -29,7 +37,7 @@ class RecursiveVault:
         # into the real database and leak them into each other.
         self.DB_PATH = db_path or os.getenv("GHOST_VAULT_DB", "engine/ghost_memory.db")
         self.test_mode = test_mode  # Skip persistence in test mode
-        
+
         self.start_of_day_balance = 0
         self.current_balance = 0
         self.is_locked = False
@@ -47,6 +55,7 @@ class RecursiveVault:
     def _ensure_db_schema(self):
         """Ensure the local SQLite schema is ready for persistence."""
         import sqlite3
+
         try:
             conn = sqlite3.connect(self.DB_PATH)
             cursor = conn.cursor()
@@ -57,14 +66,17 @@ class RecursiveVault:
                 )
             """)
             # Ensure at least one row exists
-            cursor.execute("INSERT OR IGNORE INTO vault_reservations (id, total_reserved) VALUES (1, 0)")
+            cursor.execute(
+                "INSERT OR IGNORE INTO vault_reservations (id, total_reserved) VALUES (1, 0)"
+            )
             conn.commit()
             conn.close()
         except Exception as e:
             logger.error(f"Local DB Error: {e}")
-            raise RuntimeError(f"Failed to initialize vault database schema: {e}")
+            raise RuntimeError(f"Failed to initialize vault database schema: {e}") from e
 
     async def initialize(self, current_balance_cents: int):
+        """Set the opening balance; this is the start-of-day figure the profit lock measures from."""
         async with self._lock:
             self.start_of_day_balance = current_balance_cents
             self.current_balance = current_balance_cents
@@ -74,6 +86,7 @@ class RecursiveVault:
             if not self.test_mode:
                 try:
                     import sqlite3
+
                     conn = sqlite3.connect(self.DB_PATH)
                     cursor = conn.cursor()
                     cursor.execute("SELECT total_reserved FROM vault_reservations WHERE id = 1")
@@ -81,17 +94,22 @@ class RecursiveVault:
                     if row:
                         self._reserved_funds = row[0]
                         if self._reserved_funds > 0:
-                            logger.warning(f"Restored {format_cents_to_dollars(self._reserved_funds)} in reservations from local storage.")
+                            logger.warning(
+                                f"Restored {format_cents_to_dollars(self._reserved_funds)} in reservations from local storage."
+                            )
                     conn.close()
                 except Exception as e:
                     logger.error(f"Failed to load reservations: {e}")
-                    raise RuntimeError(f"Failed to initialize vault from database: {e}")
+                    raise RuntimeError(f"Failed to initialize vault from database: {e}") from e
 
             # Initial kill switch check
             await self._check_kill_switch()
-            logger.info(f"Initialized. SOD Balance: {format_cents_to_dollars(self.start_of_day_balance)}")
+            logger.info(
+                f"Initialized. SOD Balance: {format_cents_to_dollars(self.start_of_day_balance)}"
+            )
 
     async def update_balance(self, new_balance_cents: int):
+        """Record a fresh balance and re-evaluate the kill switch and the profit lock."""
         async with self._lock:
             self.current_balance = new_balance_cents
             await self._check_lock()
@@ -101,7 +119,9 @@ class RecursiveVault:
         threshold = self.PRINCIPAL_CAPITAL_CENTS * self.KILL_SWITCH_THRESHOLD_PCT
         if self.current_balance < threshold:
             if not self.kill_switch_active:
-                logger.critical(f"🚨 CRITICAL: Balance ({format_cents_to_dollars(self.current_balance)}) < 85% Principal Threshold ({format_cents_to_dollars(threshold)}).")
+                logger.critical(
+                    f"🚨 CRITICAL: Balance ({format_cents_to_dollars(self.current_balance)}) < 85% Principal Threshold ({format_cents_to_dollars(threshold)})."
+                )
                 logger.critical("KILL SWITCH ACTIVATED. HALTING ALL OPERATIONS.")
                 self.kill_switch_active = True
         else:
@@ -116,8 +136,12 @@ class RecursiveVault:
 
         if daily_profit >= self.DAILY_PROFIT_THRESHOLD_CENTS:
             if not self.is_locked:
-                logger.info(f"🔒 PROFIT THRESHOLD ({format_cents_to_dollars(daily_profit)}) REACHED.")
-                logger.info(f"PRINCIPAL PROTECTION ACTIVATED. FROZEN {format_cents_to_dollars(self.PRINCIPAL_CAPITAL_CENTS)}.")
+                logger.info(
+                    f"🔒 PROFIT THRESHOLD ({format_cents_to_dollars(daily_profit)}) REACHED."
+                )
+                logger.info(
+                    f"PRINCIPAL PROTECTION ACTIVATED. FROZEN {format_cents_to_dollars(self.PRINCIPAL_CAPITAL_CENTS)}."
+                )
                 self.is_locked = True
             return True
 
@@ -147,15 +171,19 @@ class RecursiveVault:
             return  # Skip persistence in test mode
 
         import sqlite3
+
         try:
             conn = sqlite3.connect(self.DB_PATH)
             cursor = conn.cursor()
-            cursor.execute("UPDATE vault_reservations SET total_reserved = ? WHERE id = 1", (self._reserved_funds,))
+            cursor.execute(
+                "UPDATE vault_reservations SET total_reserved = ? WHERE id = 1",
+                (self._reserved_funds,),
+            )
             conn.commit()
             conn.close()
         except Exception as e:
             logger.error(f"Persistence Error: {e}")
-            raise RuntimeError(f"Failed to save reservations to database: {e}")
+            raise RuntimeError(f"Failed to save reservations to database: {e}") from e
 
     def reserve_funds(self, amount: int) -> bool:
         """
@@ -172,7 +200,9 @@ class RecursiveVault:
 
         self._reserved_funds += amount
         self._save_reservations()
-        logger.warning(f"Reserved {format_cents_to_dollars(amount)}. Available: {format_cents_to_dollars(self.get_available_balance())}")
+        logger.warning(
+            f"Reserved {format_cents_to_dollars(amount)}. Available: {format_cents_to_dollars(self.get_available_balance())}"
+        )
         return True
 
     def confirm_reservation(self, amount: int):
@@ -186,17 +216,23 @@ class RecursiveVault:
             return
 
         if not validate_amount_not_exceeding(amount, self._reserved_funds):
-            logger.error(f"Cannot confirm {format_cents_to_dollars(amount)}. Only {format_cents_to_dollars(self._reserved_funds)} reserved.")
+            logger.error(
+                f"Cannot confirm {format_cents_to_dollars(amount)}. Only {format_cents_to_dollars(self._reserved_funds)} reserved."
+            )
             raise ValueError("Cannot confirm amount greater than reserved funds")
 
         if not validate_amount_not_exceeding(amount, self.current_balance):
-            logger.error(f"Cannot confirm {format_cents_to_dollars(amount)}. Only {format_cents_to_dollars(self.current_balance)} in balance.")
+            logger.error(
+                f"Cannot confirm {format_cents_to_dollars(amount)}. Only {format_cents_to_dollars(self.current_balance)} in balance."
+            )
             raise ValueError("Cannot confirm amount greater than current balance")
 
         self._reserved_funds -= amount
         self.current_balance -= amount
         self._save_reservations()
-        logger.info(f"Order confirmed. Deducted {format_cents_to_dollars(amount)}. New balance: {format_cents_to_dollars(self.current_balance)}")
+        logger.info(
+            f"Order confirmed. Deducted {format_cents_to_dollars(amount)}. New balance: {format_cents_to_dollars(self.current_balance)}"
+        )
 
     def release_reservation(self, amount: int):
         """
@@ -209,21 +245,29 @@ class RecursiveVault:
             return
 
         if not validate_amount_not_exceeding(amount, self._reserved_funds):
-            logger.error(f"Cannot release {format_cents_to_dollars(amount)}. Only {format_cents_to_dollars(self._reserved_funds)} reserved.")
+            logger.error(
+                f"Cannot release {format_cents_to_dollars(amount)}. Only {format_cents_to_dollars(self._reserved_funds)} reserved."
+            )
             raise ValueError("Cannot release amount greater than reserved funds")
 
         self._reserved_funds -= amount
         self._save_reservations()
-        logger.info(f"Released {format_cents_to_dollars(amount)} reservation. Available: {format_cents_to_dollars(self.get_available_balance())}")
+        logger.info(
+            f"Released {format_cents_to_dollars(amount)} reservation. Available: {format_cents_to_dollars(self.get_available_balance())}"
+        )
 
     def release_all_reservations(self):
         """Release ALL current reservations (Emergency Rollback)."""
         released = self._reserved_funds
         self._reserved_funds = 0
         self._save_reservations()
-        logger.info(f"Emergency Rollback: Released ALL reservations ({format_cents_to_dollars(released)})")
+        logger.info(
+            f"Emergency Rollback: Released ALL reservations ({format_cents_to_dollars(released)})"
+        )
 
     def lock_principal(self):
         """Lock the principal amount to prevent trading with it."""
         self.is_locked = True
-        logger.info(f"PRINCIPAL LOCKED. {format_cents_to_dollars(self.PRINCIPAL_CAPITAL_CENTS)} protected. Trading with house money only.")
+        logger.info(
+            f"PRINCIPAL LOCKED. {format_cents_to_dollars(self.PRINCIPAL_CAPITAL_CENTS)} protected. Trading with house money only."
+        )

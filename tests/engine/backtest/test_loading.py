@@ -8,7 +8,6 @@ the resulting file -- which is also what makes a backtest reproducible.
 import json
 
 import pytest
-
 from backtest.runner import load_settled_markets, run_backtest
 
 CSV = """ticker,probability,price,settled_yes,confidence
@@ -32,8 +31,10 @@ class TestLoading:
         assert rows[0]["probability"] == pytest.approx(0.80)
         assert rows[0]["settled_yes"] is True
 
-    @pytest.mark.parametrize("text,expected", [("1", True), ("0", False), ("true", True),
-                                               ("FALSE", False), ("yes", True), ("n", False)])
+    @pytest.mark.parametrize(
+        "text,expected",
+        [("1", True), ("0", False), ("true", True), ("FALSE", False), ("yes", True), ("n", False)],
+    )
     def test_outcomes_are_accepted_in_the_forms_people_write_them(self, tmp_path, text, expected):
         path = tmp_path / "x.csv"
         path.write_text(f"ticker,probability,price,settled_yes\nK,0.6,0.5,{text}\n")
@@ -41,8 +42,9 @@ class TestLoading:
 
     def test_json_is_accepted(self, tmp_path):
         path = tmp_path / "settled.json"
-        path.write_text(json.dumps([{"ticker": "KXA", "probability": 0.8,
-                                     "price": 0.5, "settled_yes": True}]))
+        path.write_text(
+            json.dumps([{"ticker": "KXA", "probability": 0.8, "price": 0.5, "settled_yes": True}])
+        )
         assert load_settled_markets(path)[0]["probability"] == pytest.approx(0.8)
 
     def test_an_end_to_end_run_scores_the_file(self, csv_file):
@@ -56,7 +58,7 @@ class TestLoading:
         path = tmp_path / "edge.csv"
         path.write_text(
             "ticker,probability,price,settled_yes\n"
-            "AT,0.55,0.50,1\n"     # edge exactly 0.05 -> trades
+            "AT,0.55,0.50,1\n"  # edge exactly 0.05 -> trades
             "UNDER,0.549,0.50,1\n"  # edge 0.049 -> does not
         )
         assert run_backtest(path, min_edge=0.05).traded == 1

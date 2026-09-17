@@ -5,24 +5,23 @@ This test reproduces the risk of processing stale market data (older than the fr
 TDD Phase: RED - Tests should fail before the fix is implemented.
 """
 
-import pytest
-import asyncio
+import sys
+import uuid
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 # Ages are relative to the real threshold. Hardcoding 60 here made the
 # suite a second copy of the number: when the threshold moved (grounded
 # estimates take ~15s, so 60s discarded half of every batch) these tests
 # failed while asserting nothing about behaviour.
 from core.constants import BRAIN_STALE_OPPORTUNITY_SECONDS as STALE_AFTER
-from unittest.mock import AsyncMock, MagicMock, patch
-import uuid
 
-import sys
-sys.path.insert(0, 'e:/Projects/kalshi-trading-team')
+sys.path.insert(0, "e:/Projects/kalshi-trading-team")
 
 from engine.agents.brain import BrainAgent
 from engine.core.bus import EventBus
-from engine.core.synapse import Synapse, Opportunity, MarketData
 
 
 @pytest.fixture
@@ -30,11 +29,7 @@ def brain_agent():
     """Create a BrainAgent instance for testing"""
     bus = EventBus()
     synapse = None  # Not needed for process_single_opportunity testing
-    agent = BrainAgent(
-        agent_id=1,
-        bus=bus,
-        synapse=synapse
-    )
+    agent = BrainAgent(agent_id=1, bus=bus, synapse=synapse)
     # Mock AI client to avoid actual API calls
     agent.client = None
     return agent
@@ -49,7 +44,9 @@ class TestStaleOpportunityDetection:
         TEST: Opportunities older than the threshold should be rejected with STALE status
         """
         # Create an opportunity with timestamp > 60 seconds ago
-        old_timestamp = datetime.now() - timedelta(seconds=STALE_AFTER + 60)  # well past the threshold
+        old_timestamp = datetime.now() - timedelta(
+            seconds=STALE_AFTER + 60
+        )  # well past the threshold
 
         stale_opportunity = {
             "id": str(uuid.uuid4()),
@@ -60,8 +57,8 @@ class TestStaleOpportunityDetection:
                 "ticker": "STALE-TEST-123",
                 "title": "Stale Market",
                 "yes_price": 50,
-                "volume": 1000
-            }
+                "volume": 1000,
+            },
         }
 
         result = await brain_agent.process_single_opportunity(stale_opportunity)
@@ -84,20 +81,20 @@ class TestStaleOpportunityDetection:
                 "ticker": "FRESH-TEST-456",
                 "title": "Fresh Market",
                 "yes_price": 50,
-                "volume": 1000
-            }
+                "volume": 1000,
+            },
         }
 
         # Mock AI client to return valid response
         brain_agent.client = AsyncMock()
         mock_response = MagicMock()
-        mock_response.text = '''{
+        mock_response.text = """{
             "optimist": "Good opportunity",
             "critic": "Risks exist",
             "judge_verdict": "Approved with caution",
             "estimated_probability": 0.75,
             "confidence": 90
-        }'''
+        }"""
         brain_agent.client.models.generate_content = MagicMock(return_value=mock_response)
 
         result = await brain_agent.process_single_opportunity(fresh_opportunity)
@@ -122,8 +119,8 @@ class TestStaleOpportunityDetection:
                 "ticker": "BOUNDARY-TEST-789",
                 "title": "Boundary Market",
                 "yes_price": 50,
-                "volume": 1000
-            }
+                "volume": 1000,
+            },
         }
 
         result = await brain_agent.process_single_opportunity(boundary_opportunity)
@@ -148,20 +145,20 @@ class TestStaleOpportunityDetection:
                 "ticker": "FRESH-59-TEST",
                 "title": "Fresh Market 59s",
                 "yes_price": 50,
-                "volume": 1000
-            }
+                "volume": 1000,
+            },
         }
 
         # Mock AI client
         brain_agent.client = AsyncMock()
         mock_response = MagicMock()
-        mock_response.text = '''{
+        mock_response.text = """{
             "optimist": "Good opportunity",
             "critic": "Risks exist",
             "judge_verdict": "Proceed",
             "estimated_probability": 0.80,
             "confidence": 95
-        }'''
+        }"""
         brain_agent.client.models.generate_content = MagicMock(return_value=mock_response)
 
         result = await brain_agent.process_single_opportunity(fresh_opportunity)
@@ -183,8 +180,8 @@ class TestStaleOpportunityDetection:
                 "ticker": "NO-TIMESTAMP-TEST",
                 "title": "No Timestamp Market",
                 "yes_price": 50,
-                "volume": 1000
-            }
+                "volume": 1000,
+            },
         }
 
         result = await brain_agent.process_single_opportunity(no_timestamp_opportunity)
@@ -208,8 +205,8 @@ class TestStaleOpportunityDetection:
                 "ticker": "STALE-LOG-TEST",
                 "title": "Stale Market",
                 "yes_price": 50,
-                "volume": 1000
-            }
+                "volume": 1000,
+            },
         }
 
         result = await brain_agent.process_single_opportunity(stale_opportunity)
@@ -235,8 +232,8 @@ class TestStaleOpportunityDetection:
                 "ticker": "ANCIENT-TEST",
                 "title": "Ancient Market",
                 "yes_price": 50,
-                "volume": 1000
-            }
+                "volume": 1000,
+            },
         }
 
         result = await brain_agent.process_single_opportunity(ancient_opportunity)

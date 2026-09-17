@@ -4,6 +4,7 @@ Role: High-Level Decision Maker
 
 Core BrainAgent class with debate, simulation, and monitoring capabilities.
 """
+
 import asyncio
 import os
 import uuid
@@ -57,9 +58,8 @@ class BrainAgent(BaseAgent):
         # Initialize Gemini
         self.gemini_model = None
         self._model_downgrade_warning = None  # Store for logging in async context
-        self.client, self.ai_client, default_model, self._gemini_available = initialize_gemini_client(
-            log_callback=self.log,
-            bus=self.bus
+        self.client, self.ai_client, default_model, self._gemini_available = (
+            initialize_gemini_client(log_callback=self.log, bus=self.bus)
         )
 
         # Try user-specified model first, then default list
@@ -67,7 +67,9 @@ class BrainAgent(BaseAgent):
         if user_model:
             # Defensive fix: 2.5 is deprecated/missing, downgrade to 2.0
             if "gemini-2.5" in user_model:
-                self._model_downgrade_warning = f"Downgrading requested model {user_model} to gemini-2.0-flash-exp"
+                self._model_downgrade_warning = (
+                    f"Downgrading requested model {user_model} to gemini-2.0-flash-exp"
+                )
                 self.gemini_model = "gemini-2.0-flash-exp"
             else:
                 self.gemini_model = user_model
@@ -78,7 +80,10 @@ class BrainAgent(BaseAgent):
         self.personas = load_personas()
 
     async def setup(self):
-        ai_status = f"AI Model: {self.gemini_model}" if self.client else "AI: UNAVAILABLE (No API key)"
+        """Subscribe to control topics and start the queue monitor task."""
+        ai_status = (
+            f"AI Model: {self.gemini_model}" if self.client else "AI: UNAVAILABLE (No API key)"
+        )
         await self.log(f"Brain online. Intelligence & Decision engine ready. {ai_status}")
 
         # Log any model downgrade warnings
@@ -108,11 +113,13 @@ class BrainAgent(BaseAgent):
         if error is None:
             fire_and_forget(self.log("Brain monitor loop exited cleanly.", level="WARN"))
             return
-        fire_and_forget(self.log(
-            f"Brain monitor loop DIED: {type(error).__name__}: {str(error)[:200]}. "
-            f"The opportunity queue will not drain until the engine restarts.",
-            level="ERROR",
-        ))
+        fire_and_forget(
+            self.log(
+                f"Brain monitor loop DIED: {type(error).__name__}: {str(error)[:200]}. "
+                f"The opportunity queue will not drain until the engine restarts.",
+                level="ERROR",
+            )
+        )
 
     async def on_system_control(self, message):
         """Handle stop signals immediately"""
@@ -136,7 +143,7 @@ class BrainAgent(BaseAgent):
             stop_requested=lambda: self.stop_requested,
             synapse=self.synapse,
             log_callback=self.log,
-            process_callback=self.process_single_item_from_queue
+            process_callback=self.process_single_item_from_queue,
         )
 
     async def process_single_item_from_queue(self):
@@ -148,7 +155,7 @@ class BrainAgent(BaseAgent):
             process_opportunity_callback=self.process_single_opportunity,
             bus=self.bus,
             dumped_count=self._dumped_count,
-            last_restock_time=self._last_restock_time
+            last_restock_time=self._last_restock_time,
         )
 
         # Handle restock trigger
@@ -161,7 +168,7 @@ class BrainAgent(BaseAgent):
                 last_restock_time=self._last_restock_time,
                 synapse=self.synapse,
                 bus=self.bus,
-                log_callback=self.log
+                log_callback=self.log,
             )
 
             if should_reset:
@@ -179,8 +186,10 @@ class BrainAgent(BaseAgent):
         is_fresh, freshness_status = check_opportunity_freshness(opportunity, self.log)
         if not is_fresh:
             record_decision(
-                ticker, opportunity.get("kalshi_price", 0.5),
-                outcome=freshness_status, veto_reason="market data too old",
+                ticker,
+                opportunity.get("kalshi_price", 0.5),
+                outcome=freshness_status,
+                veto_reason="market data too old",
             )
             return freshness_status
 
@@ -195,11 +204,16 @@ class BrainAgent(BaseAgent):
         # FIX: Variance Veto Logic Bypass (Anti-Audit)
         if confidence == 0 or estimated_prob is None:
             reason = "Zero AI confidence" if confidence == 0 else "No probability estimate"
-            await self.log(f"[VETO] VETOED: {ticker} | {reason} - skipping simulation", level="WARN")
+            await self.log(
+                f"[VETO] VETOED: {ticker} | {reason} - skipping simulation", level="WARN"
+            )
             record_decision(
-                ticker, opportunity.get("kalshi_price", 0.5),
-                outcome="VETOED", estimated_probability=estimated_prob,
-                confidence=confidence, veto_reason=reason,
+                ticker,
+                opportunity.get("kalshi_price", 0.5),
+                outcome="VETOED",
+                estimated_probability=estimated_prob,
+                confidence=confidence,
+                veto_reason=reason,
             )
             return "VETOED"
 
@@ -210,9 +224,12 @@ class BrainAgent(BaseAgent):
             reason = f"Estimates disagree by {disagreement:.2f} (max {self.MAX_DISAGREEMENT:.2f})"
             await self.log(f"[VETO] VETOED: {ticker} | {reason}", level="WARN")
             record_decision(
-                ticker, opportunity.get("kalshi_price", 0.5),
-                outcome="VETOED", estimated_probability=estimated_prob,
-                confidence=confidence, veto_reason=reason,
+                ticker,
+                opportunity.get("kalshi_price", 0.5),
+                outcome="VETOED",
+                estimated_probability=estimated_prob,
+                confidence=confidence,
+                veto_reason=reason,
             )
             return "VETOED"
 
@@ -228,10 +245,14 @@ class BrainAgent(BaseAgent):
 
         # Only log and publish if we have valid data
         if variance == 999.0:
-            await self.log(f"[SKIP] SKIPPED: {ticker} | No valid probability data available", level="DEBUG")
+            await self.log(
+                f"[SKIP] SKIPPED: {ticker} | No valid probability data available", level="DEBUG"
+            )
             record_decision(
-                ticker, opportunity.get("kalshi_price", 0.5),
-                outcome="SKIPPED", confidence=confidence,
+                ticker,
+                opportunity.get("kalshi_price", 0.5),
+                outcome="SKIPPED",
+                confidence=confidence,
                 veto_reason="no usable probability",
             )
             return "SKIPPED"
@@ -255,10 +276,14 @@ class BrainAgent(BaseAgent):
         # Gate on edge, not variance. p(1-p) peaks at exactly the old 0.25
         # threshold, so the variance test could never reject anything.
         if confidence >= self.CONFIDENCE_THRESHOLD and ev >= self.MIN_EDGE:
-            await self.log(f"[OK] APPROVED: {ticker} | Buying {side.upper()} @ {side_price*100:.0f}c | Pushing to execution.")
+            await self.log(
+                f"[OK] APPROVED: {ticker} | Buying {side.upper()} @ {side_price*100:.0f}c | Pushing to execution."
+            )
             record_decision(
-                ticker, opportunity.get("kalshi_price", 0.5),
-                outcome="APPROVED", estimated_probability=estimated_prob,
+                ticker,
+                opportunity.get("kalshi_price", 0.5),
+                outcome="APPROVED",
+                estimated_probability=estimated_prob,
                 confidence=confidence,
             )
             await self.queue_for_execution(
@@ -283,9 +308,12 @@ class BrainAgent(BaseAgent):
         )
         await self.log(f"[X] VETOED: {ticker} | Reason: {reason}")
         record_decision(
-            ticker, opportunity.get("kalshi_price", 0.5),
-            outcome="VETOED", estimated_probability=estimated_prob,
-            confidence=confidence, veto_reason=reason,
+            ticker,
+            opportunity.get("kalshi_price", 0.5),
+            outcome="VETOED",
+            estimated_probability=estimated_prob,
+            confidence=confidence,
+            veto_reason=reason,
         )
         return "VETOED"
 
@@ -300,10 +328,10 @@ class BrainAgent(BaseAgent):
             trading_instructions=self.trading_instructions,
             ai_client=self.ai_client,
             log_callback=self.log,
-            log_error_callback=self.log_error
+            log_error_callback=self.log_error,
         )
 
-    def run_simulation(self, opportunity: dict, override_prob: float = None) -> dict:
+    def run_simulation(self, opportunity: dict, override_prob: float | None = None) -> dict:
         """Evaluate the contract - delegates to the simulation module.
 
         No longer a simulation: EV and variance have closed forms, so there is
@@ -336,13 +364,13 @@ class BrainAgent(BaseAgent):
                     no_price=m_data_raw.get("no_price", 0),
                     volume=int(m_data_raw.get("volume", 0)),
                     expiration=m_data_raw.get("expiration_time", ""),
-                    raw_response=m_data_raw
+                    raw_response=m_data_raw,
                 )
 
                 opp = Opportunity(
                     id=target.get("id", str(uuid.uuid4())),
                     ticker=target.get("ticker", ""),
-                    market_data=m_data
+                    market_data=m_data,
                 )
 
                 signal_model = ExecutionSignal(
@@ -356,7 +384,7 @@ class BrainAgent(BaseAgent):
                     side_probability=target.get("side_probability"),
                     reasoning=execution_package["reasoning"],
                     suggested_count=execution_package["suggested_size"] or 10,
-                    status="PENDING"
+                    status="PENDING",
                 )
 
                 await self.synapse.executions.push(signal_model)
@@ -377,4 +405,5 @@ class BrainAgent(BaseAgent):
         )
 
     async def on_tick(self, payload: dict[str, Any]):
-        pass  # Brain is event-driven
+        """The Brain is driven by its queue, not by ticks."""
+        # Brain is event-driven

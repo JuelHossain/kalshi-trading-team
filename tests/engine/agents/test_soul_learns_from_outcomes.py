@@ -6,8 +6,8 @@ fill time; on_trade_result had `if outcome == "win": ... else: loss`, so a
 trade was filed as a mistake before the game had been played, and
 evolve_instructions then rewrote the trading rules from that log.
 """
-import pytest
 
+import pytest
 from agents.soul.agent import SoulAgent
 
 

@@ -6,18 +6,15 @@ detecting mock data, verifying logging coverage, and checking for duplicates.
 """
 
 import ast
-import os
 import re
-import sys
 from pathlib import Path
-from typing import Dict, List, Set, Tuple
 
 import pytest
-
 
 # =============================================================================
 # Path Fixtures
 # =============================================================================
+
 
 @pytest.fixture(scope="session")
 def engine_root() -> Path:
@@ -29,11 +26,14 @@ def engine_root() -> Path:
     """
     # Navigate from tests/engine/optimization/ to engine/
     current_path = Path(__file__).resolve()
-    return current_path.parent.parent.parent / "engine"
+    # tests/engine/optimization/conftest.py -> parents[3] is the repository root.
+    # This was parent.parent.parent, which is tests/, so it resolved to
+    # tests/engine and these checks scanned the test tree instead of the code.
+    return current_path.parents[3] / "engine"
 
 
 @pytest.fixture(scope="session")
-def python_files(engine_root: Path) -> List[Path]:
+def python_files(engine_root: Path) -> list[Path]:
     """
     Get all Python files in the engine directory.
 
@@ -47,7 +47,7 @@ def python_files(engine_root: Path) -> List[Path]:
 
 
 @pytest.fixture(scope="session")
-def critical_modules(engine_root: Path) -> Dict[str, Path]:
+def critical_modules(engine_root: Path) -> dict[str, Path]:
     """
     Get paths to critical modules that require special attention.
 
@@ -75,8 +75,9 @@ def critical_modules(engine_root: Path) -> Dict[str, Path]:
 # Mock Detection Patterns
 # =============================================================================
 
+
 @pytest.fixture(scope="session")
-def mock_patterns() -> List[re.Pattern]:
+def mock_patterns() -> list[re.Pattern]:
     """
     Get regex patterns that indicate mock/placeholder data.
 
@@ -84,26 +85,26 @@ def mock_patterns() -> List[re.Pattern]:
         List[re.Pattern]: Compiled regex patterns for mock detection
     """
     patterns = [
-        r"MOCK_",                      # MOCK_ prefix variables/functions
-        r"mock_data",                  # mock_data variable
-        r"fallback.*mock",             # fallback to mock
-        r"placeholder",                # placeholder values
-        r"TODO.*implement",            # unimplemented features
-        r"FIXME.*mock",                # mock-related FIXMEs
-        r"XXX.*mock",                  # mock-related XXX comments
-        r"HACK.*mock",                 # mock-related HACKs
-        r"fake.*data",                 # fake data references
-        r"dummy.*data",                # dummy data references
-        r"test_data.*production",      # test data in production
-        r"hardcoded.*value",           # hardcoded values
-        r"example\.com",               # example URLs
-        r"placeholder\.com",           # placeholder URLs
+        r"MOCK_",  # MOCK_ prefix variables/functions
+        r"mock_data",  # mock_data variable
+        r"fallback.*mock",  # fallback to mock
+        r"placeholder",  # placeholder values
+        r"TODO.*implement",  # unimplemented features
+        r"FIXME.*mock",  # mock-related FIXMEs
+        r"XXX.*mock",  # mock-related XXX comments
+        r"HACK.*mock",  # mock-related HACKs
+        r"fake.*data",  # fake data references
+        r"dummy.*data",  # dummy data references
+        r"test_data.*production",  # test data in production
+        r"hardcoded.*value",  # hardcoded values
+        r"example\.com",  # example URLs
+        r"placeholder\.com",  # placeholder URLs
     ]
     return [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
 
 
 @pytest.fixture(scope="session")
-def api_mock_patterns() -> List[re.Pattern]:
+def api_mock_patterns() -> list[re.Pattern]:
     """
     Get patterns specific to API mocking.
 
@@ -112,9 +113,9 @@ def api_mock_patterns() -> List[re.Pattern]:
     """
     patterns = [
         r"return\s+{[^}]*}.*#.*mock",  # Mock return dict
-        r"return\s+\".*\".*#.*mock",   # Mock return string
-        r"simulate.*response",         # Simulated API responses
-        r"mock.*response",             # Mock response objects
+        r"return\s+\".*\".*#.*mock",  # Mock return string
+        r"simulate.*response",  # Simulated API responses
+        r"mock.*response",  # Mock response objects
     ]
     return [re.compile(pattern, re.IGNORECASE) for pattern in patterns]
 
@@ -123,8 +124,9 @@ def api_mock_patterns() -> List[re.Pattern]:
 # AST Analysis Utilities
 # =============================================================================
 
+
 @pytest.fixture(scope="session")
-def ast_cache(python_files: List[Path]) -> Dict[Path, ast.Module]:
+def ast_cache(python_files: list[Path]) -> dict[Path, ast.Module]:
     """
     Cache parsed AST trees for all Python files.
 
@@ -137,7 +139,7 @@ def ast_cache(python_files: List[Path]) -> Dict[Path, ast.Module]:
     cache = {}
     for file_path in python_files:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 source = f.read()
                 cache[file_path] = ast.parse(source, filename=str(file_path))
         except (SyntaxError, UnicodeDecodeError) as e:
@@ -158,13 +160,15 @@ class FunctionAnalyzer(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """Visit function definition and collect metadata."""
-        self.functions.append({
-            "name": node.name,
-            "lineno": node.lineno,
-            "is_async": isinstance(node, ast.AsyncFunctionDef),
-            "has_docstring": ast.get_docstring(node) is not None,
-            "decorator_list": [ast.unparse(d) for d in node.decorator_list],
-        })
+        self.functions.append(
+            {
+                "name": node.name,
+                "lineno": node.lineno,
+                "is_async": isinstance(node, ast.AsyncFunctionDef),
+                "has_docstring": ast.get_docstring(node) is not None,
+                "decorator_list": [ast.unparse(d) for d in node.decorator_list],
+            }
+        )
         self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
@@ -174,46 +178,65 @@ class FunctionAnalyzer(ast.NodeVisitor):
     def visit_Import(self, node: ast.Import) -> None:
         """Visit import statement."""
         for alias in node.names:
-            self.imports.append({
-                "name": alias.name,
-                "lineno": node.lineno,
-                "alias": alias.asname,
-            })
+            self.imports.append(
+                {
+                    "name": alias.name,
+                    "lineno": node.lineno,
+                    "alias": alias.asname,
+                }
+            )
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         """Visit from import statement."""
         module = node.module or ""
         for alias in node.names:
-            self.imports.append({
-                "name": f"{module}.{alias.name}",
-                "lineno": node.lineno,
-                "alias": alias.asname,
-            })
+            self.imports.append(
+                {
+                    "name": f"{module}.{alias.name}",
+                    "lineno": node.lineno,
+                    "alias": alias.asname,
+                }
+            )
 
     def visit_Call(self, node: ast.Call) -> None:
         """Visit function call and check for logging."""
         func_name = self._get_call_name(node)
 
         # Check for logging calls
-        if func_name and any(log_method in func_name for log_method in [
-            "logger.debug", "logger.info", "logger.warning",
-            "logger.error", "logger.critical", "logger.exception",
-            "log.debug", "log.info", "log.warning",
-            "log.error", "log.critical", "log.exception",
-        ]):
-            self.logging_calls.append({
-                "function": func_name,
-                "lineno": node.lineno,
-            })
+        if func_name and any(
+            log_method in func_name
+            for log_method in [
+                "logger.debug",
+                "logger.info",
+                "logger.warning",
+                "logger.error",
+                "logger.critical",
+                "logger.exception",
+                "log.debug",
+                "log.info",
+                "log.warning",
+                "log.error",
+                "log.critical",
+                "log.exception",
+            ]
+        ):
+            self.logging_calls.append(
+                {
+                    "function": func_name,
+                    "lineno": node.lineno,
+                }
+            )
 
         self.generic_visit(node)
 
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
         """Visit exception handler."""
-        self.exception_handlers.append({
-            "type": ast.unparse(node.type) if node.type else "bare",
-            "lineno": node.lineno,
-        })
+        self.exception_handlers.append(
+            {
+                "type": ast.unparse(node.type) if node.type else "bare",
+                "lineno": node.lineno,
+            }
+        )
         self.generic_visit(node)
 
     def _get_call_name(self, node: ast.Call) -> str | None:
@@ -235,8 +258,9 @@ def function_analyzer() -> type:
 # Logging Capture Fixtures
 # =============================================================================
 
+
 @pytest.fixture
-def log_capture() -> List[str]:
+def log_capture() -> list[str]:
     """
     Create a list to capture log messages during tests.
 
@@ -247,7 +271,7 @@ def log_capture() -> List[str]:
 
 
 @pytest.fixture
-def mock_logger(log_capture: List[str]):
+def mock_logger(log_capture: list[str]):
     """
     Create a mock logger that captures log messages.
 
@@ -257,8 +281,9 @@ def mock_logger(log_capture: List[str]):
     Returns:
         Mock logger object
     """
+
     class MockLogger:
-        def __init__(self, capture_list: List[str]):
+        def __init__(self, capture_list: list[str]):
             self._capture = capture_list
             self.name = "test_logger"
 
@@ -286,6 +311,7 @@ def mock_logger(log_capture: List[str]):
 # =============================================================================
 # Code Analysis Helpers
 # =============================================================================
+
 
 @pytest.fixture(scope="session")
 def duplicate_threshold() -> int:
@@ -317,6 +343,7 @@ def code_similarity_checker():
     Returns:
         Callable that compares two code blocks for similarity
     """
+
     def check_similarity(code1: str, code2: str) -> float:
         """
         Calculate similarity ratio between two code blocks.
@@ -345,6 +372,7 @@ def code_similarity_checker():
 # Test Result Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def test_results():
     """
@@ -365,6 +393,7 @@ def test_results():
 # Test Skip Markers
 # =============================================================================
 
+
 def pytest_configure(config):
     """
     Configure pytest with custom markers for optimization tests.
@@ -372,23 +401,10 @@ def pytest_configure(config):
     Args:
         config: pytest config object
     """
+    config.addinivalue_line("markers", "mock: tests related to mock data detection")
+    config.addinivalue_line("markers", "logging: tests related to logging coverage")
+    config.addinivalue_line("markers", "duplicates: tests related to code duplication")
+    config.addinivalue_line("markers", "quality: tests related to code quality")
     config.addinivalue_line(
-        "markers",
-        "mock: tests related to mock data detection"
-    )
-    config.addinivalue_line(
-        "markers",
-        "logging: tests related to logging coverage"
-    )
-    config.addinivalue_line(
-        "markers",
-        "duplicates: tests related to code duplication"
-    )
-    config.addinivalue_line(
-        "markers",
-        "quality: tests related to code quality"
-    )
-    config.addinivalue_line(
-        "markers",
-        "slow: marks tests as slow (deselect with '-m \"not slow\"')"
+        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
     )

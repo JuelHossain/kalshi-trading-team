@@ -17,7 +17,6 @@ import pytest
 # package with the test directory of the same name -- it only imported at all
 # because an earlier test had already cached the real module. conftest.py puts
 # the engine source on the path.
-
 from agents.brain import BrainAgent
 from agents.senses import SensesAgent
 from agents.soul import SoulAgent
@@ -32,7 +31,6 @@ def clear_database(db_path: str):
     if os.path.exists(db_path):
         os.remove(db_path)
         print(f"[TEST] Cleared database: {db_path}")
-
 
 
 async def _settled(read, quiet_for: float = 0.3, timeout: float = 10.0):
@@ -66,9 +64,9 @@ async def _settled(read, quiet_for: float = 0.3, timeout: float = 10.0):
 @pytest.mark.asyncio
 async def test_senses_guard():
     """Test that Senses only scans once and goes to standby"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 1: Senses Initial Scan Guard")
-    print("="*60)
+    print("=" * 60)
 
     clear_database(os.environ["GHOST_SYNAPSE_DB"])
 
@@ -100,9 +98,9 @@ async def test_senses_guard():
     print(f"[TEST] Opportunities after second trigger: {opp_size_2}")
 
     # Verify guard is working
-    assert opp_size_1 == opp_size_2, (
-        f"Senses re-queued on a second PREFLIGHT_COMPLETE: {opp_size_1} -> {opp_size_2}"
-    )
+    assert (
+        opp_size_1 == opp_size_2
+    ), f"Senses re-queued on a second PREFLIGHT_COMPLETE: {opp_size_1} -> {opp_size_2}"
 
 
 @pytest.mark.asyncio
@@ -124,9 +122,9 @@ async def test_brain_does_not_retrigger_itself():
     and looping forever. That is what this now checks, alongside the behaviour
     the design actually promises.
     """
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("TEST 2: Brain Does Not Re-Trigger Itself")
-    print("="*60)
+    print("=" * 60)
 
     clear_database(os.environ["GHOST_SYNAPSE_DB"])
 
@@ -170,12 +168,12 @@ async def test_brain_does_not_retrigger_itself():
     print(f"[TEST] Opportunities remaining once settled: {remaining}")
     print(f"[TEST] OPPORTUNITIES_READY senders seen: {senders}")
 
-    assert brain.name not in senders, (
-        f"Brain published its own trigger, which would loop forever: {senders}"
-    )
-    assert remaining == 0, (
-        f"the monitor loop is meant to drain the queue to empty, left {remaining}"
-    )
+    assert (
+        brain.name not in senders
+    ), f"Brain published its own trigger, which would loop forever: {senders}"
+    assert (
+        remaining == 0
+    ), f"the monitor loop is meant to drain the queue to empty, left {remaining}"
 
 
 @pytest.mark.asyncio
@@ -209,42 +207,3 @@ async def test_restock_cooldown():
     assert not await should_restock(
         synapse, over_threshold - 1, last_restock_time=now - 9999, current_time=now
     )
-
-
-async def main():
-    """Run all tests"""
-    print("\n" + "="*60)
-    print("AGENT FLOW CONTROL TEST SUITE")
-    print("="*60)
-
-    results = []
-
-    # Run tests
-    results.append(("Senses Guard", await test_senses_guard()))
-    results.append(("Brain No Self-Trigger", await test_brain_no_self_trigger()))
-    results.append(("Restock Cooldown", await test_restock_cooldown()))
-
-    # Summary
-    print("\n" + "="*60)
-    print("TEST SUMMARY")
-    print("="*60)
-
-    for test_name, passed in results:
-        status = "OK PASS" if passed else "FAIL FAIL"
-        print(f"{status}: {test_name}")
-
-    total = len(results)
-    passed = sum(1 for _, p in results if p)
-
-    print(f"\nTotal: {passed}/{total} tests passed")
-
-    if passed == total:
-        print("\n[OK SUCCESS] All flow control tests passed!")
-        return 0
-    print(f"\n[FAIL FAILURE] {total - passed} test(s) failed")
-    return 1
-
-
-if __name__ == "__main__":
-    exit_code = asyncio.run(main())
-    sys.exit(exit_code)

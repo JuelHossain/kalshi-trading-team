@@ -9,17 +9,17 @@ This test demonstrates:
 2. The fix (AFTER): Direct DB read prevents hard floor bypass
 """
 
-import pytest
-import asyncio
 import sys
-import os
 from pathlib import Path
+
+import pytest
 
 # Add engine directory to path
 engine_dir = Path(__file__).parent.parent.parent.parent / "engine"
 sys.path.insert(0, str(engine_dir))
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
+
 from main import GhostEngine
 
 
@@ -52,7 +52,7 @@ class TestHardFloorRaceCondition:
         real_balance_in_db = 20000  # $200 in cents
 
         # Mock kalshi_client.get_balance to return the REAL balance from DB
-        with patch('main.kalshi_client') as mock_client:
+        with patch("main.kalshi_client") as mock_client:
             mock_client.get_balance = AsyncMock(return_value=real_balance_in_db)
 
             # Keep vault cache stale
@@ -62,8 +62,9 @@ class TestHardFloorRaceCondition:
 
             # AFTER FIX: Should return False because real balance ($200) < hard floor ($255)
             # BEFORE FIX: Would return True because stale cache ($300) >= hard floor
-            assert authorized is False, \
-                "Cycle should be rejected: real balance ($200) below hard floor ($255)"
+            assert (
+                authorized is False
+            ), "Cycle should be rejected: real balance ($200) below hard floor ($255)"
 
     @pytest.mark.asyncio
     async def test_fix_direct_db_read_prevents_hard_floor_bypass(self):
@@ -87,13 +88,15 @@ class TestHardFloorRaceCondition:
 
         real_balance = 20000  # Below hard floor
 
-        with patch('main.kalshi_client') as mock_client:
+        with patch("main.kalshi_client") as mock_client:
             mock_client.get_balance = AsyncMock(return_value=real_balance)
 
             # Fix should prevent cycle from being authorized
             authorized = await engine.authorize_cycle()
 
-            assert authorized is False, "Cycle should be rejected when real balance below hard floor"
+            assert (
+                authorized is False
+            ), "Cycle should be rejected when real balance below hard floor"
 
             # Verify that get_balance was actually called (proves we're reading from DB)
             mock_client.get_balance.assert_called_once()
@@ -118,7 +121,7 @@ class TestHardFloorRaceCondition:
 
         real_balance = 45000  # Still above hard floor ($255)
 
-        with patch('main.kalshi_client') as mock_client:
+        with patch("main.kalshi_client") as mock_client:
             mock_client.get_balance = AsyncMock(return_value=real_balance)
 
             authorized = await engine.authorize_cycle()
@@ -141,7 +144,7 @@ class TestHardFloorRaceCondition:
 
         real_balance = 25500  # Exactly $255 (hard floor threshold)
 
-        with patch('main.kalshi_client') as mock_client:
+        with patch("main.kalshi_client") as mock_client:
             mock_client.get_balance = AsyncMock(return_value=real_balance)
 
             authorized = await engine.authorize_cycle()
@@ -163,7 +166,7 @@ class TestHardFloorRaceCondition:
 
         real_balance = 25499  # $254.99 (one cent below hard floor)
 
-        with patch('main.kalshi_client') as mock_client:
+        with patch("main.kalshi_client") as mock_client:
             mock_client.get_balance = AsyncMock(return_value=real_balance)
 
             authorized = await engine.authorize_cycle()

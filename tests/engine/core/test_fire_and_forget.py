@@ -10,7 +10,6 @@ STALE.
 import asyncio
 
 import pytest
-
 from core.shared_utils import fire_and_forget
 
 

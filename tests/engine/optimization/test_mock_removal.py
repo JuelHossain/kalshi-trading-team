@@ -12,19 +12,17 @@ This test suite ensures:
 import ast
 import re
 from pathlib import Path
-from typing import List, Set, Tuple
 
 import pytest
-
 
 # =============================================================================
 # Test: No Mock Patterns in Production Code
 # =============================================================================
 
+
 @pytest.mark.mock
 def test_no_mock_prefixes_in_production_code(
-    python_files: List[Path],
-    mock_patterns: List[re.Pattern]
+    python_files: list[Path], mock_patterns: list[re.Pattern]
 ) -> None:
     """
     Test that no mock patterns exist in production code.
@@ -44,34 +42,38 @@ def test_no_mock_prefixes_in_production_code(
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
             for pattern in mock_patterns:
                 matches = pattern.finditer(content)
                 for match in matches:
                     # Get line number
-                    line_num = content[:match.start()].count("\n") + 1
+                    line_num = content[: match.start()].count("\n") + 1
                     line_content = content.split("\n")[line_num - 1].strip()
 
                     # Skip comments and docstrings
-                    if line_content.startswith("#") or line_content.startswith('"""'):
+                    if line_content.startswith(("#", '"""')):
                         continue
 
-                    violations.append({
-                        "file": str(file_path.relative_to(file_path.parents[2])),
-                        "line": line_num,
-                        "pattern": pattern.pattern,
-                        "content": line_content,
-                    })
+                    violations.append(
+                        {
+                            "file": str(file_path.relative_to(file_path.parents[2])),
+                            "line": line_num,
+                            "pattern": pattern.pattern,
+                            "content": line_content,
+                        }
+                    )
         except (UnicodeDecodeError, FileNotFoundError):
             continue
 
     if violations:
-        violation_details = "\n".join([
-            f"  {v['file']}:{v['line']} - Pattern: {v['pattern']}\n    {v['content']}"
-            for v in violations[:10]  # Show first 10
-        ])
+        violation_details = "\n".join(
+            [
+                f"  {v['file']}:{v['line']} - Pattern: {v['pattern']}\n    {v['content']}"
+                for v in violations[:10]  # Show first 10
+            ]
+        )
         pytest.fail(
             f"Found {len(violations)} mock pattern violations:\n"
             f"{violation_details}\n"
@@ -80,7 +82,7 @@ def test_no_mock_prefixes_in_production_code(
 
 
 @pytest.mark.mock
-def test_no_mock_imports_in_production(python_files: List[Path]) -> None:
+def test_no_mock_imports_in_production(python_files: list[Path]) -> None:
     """
     Test that no mock imports exist in production code.
 
@@ -106,7 +108,7 @@ def test_no_mock_imports_in_production(python_files: List[Path]) -> None:
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
             tree = ast.parse(content, filename=str(file_path))
@@ -115,29 +117,32 @@ def test_no_mock_imports_in_production(python_files: List[Path]) -> None:
                 if isinstance(node, ast.Import):
                     for alias in node.names:
                         if any(mock_import in alias.name for mock_import in mock_imports):
-                            violations.append({
-                                "file": str(file_path.relative_to(file_path.parents[2])),
-                                "line": node.lineno,
-                                "import": alias.name,
-                            })
-                elif isinstance(node, ast.ImportFrom):
-                    if node.module and any(
-                        mock_import in node.module
-                        for mock_import in mock_imports
-                    ):
-                        violations.append({
+                            violations.append(
+                                {
+                                    "file": str(file_path.relative_to(file_path.parents[2])),
+                                    "line": node.lineno,
+                                    "import": alias.name,
+                                }
+                            )
+                elif (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module
+                    and any(mock_import in node.module for mock_import in mock_imports)
+                ):
+                    violations.append(
+                        {
                             "file": str(file_path.relative_to(file_path.parents[2])),
                             "line": node.lineno,
                             "import": node.module,
-                        })
+                        }
+                    )
         except (SyntaxError, UnicodeDecodeError):
             continue
 
     if violations:
-        violation_details = "\n".join([
-            f"  {v['file']}:{v['line']} - import {v['import']}"
-            for v in violations
-        ])
+        violation_details = "\n".join(
+            [f"  {v['file']}:{v['line']} - import {v['import']}" for v in violations]
+        )
         pytest.fail(
             f"Found {len(violations)} mock imports in production code:\n"
             f"{violation_details}\n"
@@ -149,10 +154,10 @@ def test_no_mock_imports_in_production(python_files: List[Path]) -> None:
 # Test: No Fallback Mock Data in AI Responses
 # =============================================================================
 
+
 @pytest.mark.mock
 def test_no_fallback_mock_data_in_ai_client(
-    engine_root: Path,
-    api_mock_patterns: List[re.Pattern]
+    engine_root: Path, api_mock_patterns: list[re.Pattern]
 ) -> None:
     """
     Test that AI client doesn't have fallback mock data.
@@ -169,38 +174,36 @@ def test_no_fallback_mock_data_in_ai_client(
     if not ai_client_path.exists():
         pytest.skip("AI client file not found")
 
-    with open(ai_client_path, "r", encoding="utf-8") as f:
+    with open(ai_client_path, encoding="utf-8") as f:
         content = f.read()
 
     violations = []
 
     # Check for mock return values in fallback logic
     fallback_section = re.search(
-        r"def.*fallback.*:.*?(?=\n    def|\nclass|\Z)",
-        content,
-        re.DOTALL | re.IGNORECASE
+        r"def.*fallback.*:.*?(?=\n    def|\nclass|\Z)", content, re.DOTALL | re.IGNORECASE
     )
 
     if fallback_section:
         for pattern in api_mock_patterns:
             if pattern.search(fallback_section.group(0)):
-                violations.append({
-                    "pattern": pattern.pattern,
-                    "context": "fallback method",
-                })
+                violations.append(
+                    {
+                        "pattern": pattern.pattern,
+                        "context": "fallback method",
+                    }
+                )
 
     # Check for hardcoded mock responses
-    hardcoded_return = re.search(
-        r'return\s+["\'].*mock.*["\']',
-        content,
-        re.IGNORECASE
-    )
+    hardcoded_return = re.search(r'return\s+["\'].*mock.*["\']', content, re.IGNORECASE)
 
     if hardcoded_return:
-        violations.append({
-            "pattern": "hardcoded mock return",
-            "context": hardcoded_return.group(0),
-        })
+        violations.append(
+            {
+                "pattern": "hardcoded mock return",
+                "context": hardcoded_return.group(0),
+            }
+        )
 
     if violations:
         pytest.fail(
@@ -212,8 +215,7 @@ def test_no_fallback_mock_data_in_ai_client(
 
 @pytest.mark.mock
 def test_real_api_calls_in_critical_modules(
-    critical_modules: dict,
-    api_mock_patterns: List[re.Pattern]
+    critical_modules: dict, api_mock_patterns: list[re.Pattern]
 ) -> None:
     """
     Test that critical modules use real API calls, not mocks.
@@ -229,21 +231,19 @@ def test_real_api_calls_in_critical_modules(
             continue
 
         try:
-            with open(module_path, "r", encoding="utf-8") as f:
+            with open(module_path, encoding="utf-8") as f:
                 content = f.read()
 
             # Look for API functions that might return mock data
             api_functions = re.finditer(
-                r"async def (?:get_|fetch_|query_|call_).*?\(.*?\):",
-                content
+                r"async def (?:get_|fetch_|query_|call_).*?\(.*?\):", content
             )
 
             for func_match in api_functions:
                 func_start = func_match.end()
                 # Get function body (simplified)
                 func_body_match = re.search(
-                    r"(?s)(.*?)(?=\n    async def|\n    def|\nclass|\Z)",
-                    content[func_start:]
+                    r"(?s)(.*?)(?=\n    async def|\n    def|\nclass|\Z)", content[func_start:]
                 )
 
                 if func_body_match:
@@ -251,19 +251,20 @@ def test_real_api_calls_in_critical_modules(
 
                     for pattern in api_mock_patterns:
                         if pattern.search(func_body):
-                            violations.append({
-                                "module": module_name,
-                                "function": func_match.group(1),
-                                "pattern": pattern.pattern,
-                            })
+                            violations.append(
+                                {
+                                    "module": module_name,
+                                    "function": func_match.group(1),
+                                    "pattern": pattern.pattern,
+                                }
+                            )
         except (UnicodeDecodeError, FileNotFoundError):
             continue
 
     if violations:
-        violation_details = "\n".join([
-            f"  {v['module']}.{v['function']}() - {v['pattern']}"
-            for v in violations
-        ])
+        violation_details = "\n".join(
+            [f"  {v['module']}.{v['function']}() - {v['pattern']}" for v in violations]
+        )
         pytest.fail(
             f"Found {len(violations)} API functions with mock data:\n"
             f"{violation_details}\n"
@@ -274,6 +275,7 @@ def test_real_api_calls_in_critical_modules(
 # =============================================================================
 # Test: No Hardcoded Mock Data
 # =============================================================================
+
 
 @pytest.mark.mock
 def test_no_hardcoded_mock_market_data(engine_root: Path) -> None:
@@ -303,14 +305,16 @@ def test_no_hardcoded_mock_market_data(engine_root: Path) -> None:
                 continue
 
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     for line_num, line in enumerate(f, 1):
                         if re.search(pattern, line, re.IGNORECASE):
-                            violations.append({
-                                "file": str(file_path.relative_to(engine_root)),
-                                "line": line_num,
-                                "content": line.strip(),
-                            })
+                            violations.append(
+                                {
+                                    "file": str(file_path.relative_to(engine_root)),
+                                    "line": line_num,
+                                    "content": line.strip(),
+                                }
+                            )
             except (UnicodeDecodeError, FileNotFoundError):
                 continue
 
@@ -346,17 +350,19 @@ def test_no_mock_trading_signals(engine_root: Path) -> None:
                 continue
 
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read()
 
                 matches = re.finditer(pattern, content, re.IGNORECASE)
                 for match in matches:
-                    line_num = content[:match.start()].count("\n") + 1
-                    violations.append({
-                        "file": str(file_path.relative_to(engine_root)),
-                        "line": line_num,
-                        "content": match.group(0),
-                    })
+                    line_num = content[: match.start()].count("\n") + 1
+                    violations.append(
+                        {
+                            "file": str(file_path.relative_to(engine_root)),
+                            "line": line_num,
+                            "content": match.group(0),
+                        }
+                    )
             except (UnicodeDecodeError, FileNotFoundError):
                 continue
 
@@ -370,6 +376,7 @@ def test_no_mock_trading_signals(engine_root: Path) -> None:
 # =============================================================================
 # Test: Real Data in Critical Paths
 # =============================================================================
+
 
 @pytest.mark.mock
 def test_vault_uses_real_data(engine_root: Path) -> None:
@@ -386,7 +393,7 @@ def test_vault_uses_real_data(engine_root: Path) -> None:
     if not vault_path.exists():
         pytest.skip("Vault file not found")
 
-    with open(vault_path, "r", encoding="utf-8") as f:
+    with open(vault_path, encoding="utf-8") as f:
         content = f.read()
 
     # Look for mock data in vault operations
@@ -394,35 +401,28 @@ def test_vault_uses_real_data(engine_root: Path) -> None:
 
     # Check for hardcoded initial balances that look like mocks
     hardcoded_balance = re.search(
-        r"initial.*balance.*=.*[0-9]+\s*#.*(?:mock|test|fake)",
-        content,
-        re.IGNORECASE
+        r"initial.*balance.*=.*[0-9]+\s*#.*(?:mock|test|fake)", content, re.IGNORECASE
     )
 
     if hardcoded_balance:
         issues.append(f"Hardcoded mock balance: {hardcoded_balance.group(0)}")
 
     # Check for mock transaction data
-    mock_transaction = re.search(
-        r"transaction.*=.*{.*'mock'|'MOCK",
-        content,
-        re.IGNORECASE
-    )
+    mock_transaction = re.search(r"transaction.*=.*{.*'mock'|'MOCK", content, re.IGNORECASE)
 
     if mock_transaction:
         issues.append(f"Mock transaction data: {mock_transaction.group(0)}")
 
     if issues:
         pytest.fail(
-            f"Found mock data in vault operations:\n" + "\n".join(issues) +
-            "\nVault must use real financial data only."
+            "Found mock data in vault operations:\n"
+            + "\n".join(issues)
+            + "\nVault must use real financial data only."
         )
 
 
 @pytest.mark.mock
-def test_trading_execution_uses_real_market_data(
-    engine_root: Path
-) -> None:
+def test_trading_execution_uses_real_market_data(engine_root: Path) -> None:
     """
     Test that trading execution uses real market data.
 
@@ -436,7 +436,7 @@ def test_trading_execution_uses_real_market_data(
     if not execution_path.exists():
         pytest.skip("Execution file not found")
 
-    with open(execution_path, "r", encoding="utf-8") as f:
+    with open(execution_path, encoding="utf-8") as f:
         content = f.read()
 
     issues = []
@@ -454,8 +454,9 @@ def test_trading_execution_uses_real_market_data(
 
     if issues:
         pytest.fail(
-            f"Found mock market data in trading execution:\n" + "\n".join(issues) +
-            "\nExecution must use real market data from API."
+            "Found mock market data in trading execution:\n"
+            + "\n".join(issues)
+            + "\nExecution must use real market data from API."
         )
 
 
@@ -481,7 +482,7 @@ def test_signal_generation_uses_real_inputs(engine_root: Path) -> None:
         if not file_path.exists():
             continue
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
 
         # Check for mock input data
@@ -493,8 +494,9 @@ def test_signal_generation_uses_real_inputs(engine_root: Path) -> None:
 
     if issues:
         pytest.fail(
-            f"Found mock inputs in signal generation:\n" + "\n".join(issues) +
-            "\nSignal generation must use real market data."
+            "Found mock inputs in signal generation:\n"
+            + "\n".join(issues)
+            + "\nSignal generation must use real market data."
         )
 
 
@@ -502,8 +504,9 @@ def test_signal_generation_uses_real_inputs(engine_root: Path) -> None:
 # Test: No TODO/FIXME Mocks in Production
 # =============================================================================
 
+
 @pytest.mark.mock
-def test_no_todo_mock_implementations(python_files: List[Path]) -> None:
+def test_no_todo_mock_implementations(python_files: list[Path]) -> None:
     """
     Test that no TODO comments reference mock implementations.
 
@@ -526,15 +529,17 @@ def test_no_todo_mock_implementations(python_files: List[Path]) -> None:
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 for line_num, line in enumerate(f, 1):
                     for pattern in todo_mock_patterns:
                         if re.search(pattern, line, re.IGNORECASE):
-                            violations.append({
-                                "file": str(file_path.relative_to(file_path.parents[2])),
-                                "line": line_num,
-                                "content": line.strip(),
-                            })
+                            violations.append(
+                                {
+                                    "file": str(file_path.relative_to(file_path.parents[2])),
+                                    "line": line_num,
+                                    "content": line.strip(),
+                                }
+                            )
         except (UnicodeDecodeError, FileNotFoundError):
             continue
 
@@ -549,11 +554,11 @@ def test_no_todo_mock_implementations(python_files: List[Path]) -> None:
 # Integration Tests
 # =============================================================================
 
+
 @pytest.mark.mock
 @pytest.mark.slow
 def test_end_to_end_no_mock_data_in_api_calls(
-    engine_root: Path,
-    mock_patterns: List[re.Pattern]
+    engine_root: Path, mock_patterns: list[re.Pattern]
 ) -> None:
     """
     End-to-end test that no mock data exists in the full API call chain.
@@ -567,10 +572,10 @@ def test_end_to_end_no_mock_data_in_api_calls(
     """
     # Define the API call chain
     api_chain = [
-        "agents/senses/scanner.py",      # Market data fetching
-        "agents/brain/agent.py",         # Decision making
-        "agents/hand/execution.py",      # Order execution
-        "core/vault.py",                 # State management
+        "agents/senses/scanner.py",  # Market data fetching
+        "agents/brain/agent.py",  # Decision making
+        "agents/hand/execution.py",  # Order execution
+        "core/vault.py",  # State management
     ]
 
     violations_in_chain = {}
@@ -581,7 +586,7 @@ def test_end_to_end_no_mock_data_in_api_calls(
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
 
             file_violations = []
@@ -597,10 +602,12 @@ def test_end_to_end_no_mock_data_in_api_calls(
 
     if violations_in_chain:
         pytest.fail(
-            f"Found mock data in API call chain:\n" +
-            "\n".join([
-                f"  {file}: {', '.join(patterns)}"
-                for file, patterns in violations_in_chain.items()
-            ]) +
-            "\nThe entire chain must use real data."
+            "Found mock data in API call chain:\n"
+            + "\n".join(
+                [
+                    f"  {file}: {', '.join(patterns)}"
+                    for file, patterns in violations_in_chain.items()
+                ]
+            )
+            + "\nThe entire chain must use real data."
         )

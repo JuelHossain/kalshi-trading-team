@@ -31,11 +31,11 @@ AGENT_NAME_TO_ID = {
 # Agent to Phase mapping (mirrors shared/constants.ts)
 # Used for visualizer and event formatting
 AGENT_TO_PHASE = {
-    AGENT_ID_SOUL: 1,      # Phase 1: System Init
-    AGENT_ID_SENSES: 2,    # Phase 2: Surveillance
-    AGENT_ID_BRAIN: 3,     # Phase 3: Intelligence
-    AGENT_ID_HAND: 4,      # Phase 4: Execution
-    AGENT_ID_GATEWAY: 4,   # Phase 4: Gateway (part of Hand output)
+    AGENT_ID_SOUL: 1,  # Phase 1: System Init
+    AGENT_ID_SENSES: 2,  # Phase 2: Surveillance
+    AGENT_ID_BRAIN: 3,  # Phase 3: Intelligence
+    AGENT_ID_HAND: 4,  # Phase 4: Execution
+    AGENT_ID_GATEWAY: 4,  # Phase 4: Gateway (part of Hand output)
 }
 
 # Extended phase mapping (includes all 14 agents from original design)
@@ -66,7 +66,7 @@ MAX_OPPORTUNITY_QUEUE_SIZE = 20
 
 # Restock triggers
 RESTOCK_THRESHOLD_VETO_COUNT = 5  # Request restock after 5 vetoes
-RESTOCK_COOLDOWN_SECONDS = 60     # Minimum time between restocks
+RESTOCK_COOLDOWN_SECONDS = 60  # Minimum time between restocks
 
 # ==============================================================================
 # CYCLE CONFIGURATION
@@ -80,7 +80,7 @@ MIN_CYCLE_INTERVAL_SECONDS = 30
 
 # Senses Agent
 SENSES_STOCK_BUFFER_SIZE = 30  # Total markets to pull from Kalshi
-SENSES_QUEUE_BATCH_SIZE = 10   # Markets to queue at once
+SENSES_QUEUE_BATCH_SIZE = 10  # Markets to queue at once
 
 # Brain Agent
 BRAIN_CONFIDENCE_THRESHOLD = 0.85  # 85% minimum AI confidence in its estimate

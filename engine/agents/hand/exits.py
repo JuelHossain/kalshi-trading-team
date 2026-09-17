@@ -122,7 +122,7 @@ def average_entry_price_cents(position: dict) -> int | None:
     except (TypeError, ValueError, ZeroDivisionError):
         return None
 
-    return int(round(average)) if _is_valid_price(average) else None
+    return round(average) if _is_valid_price(average) else None
 
 
 def _is_valid_price(price: float | int | None) -> bool:

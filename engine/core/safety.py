@@ -1,6 +1,10 @@
+"""Ragnarok: the emergency exit.
+
+Cancel every resting order, then flatten every position at the extreme
+tick. Getting out matters more than the last cent, so nothing here rests in
+the book. Invoked by POST /ragnarok and by the Hand on a fatal error.
 """
-Safety & Risk Management Core
-"""
+
 import asyncio
 from typing import Any
 
@@ -59,7 +63,7 @@ async def _cancel_all_orders() -> tuple[int, int]:
         response = await kalshi_client.request(
             "GET", "/portfolio/orders", params={"status": "active"}
         )
-    except Exception as e:  # noqa: BLE001 - emergency path must not raise
+    except Exception as e:
         log_error(f"Ragnarok could not read orders: {e}", AgentType.HAND)
         return (0, 0)
 
@@ -71,9 +75,10 @@ async def _cancel_all_orders() -> tuple[int, int]:
     log_critical(f"Found {len(orders)} active orders. CANCELLING ALL.", AgentType.HAND)
 
     async def cancel_one(order_id: str) -> bool:
+        """Cancel a single resting order; True on success."""
         try:
             result = await kalshi_client.request("DELETE", f"/portfolio/orders/{order_id}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log_error(f"Failed to cancel order {order_id}: {e}", AgentType.HAND)
             return False
         if result:
@@ -96,7 +101,7 @@ async def _close_all_positions() -> tuple[int, int]:
     """
     try:
         positions = await kalshi_client.get_positions()
-    except Exception as e:  # noqa: BLE001 - emergency path must not raise
+    except Exception as e:
         log_error(f"Ragnarok could not read positions: {e}", AgentType.HAND)
         return (0, 0)
 
@@ -108,13 +113,14 @@ async def _close_all_positions() -> tuple[int, int]:
     log_critical(f"Closing {len(open_positions)} open positions.", AgentType.HAND)
 
     async def close_one(position: dict) -> bool:
+        """Flatten a single position at the extreme tick; True on success."""
         ticker = position.get("ticker") or position.get("market_id")
         count = abs(int(position.get("position", 0)))
         if not ticker or count <= 0:
             return False
         try:
             result = await kalshi_client.close_position(ticker, count)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log_error(f"Failed to close {ticker}: {e}", AgentType.HAND)
             return False
         if result:

@@ -3,7 +3,6 @@ Unit tests for safety mechanisms - Kill switch, Ragnarok, and emergency procedur
 """
 
 import asyncio
-
 from unittest.mock import AsyncMock
 
 import pytest
@@ -67,9 +66,7 @@ class TestRagnarokProtocol:
 
         assert result["orders_cancelled"] == 3
         deleted = [
-            call.args[1]
-            for call in client.request.call_args_list
-            if call.args[0] == "DELETE"
+            call.args[1] for call in client.request.call_args_list if call.args[0] == "DELETE"
         ]
         assert sorted(deleted) == [
             "/portfolio/orders/a",
@@ -116,7 +113,7 @@ class TestHardFloor:
 
     def test_hard_floor_at_255_dollars(self):
         """Hard floor is exactly $255."""
-        vault = RecursiveVault()
+        RecursiveVault()
         # This would be checked in authorize_cycle
         assert 25500 == 255 * 100  # $255 in cents
 

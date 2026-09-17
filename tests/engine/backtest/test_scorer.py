@@ -9,7 +9,6 @@ makes every past market labelled data.
 import random
 
 import pytest
-
 from backtest.runner import format_report
 from backtest.scorer import score_predictions
 

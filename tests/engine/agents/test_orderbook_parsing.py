@@ -11,8 +11,8 @@ green while the engine could not place a single order.
 
 The book below is a real one, captured through the engine's own client.
 """
-import pytest
 
+import pytest
 from agents.hand.execution import parse_orderbook, snipe_check
 
 # KXNFLGAME-26SEP20SEAARI-ARI, as returned by GET /markets/{t}/orderbook.
@@ -100,27 +100,29 @@ class TestSnipeCheckOnTheRealBook:
     @pytest.mark.asyncio
     async def test_depth_is_measured_where_the_order_would_fill(self):
         """77,618 contracts rest at 35c; a $75 stake is not a depth problem."""
-        result = await snipe_check(
-            _Client(REAL_BOOK), "T", _log, max_stake_cents=7500, side="yes"
-        )
+        result = await snipe_check(_Client(REAL_BOOK), "T", _log, max_stake_cents=7500, side="yes")
         assert result["valid"] is True
 
     @pytest.mark.asyncio
     async def test_thin_depth_at_the_best_ask_is_still_refused(self):
-        thin = {"orderbook_fp": {
-            "yes_dollars": [["0.3300", "5.00"]],
-            "no_dollars": [["0.6500", "3.00"]],   # 3 contracts at 35c
-        }}
+        thin = {
+            "orderbook_fp": {
+                "yes_dollars": [["0.3300", "5.00"]],
+                "no_dollars": [["0.6500", "3.00"]],  # 3 contracts at 35c
+            }
+        }
         result = await snipe_check(_Client(thin), "T", _log, max_stake_cents=7500)
         assert result["valid"] is False
         assert "depth" in result["reason"]
 
     @pytest.mark.asyncio
     async def test_a_genuinely_wide_book_is_still_rejected(self):
-        wide = {"orderbook_fp": {
-            "yes_dollars": [["0.3000", "100.00"]],
-            "no_dollars": [["0.6000", "100.00"]],   # ask 40, bid 30
-        }}
+        wide = {
+            "orderbook_fp": {
+                "yes_dollars": [["0.3000", "100.00"]],
+                "no_dollars": [["0.6000", "100.00"]],  # ask 40, bid 30
+            }
+        }
         result = await snipe_check(_Client(wide), "T", _log)
         assert result["valid"] is False
         assert result["reason"] == "Spread too wide: 10¢"
@@ -171,10 +173,12 @@ class TestUnreadableBooksFailLoudlyNotSilently:
         assert "empty" in result["reason"]
 
     def test_malformed_levels_are_skipped_not_fatal(self):
-        messy = {"orderbook_fp": {
-            "yes_dollars": [["oops", "1"], ["0.3300", "5"], [None]],
-            "no_dollars": [["0.6500", "x"], ["0.6400", "9"]],
-        }}
+        messy = {
+            "orderbook_fp": {
+                "yes_dollars": [["oops", "1"], ["0.3300", "5"], [None]],
+                "no_dollars": [["0.6500", "x"], ["0.6400", "9"]],
+            }
+        }
         book = parse_orderbook(messy, side="yes")
         assert book["best_bid"] == 33
         assert book["best_ask"] == 36

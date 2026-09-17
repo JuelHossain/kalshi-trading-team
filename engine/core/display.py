@@ -18,7 +18,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Dict
 
 from rich.align import Align
 from rich.console import Console, Group
@@ -69,8 +68,10 @@ console = Console()
 # AGENT CONFIGURATION
 # =============================================================================
 
+
 class AgentType(Enum):
     """The 4 Mega-Agents of Ghost Engine"""
+
     SOUL = 1
     SENSES = 2
     BRAIN = 3
@@ -81,6 +82,7 @@ class AgentType(Enum):
 @dataclass
 class AgentInfo:
     """Information about each Mega-Agent"""
+
     id: AgentType
     name: str
     description: str
@@ -88,41 +90,19 @@ class AgentInfo:
     color: str
 
 
-AGENT_INFO: Dict[AgentType, AgentInfo] = {
-    AgentType.SOUL: AgentInfo(
-        AgentType.SOUL,
-        "SOUL",
-        "System, Memory & Evolution",
-        "👻",
-        "cyan"
-    ),
+AGENT_INFO: dict[AgentType, AgentInfo] = {
+    AgentType.SOUL: AgentInfo(AgentType.SOUL, "SOUL", "System, Memory & Evolution", "👻", "cyan"),
     AgentType.SENSES: AgentInfo(
-        AgentType.SENSES,
-        "SENSES",
-        "Surveillance & Signal Detection",
-        "👁️",
-        "bright_blue"
+        AgentType.SENSES, "SENSES", "Surveillance & Signal Detection", "👁️", "bright_blue"
     ),
     AgentType.BRAIN: AgentInfo(
-        AgentType.BRAIN,
-        "BRAIN",
-        "Intelligence & Mathematical Verification",
-        "🧠",
-        "magenta"
+        AgentType.BRAIN, "BRAIN", "Intelligence & Mathematical Verification", "🧠", "magenta"
     ),
     AgentType.HAND: AgentInfo(
-        AgentType.HAND,
-        "HAND",
-        "Precision Strike & Budget Sentinel",
-        "✋",
-        "green"
+        AgentType.HAND, "HAND", "Precision Strike & Budget Sentinel", "✋", "green"
     ),
     AgentType.GATEWAY: AgentInfo(
-        AgentType.GATEWAY,
-        "GATEWAY",
-        "HTTP Interface & External Communication",
-        "🌐",
-        "yellow"
+        AgentType.GATEWAY, "GATEWAY", "HTTP Interface & External Communication", "🌐", "yellow"
     ),
 }
 
@@ -130,6 +110,7 @@ AGENT_INFO: Dict[AgentType, AgentInfo] = {
 # =============================================================================
 # DISPLAY MANAGER
 # =============================================================================
+
 
 class GhostDisplay:
     """
@@ -141,9 +122,7 @@ class GhostDisplay:
         self.console = console
         self.live: Live | None = None
         self.layout: Layout | None = None
-        self.agent_status: Dict[AgentType, str] = {
-            agent: "IDLE" for agent in AGENT_INFO.keys()
-        }
+        self.agent_status: dict[AgentType, str] = dict.fromkeys(AGENT_INFO.keys(), "IDLE")
         self.current_cycle = 0
         self.is_windows = os.name == "nt"
 
@@ -196,7 +175,7 @@ class GhostDisplay:
                     f"{info.emoji} {info.name}",
                     str(agent_type.value),
                     info.description,
-                    "[dim]INITIALIZING[/dim]"
+                    "[dim]INITIALIZING[/dim]",
                 )
 
         self.console.print(Align.center(table))
@@ -229,7 +208,7 @@ class GhostDisplay:
                 f"{info.emoji} {info.name}",
                 f"[{status_style}]{status}[/{status_style}]",
                 datetime.now().strftime("%H:%M:%S"),
-                f"Cycle #{self.current_cycle}"
+                f"Cycle #{self.current_cycle}",
             )
 
         self.console.print(table)
@@ -281,20 +260,16 @@ class GhostDisplay:
         # Add tasks for each phase
         tasks = {
             "soul": progress.add_task(
-                f"[{AGENT_INFO[AgentType.SOUL].color}]👻 SOUL: Authorization & Setup",
-                total=100
+                f"[{AGENT_INFO[AgentType.SOUL].color}]👻 SOUL: Authorization & Setup", total=100
             ),
             "senses": progress.add_task(
-                f"[{AGENT_INFO[AgentType.SENSES].color}]👁️ SENSES: Market Surveillance",
-                total=100
+                f"[{AGENT_INFO[AgentType.SENSES].color}]👁️ SENSES: Market Surveillance", total=100
             ),
             "brain": progress.add_task(
-                f"[{AGENT_INFO[AgentType.BRAIN].color}]🧠 BRAIN: Intelligence Analysis",
-                total=100
+                f"[{AGENT_INFO[AgentType.BRAIN].color}]🧠 BRAIN: Intelligence Analysis", total=100
             ),
             "hand": progress.add_task(
-                f"[{AGENT_INFO[AgentType.HAND].color}]✋ HAND: Execution & Trading",
-                total=100
+                f"[{AGENT_INFO[AgentType.HAND].color}]✋ HAND: Execution & Trading", total=100
             ),
         }
 
@@ -311,11 +286,13 @@ class GhostDisplay:
         self.console.print()
 
         class CycleProgressTracker:
+            """Holds the current phase of one cycle so the progress bar can render it."""
+
             def __init__(self, progress, tasks):
                 self.progress = progress
                 self.tasks = tasks
 
-            def update_phase(self, phase: str, advance_to: int = None):
+            def update_phase(self, phase: str, advance_to: int | None = None):
                 """Advance progress for a specific phase."""
                 if advance_to is not None:
                     self.progress.update(self.tasks[phase], completed=advance_to)
@@ -366,7 +343,7 @@ class GhostDisplay:
             finally:
                 self.console.print(
                     f"[{info.color}]✓[/] [{info.color}]{info.name}[/]: {action} - Complete",
-                    highlight=False
+                    highlight=False,
                 )
 
     # =========================================================================
@@ -459,7 +436,7 @@ class GhostDisplay:
         """
         level_styles = {
             "DEBUG": ("dim cyan", "🔍"),
-            "INFO": ("white", "ℹ️"),
+            "INFO": ("white", "ℹ️"),  # noqa: RUF001 - the info glyph is the intended symbol
             "WARNING": ("yellow", "⚠️"),
             "ERROR": ("red", "❌"),
             "CRITICAL": ("bold red", "💀"),
@@ -526,9 +503,7 @@ class GhostDisplay:
         # Add header
         self.layout["header"].update(
             Panel(
-                Align.center(
-                    Text("GHOST ENGINE v3.0 - LIVE DASHBOARD", style="bold bright_cyan")
-                ),
+                Align.center(Text("GHOST ENGINE v3.0 - LIVE DASHBOARD", style="bold bright_cyan")),
                 style="bright_black",
             )
         )
@@ -548,9 +523,7 @@ class GhostDisplay:
         # Add footer
         self.layout["footer"].update(
             Panel(
-                Align.center(
-                    Text("Press Ctrl+C to exit", style="dim white")
-                ),
+                Align.center(Text("Press Ctrl+C to exit", style="dim white")),
                 style="bright_black",
             )
         )
@@ -607,9 +580,7 @@ class GhostDisplay:
     def show_system_online(self) -> None:
         """Display system online message."""
         panel = Panel(
-            Align.center(
-                Text("✅ ALL SYSTEMS OPERATIONAL", style="bold green on black")
-            ),
+            Align.center(Text("✅ ALL SYSTEMS OPERATIONAL", style="bold green on black")),
             border_style="green",
             padding=(1, 3),
         )
@@ -710,17 +681,17 @@ def show_error(
 
 # Export main class and convenience functions
 __all__ = [
-    "GhostDisplay",
     "AgentType",
+    "GhostDisplay",
     "get_display",
-    "show_startup_banner",
-    "show_agent_status",
-    "update_agent_status",
-    "log_debug",
-    "log_info",
-    "log_warning",
-    "log_error",
     "log_critical",
+    "log_debug",
+    "log_error",
+    "log_info",
     "log_success",
+    "log_warning",
+    "show_agent_status",
     "show_error",
+    "show_startup_banner",
+    "update_agent_status",
 ]

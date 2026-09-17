@@ -8,8 +8,8 @@ hand-editing SQLite:
   * Nothing drained synapse.errors, and authorize_cycle halts while that box
     holds anything. A recoverable error latched the engine off for good.
 """
-import pytest
 
+import pytest
 from core.synapse import Synapse, SynapseError
 from http_api.routes import reset_system
 

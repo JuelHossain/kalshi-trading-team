@@ -7,9 +7,10 @@ import asyncio
 import os
 import sqlite3
 import time
+from collections.abc import Callable
 from datetime import datetime
 from functools import wraps
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 # -------------------------------------------------------------------------
 # Database Utilities
@@ -29,22 +30,28 @@ def retry_sqlite(max_retries: int = 3, base_delay: float = 0.05):
     Returns:
         Decorated function with retry logic
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        """Wrap `func` with the retry loop configured by retry_sqlite."""
+
         @wraps(func)
         def wrapper(*args, **kwargs) -> T:
+            """Retry on sqlite3.OperationalError (a locked database) with backoff."""
             for attempt in range(max_retries):
                 try:
                     return func(*args, **kwargs)
                 except sqlite3.OperationalError as e:
                     if "locked" in str(e).lower() and attempt < max_retries - 1:
                         # Exponential backoff
-                        delay = base_delay * (2 ** attempt)
+                        delay = base_delay * (2**attempt)
                         time.sleep(delay)
                         continue
                     # Re-raise if not locked error or retries exhausted
                     raise
             return None
+
         return wrapper
+
     return decorator
 
 
@@ -67,6 +74,7 @@ async def run_in_executor(func: Callable[..., T], *args, **kwargs) -> T:
 # -------------------------------------------------------------------------
 # Validation Utilities
 # -------------------------------------------------------------------------
+
 
 def validate_positive_amount(amount: int) -> bool:
     """
@@ -99,6 +107,7 @@ def validate_amount_not_exceeding(amount: int, maximum: int) -> bool:
 # Time Utilities
 # -------------------------------------------------------------------------
 
+
 def get_current_timestamp() -> str:
     """
     Get current timestamp in ISO format.
@@ -123,6 +132,7 @@ def get_current_unix_timestamp() -> float:
 # Async Utilities
 # -------------------------------------------------------------------------
 
+
 async def gather_with_exceptions(*tasks, return_exceptions: bool = False):
     """
     Gather tasks with better exception handling.
@@ -140,6 +150,7 @@ async def gather_with_exceptions(*tasks, return_exceptions: bool = False):
 # -------------------------------------------------------------------------
 # Environment Utilities
 # -------------------------------------------------------------------------
+
 
 def get_env_bool(key: str, default: bool = False) -> bool:
     """
@@ -198,6 +209,7 @@ def get_env_float(key: str, default: float = 0.0) -> float:
 # String Utilities
 # -------------------------------------------------------------------------
 
+
 def truncate_string(s: str, max_length: int, suffix: str = "...") -> str:
     """
     Truncate a string to a maximum length.
@@ -212,7 +224,7 @@ def truncate_string(s: str, max_length: int, suffix: str = "...") -> str:
     """
     if len(s) <= max_length:
         return s
-    return s[:max_length - len(suffix)] + suffix
+    return s[: max_length - len(suffix)] + suffix
 
 
 def format_cents_to_dollars(cents: int, show_symbol: bool = True) -> str:
@@ -245,25 +257,32 @@ def format_dollars_to_cents(dollars: float) -> int:
 
 
 __all__ = [
-    "retry_sqlite",
-    "run_in_executor",
-    "validate_positive_amount",
-    "validate_amount_not_exceeding",
-    "get_current_timestamp",
-    "get_current_unix_timestamp",
-    "gather_with_exceptions",
-    "get_env_bool",
-    "get_env_int",
-    "get_env_float",
-    "truncate_string",
     "format_cents_to_dollars",
     "format_dollars_to_cents",
+    "gather_with_exceptions",
+    "get_current_timestamp",
+    "get_current_unix_timestamp",
+    "get_env_bool",
+    "get_env_float",
+    "get_env_int",
+    "retry_sqlite",
+    "run_in_executor",
+    "truncate_string",
+    "validate_amount_not_exceeding",
+    "validate_positive_amount",
 ]
 
 
 # -------------------------------------------------------------------------
 # Async Scheduling Utilities
 # -------------------------------------------------------------------------
+
+
+# Tasks scheduled by fire_and_forget. asyncio holds only a weak reference to
+# a running task; without a strong one here it can be garbage-collected
+# mid-flight and the coroutine simply stops. Entries remove themselves when
+# done.
+_background_tasks: set[asyncio.Task] = set()
 
 
 def fire_and_forget(coro) -> None:
@@ -280,9 +299,11 @@ def fire_and_forget(coro) -> None:
     a failure here is swallowed after closing the coroutine.
     """
     try:
-        asyncio.get_running_loop().create_task(coro)
+        task = asyncio.get_running_loop().create_task(coro)
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
     except RuntimeError:
         try:
             asyncio.run(coro)
-        except Exception:  # noqa: BLE001 - a failed log must not raise into its caller
+        except Exception:
             coro.close()

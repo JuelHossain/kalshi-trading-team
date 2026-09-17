@@ -8,8 +8,8 @@ returned and no trade decision was ever logged.
 VAULT and STATE are different: the Gateway produces those itself in on_tick,
 so publishing them is correct and the HTTP layer depends on it.
 """
-import pytest
 
+import pytest
 from agents.gateway import GatewayAgent
 
 
@@ -57,10 +57,19 @@ class TestRelayedEventsAreNotEchoed:
         """The regression that froze the Brain."""
         agent, bus = gateway
 
-        await agent.handle_sim(_Message("SIM_RESULT", {
-            "ticker": "T", "win_rate": 0.5, "ev_score": 0.01,
-            "variance": 0.2, "iterations": 1, "veto": True,
-        }))
+        await agent.handle_sim(
+            _Message(
+                "SIM_RESULT",
+                {
+                    "ticker": "T",
+                    "win_rate": 0.5,
+                    "ev_score": 0.01,
+                    "variance": 0.2,
+                    "iterations": 1,
+                    "veto": True,
+                },
+            )
+        )
 
         assert "SIM_RESULT" not in _topics(bus)
 
@@ -76,10 +85,18 @@ class TestRelayedEventsAreNotEchoed:
     async def test_an_error_is_not_republished(self, gateway):
         agent, bus = gateway
 
-        await agent.handle_error(_Message("SYSTEM_ERROR", {
-            "code": "X", "message": "boom", "severity": "HIGH",
-            "agent_name": "TEST", "domain": "SYSTEM",
-        }))
+        await agent.handle_error(
+            _Message(
+                "SYSTEM_ERROR",
+                {
+                    "code": "X",
+                    "message": "boom",
+                    "severity": "HIGH",
+                    "agent_name": "TEST",
+                    "domain": "SYSTEM",
+                },
+            )
+        )
 
         assert "SYSTEM_ERROR" not in _topics(bus)
 
@@ -89,8 +106,17 @@ class TestRelayedEventsAreNotEchoed:
         agent, bus = gateway
         await agent.setup()
 
-        for msg_type in ("SIMULATION", "HEALTH", "ERROR", "LOG", "MARKET",
-                         "INTERCEPT", "TRADE", "VAULT", "STATE"):
+        for msg_type in (
+            "SIMULATION",
+            "HEALTH",
+            "ERROR",
+            "LOG",
+            "MARKET",
+            "INTERCEPT",
+            "TRADE",
+            "VAULT",
+            "STATE",
+        ):
             bus.published.clear()
             await agent.emit(msg_type, {"probe": msg_type})
             echoed = set(_topics(bus)) & set(bus.subscriptions)

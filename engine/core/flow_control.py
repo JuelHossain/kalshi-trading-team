@@ -20,7 +20,10 @@ if TYPE_CHECKING:
 # FLOW CONTROL CHECKS
 # ==============================================================================
 
-async def check_execution_queue_limit(synapse: "Synapse", limit: int = MAX_EXECUTION_QUEUE_SIZE) -> tuple[bool, int]:
+
+async def check_execution_queue_limit(
+    synapse: "Synapse", limit: int = MAX_EXECUTION_QUEUE_SIZE
+) -> tuple[bool, int]:
     """
     Check if execution queue is at limit.
 
@@ -40,7 +43,9 @@ async def check_execution_queue_limit(synapse: "Synapse", limit: int = MAX_EXECU
     return is_at_limit, current_size
 
 
-async def check_opportunity_queue_limit(synapse: "Synapse", limit: int = MAX_OPPORTUNITY_QUEUE_SIZE) -> tuple[bool, int]:
+async def check_opportunity_queue_limit(
+    synapse: "Synapse", limit: int = MAX_OPPORTUNITY_QUEUE_SIZE
+) -> tuple[bool, int]:
     """
     Check if opportunity queue is at limit.
 
@@ -107,7 +112,4 @@ async def should_restock(
 
     # Check cooldown
     time_since_restock = current_time - last_restock_time
-    if time_since_restock < cooldown_seconds:
-        return False
-
-    return True
+    return not time_since_restock < cooldown_seconds

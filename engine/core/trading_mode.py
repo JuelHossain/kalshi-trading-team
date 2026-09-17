@@ -72,7 +72,9 @@ def _record_paper_fill(ticker: str, side: str, price: int, count: int, action: s
         held = row["position"]
         if held:
             per_contract = abs(row["market_exposure"]) / abs(held)
-            row["market_exposure"] = max(0, int(round(abs(row["market_exposure"]) - per_contract * abs(count))))
+            row["market_exposure"] = max(
+                0, round(abs(row["market_exposure"]) - per_contract * abs(count))
+            )
         row["position"] = held - signed
     else:
         row["position"] = row["position"] + signed

@@ -19,26 +19,34 @@ import sys
 # Import Rich display system
 try:
     from core.display import AgentType, get_display
+
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
+
     # Create a dummy AgentType for fallback
     class AgentType:
+        """Agent identities used to tag log lines and pick a colour."""
+
         SOUL = 1
         SENSES = 2
         BRAIN = 3
         HAND = 4
         GATEWAY = 5
 
+
 # Pre-compile regex for performance (Emoji stripping)
-EMOJI_PATTERN = re.compile("["
-    "\U0001F600-\U0001F64F"  # emoticons
-    "\U0001F300-\U0001F5FF"  # symbols & pictographs
-    "\U0001F680-\U0001F6FF"  # transport & map symbols
-    "\U0001F1E0-\U0001F1FF"  # flags
-    "\U00002702-\U000027B0"
-    "\U000024C2-\U0001F251"
-    "]+", flags=re.UNICODE)
+EMOJI_PATTERN = re.compile(
+    "["
+    "\U0001f600-\U0001f64f"  # emoticons
+    "\U0001f300-\U0001f5ff"  # symbols & pictographs
+    "\U0001f680-\U0001f6ff"  # transport & map symbols
+    "\U0001f1e0-\U0001f1ff"  # flags
+    "\U00002702-\U000027b0"
+    "\U000024c2-\U0001f251"
+    "]+",
+    flags=re.UNICODE,
+)
 
 
 class EmojiSafeFormatter(logging.Formatter):
@@ -56,10 +64,10 @@ class EmojiSafeFormatter(logging.Formatter):
     }
 
     def format(self, record):
+        """Format the record, replacing emoji the target stream cannot encode."""
         # 1. Strip Emojis if on Windows (or forced)
-        if os.name == "nt":
-             if isinstance(record.msg, str):
-                record.msg = EMOJI_PATTERN.sub("", record.msg)
+        if os.name == "nt" and isinstance(record.msg, str):
+            record.msg = EMOJI_PATTERN.sub("", record.msg)
 
         # 2. Add Color (using ANSI codes directly instead of colorama)
         log_fmt = self.FORMATS.get(record.levelno, self.FORMATS[logging.INFO])
@@ -204,13 +212,13 @@ def log_success(message: str, agent: AgentType | None = None) -> None:
 
 
 __all__ = [
-    "get_logger",
     "RichIntegratedLogger",
-    "logger",
-    "log_debug",
-    "log_info",
-    "log_warning",
-    "log_error",
+    "get_logger",
     "log_critical",
+    "log_debug",
+    "log_error",
+    "log_info",
     "log_success",
+    "log_warning",
+    "logger",
 ]

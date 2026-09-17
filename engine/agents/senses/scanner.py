@@ -2,6 +2,7 @@
 Market Scanning Logic for Senses Agent
 Handles Kalshi market fetching, filtering, and stock management.
 """
+
 from datetime import UTC, datetime, timedelta
 
 from core.error_dispatcher import ErrorSeverity
@@ -110,10 +111,7 @@ async def fetch_kalshi_markets(
                 break
 
             seen += len(page)
-            tradeable.extend(
-                m for m in page
-                if is_tradeable(m) and m.get("ticker") not in exclude
-            )
+            tradeable.extend(m for m in page if is_tradeable(m) and m.get("ticker") not in exclude)
 
             if len(tradeable) >= needed or not cursor:
                 break
@@ -150,7 +148,9 @@ async def queue_from_stock(
     to_queue = market_stock[:queue_batch_size]
     remaining = market_stock[queue_batch_size:]
 
-    await log_callback(f"Queueing {len(to_queue)} markets from stock (remaining in stock: {len(remaining)})")
+    await log_callback(
+        f"Queueing {len(to_queue)} markets from stock (remaining in stock: {len(remaining)})"
+    )
 
     queued_count = 0
     for market in to_queue:
@@ -189,7 +189,7 @@ async def surveillance_loop(
     queue_batch_size: int,
     log_callback,
     log_error_callback,
-    bus
+    bus,
 ):
     """Main scanning loop - pure Python, no AI tokens"""
     try:
@@ -197,12 +197,17 @@ async def surveillance_loop(
         if senses_agent.synapse:
             is_at_limit, exec_size = await check_execution_queue_limit(senses_agent.synapse)
             if is_at_limit:
-                await log_callback(f"Flow Control: Execution queue at limit ({exec_size}/10). Pausing surveillance.", level="WARN")
+                await log_callback(
+                    f"Flow Control: Execution queue at limit ({exec_size}/10). Pausing surveillance.",
+                    level="WARN",
+                )
                 return
 
         # 1. Fetch Kalshi markets
         markets = await fetch_kalshi_markets(
-            senses_agent.kalshi_client, log_callback, needed=stock_buffer_size,
+            senses_agent.kalshi_client,
+            log_callback,
+            needed=stock_buffer_size,
             exclude=senses_agent.recently_queued(),
         )
 
@@ -222,7 +227,7 @@ async def surveillance_loop(
             queue_batch_size=queue_batch_size,
             synapse=senses_agent.synapse,
             log_callback=log_callback,
-            queue_opportunity_callback=senses_agent.queue_opportunity
+            queue_opportunity_callback=senses_agent.queue_opportunity,
         )
 
         # 5. Signal Brain that opportunities are ready
@@ -243,6 +248,8 @@ async def surveillance_loop(
             code="NETWORK_CONNECTION_FAILED",
             message=f"Senses Surveillance Failed: {e!s}",
             severity=ErrorSeverity.CRITICAL,
-            exception=e
+            exception=e,
         )
-        await bus.publish("SYSTEM_FATAL", {"message": f"Senses Agent Failed: {e!s}"}, senses_agent.name)
+        await bus.publish(
+            "SYSTEM_FATAL", {"message": f"Senses Agent Failed: {e!s}"}, senses_agent.name
+        )

@@ -14,13 +14,15 @@ Features:
 - Error Logging: Log all errors with full context and stack traces
 - No Mock Fallbacks: All errors are real, actionable errors
 """
+
 import asyncio
 import traceback
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from core.error_codes import ErrorDomain, ErrorSeverity
 from rich.console import Console
@@ -31,15 +33,17 @@ from rich.text import Text
 
 class ErrorAction(Enum):
     """Actions that can be taken when an error occurs"""
-    LOG_ONLY = "log_only"           # Just log the error
-    RETRY = "retry"                 # Retry the operation
-    SHUTDOWN = "shutdown"           # Shutdown the engine
-    RECOVER = "recover"             # Attempt recovery
+
+    LOG_ONLY = "log_only"  # Just log the error
+    RETRY = "retry"  # Retry the operation
+    SHUTDOWN = "shutdown"  # Shutdown the engine
+    RECOVER = "recover"  # Attempt recovery
 
 
 @dataclass
 class ErrorRecord:
     """A record of an error that occurred"""
+
     code: str
     message: str
     severity: ErrorSeverity
@@ -106,7 +110,9 @@ class ErrorManager:
 
         # Error tracking
         self._errors: list[ErrorRecord] = []
-        self._error_counts: defaultdict[tuple[str, str], int] = defaultdict(int)  # (agent, code) -> count
+        self._error_counts: defaultdict[tuple[str, str], int] = defaultdict(
+            int
+        )  # (agent, code) -> count
 
         # Recovery handlers
         self._recovery_handlers: dict[str, Callable[[], Awaitable[bool]]] = {}
@@ -158,9 +164,9 @@ class ErrorManager:
 
         # Generate stack trace from exception if not provided
         if exception and not stack_trace:
-            stack_trace = "".join(traceback.format_exception(
-                type(exception), exception, exception.__traceback__
-            ))
+            stack_trace = "".join(
+                traceback.format_exception(type(exception), exception, exception.__traceback__)
+            )
 
         # Create error record
         error_record = ErrorRecord(
@@ -222,9 +228,7 @@ class ErrorManager:
             try:
                 await self.shutdown_callback(str(error.message))
             except Exception as e:
-                self.console.print(
-                    f"[red]Error during shutdown callback: {e}[/red]"
-                )
+                self.console.print(f"[red]Error during shutdown callback: {e}[/red]")
 
     async def handle_high(self, error: ErrorRecord) -> None:
         """
@@ -240,9 +244,7 @@ class ErrorManager:
         recovery_key = f"{error.agent_name}:{error.code}"
         if recovery_key in self._recovery_handlers:
             if error.retry_count < self.max_retry_attempts:
-                self.console.print(
-                    f"[yellow]Attempting recovery for {error.code}...[/yellow]"
-                )
+                self.console.print(f"[yellow]Attempting recovery for {error.code}...[/yellow]")
                 error.retry_count += 1
                 await asyncio.sleep(self.retry_delay)
 
@@ -250,19 +252,13 @@ class ErrorManager:
                     recovered = await self._recovery_handlers[recovery_key]()
                     if recovered:
                         error.resolved = True
-                        self.console.print(
-                            f"[green]Recovery successful for {error.code}[/green]"
-                        )
+                        self.console.print(f"[green]Recovery successful for {error.code}[/green]")
                         return
                 except Exception as e:
-                    self.console.print(
-                        f"[red]Recovery failed for {error.code}: {e}[/red]"
-                    )
+                    self.console.print(f"[red]Recovery failed for {error.code}: {e}[/red]")
 
         # No recovery or recovery failed
-        self.console.print(
-            f"[yellow]High-severity error {error.code} requires attention[/yellow]"
-        )
+        self.console.print(f"[yellow]High-severity error {error.code} requires attention[/yellow]")
 
     async def handle_warning(self, error: ErrorRecord) -> None:
         """
@@ -275,7 +271,6 @@ class ErrorManager:
             error: The warning-level error to handle
         """
         # Just log the error (already displayed)
-        pass
 
     def _display_error(self, error: ErrorRecord) -> None:
         """
@@ -355,9 +350,7 @@ class ErrorManager:
             try:
                 await self.shutdown_callback(reason)
             except Exception as e:
-                self.console.print(
-                    f"[red]Error during shutdown callback: {e}[/red]"
-                )
+                self.console.print(f"[red]Error during shutdown callback: {e}[/red]")
 
     def register_recovery_handler(
         self,

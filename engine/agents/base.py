@@ -1,4 +1,11 @@
-from abc import ABC
+"""The class every agent extends.
+
+An agent is a bus subscriber with a name and an id. BaseAgent wires it to
+TICK, gives it log() -- itself a SYSTEM_LOG publish -- and a log_error()
+that routes through the error dispatcher so severity means something.
+setup(), teardown() and on_tick() are hooks; the defaults do nothing.
+"""
+
 from datetime import datetime
 from typing import Any
 
@@ -8,8 +15,17 @@ from core.error_manager import ErrorManager, get_error_manager
 from core.synapse import Synapse
 
 
-class BaseAgent(ABC):
-    def __init__(self, name: str, agent_id: int, bus: EventBus, synapse: Synapse = None, error_manager: ErrorManager = None):
+class BaseAgent:
+    """Shared base for the four agents and the gateway: bus wiring, ticks, logging, error reporting."""
+
+    def __init__(
+        self,
+        name: str,
+        agent_id: int,
+        bus: EventBus,
+        synapse: Synapse = None,
+        error_manager: ErrorManager = None,
+    ):
         self.name = name
         self.agent_id = agent_id
         self.bus = bus
@@ -48,7 +64,7 @@ class BaseAgent(ABC):
     async def log(self, message: str, level: str = "INFO"):
         """Log a message to both the bus (for frontend) and console."""
         from core.logger import get_logger
-        
+
         # Publish to bus for Frontend
         payload = {
             "level": level,
@@ -61,7 +77,7 @@ class BaseAgent(ABC):
 
         # Log to Console via Centralized Logger
         logger = get_logger(self.name)
-        
+
         # Map log levels to logger methods
         log_methods = {
             "INFO": logger.info,
@@ -71,7 +87,7 @@ class BaseAgent(ABC):
             "DEBUG": logger.debug,
             "SUCCESS": lambda msg: logger.info(f"SUCCESS: {msg}"),
         }
-        
+
         log_func = log_methods.get(level, logger.info)
         log_func(message)
 
@@ -83,7 +99,7 @@ class BaseAgent(ABC):
         domain: ErrorDomain | None = None,
         context: dict | None = None,
         exception: Exception | None = None,
-        hint: str | None = None
+        hint: str | None = None,
     ):
         """
         Log an error using the centralized error dispatcher
@@ -111,5 +127,5 @@ class BaseAgent(ABC):
             domain=domain,
             context=context,
             exception=exception,
-            hint=hint
+            hint=hint,
         )

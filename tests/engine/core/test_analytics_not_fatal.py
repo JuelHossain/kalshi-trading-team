@@ -7,9 +7,8 @@ an approved trade was silently never executed. An insert failure was already
 tolerated; only the unconfigured case was fatal.
 """
 
-import pytest
-
 import core.db
+import pytest
 from core.bus import EventBus
 
 

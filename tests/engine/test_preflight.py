@@ -4,6 +4,7 @@ It is the thing standing between a misconfigured laptop and a confusing
 failure at the Kalshi handshake, so its two dangerous outcomes are reporting
 ready when something is missing, and printing a secret.
 """
+
 import os
 import subprocess
 import sys
@@ -46,7 +47,10 @@ def _run(env: dict) -> subprocess.CompletedProcess:
                 base[name] = os.environ[name]
     return subprocess.run(
         [sys.executable, str(SCRIPT)],
-        capture_output=True, text=True, env={**base, **env}, cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        env={**base, **env},
+        cwd=str(ROOT),
     )
 
 
@@ -92,8 +96,13 @@ def test_refuses_the_leaked_password(pem):
 
 @pytest.mark.parametrize(
     "missing",
-    ["KALSHI_DEMO_KEY_ID", "KALSHI_DEMO_PRIVATE_KEY", "AUTH_PASSWORD",
-     "GHOST_API_KEY", "GEMINI_API_KEY"],
+    [
+        "KALSHI_DEMO_KEY_ID",
+        "KALSHI_DEMO_PRIVATE_KEY",
+        "AUTH_PASSWORD",
+        "GHOST_API_KEY",
+        "GEMINI_API_KEY",
+    ],
 )
 def test_every_required_variable_is_actually_required(pem, missing):
     """A check that passes with a credential absent is worse than no check."""
@@ -107,7 +116,9 @@ def test_every_required_variable_is_actually_required(pem, missing):
 
 
 def test_a_malformed_key_is_distinguished_from_a_missing_one(pem):
-    result = _run(_configured(pem, KALSHI_DEMO_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\nnope\n"))
+    result = _run(
+        _configured(pem, KALSHI_DEMO_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\nnope\n")
+    )
 
     assert result.returncode == 1
     assert "will not parse" in result.stdout
@@ -115,10 +126,14 @@ def test_a_malformed_key_is_distinguished_from_a_missing_one(pem):
 
 def test_production_is_flagged_not_silently_accepted(pem):
     """Pointing at real money must be visible in the output."""
-    result = _run(_configured(
-        pem, KALSHI_ENV="prod",
-        KALSHI_PROD_KEY_ID="prod-id", KALSHI_PROD_PRIVATE_KEY=pem,
-    ))
+    result = _run(
+        _configured(
+            pem,
+            KALSHI_ENV="prod",
+            KALSHI_PROD_KEY_ID="prod-id",
+            KALSHI_PROD_PRIVATE_KEY=pem,
+        )
+    )
 
     assert "REAL MONEY" in result.stdout
 

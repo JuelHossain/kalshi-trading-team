@@ -17,7 +17,7 @@ Settlement is filled in later, when the market resolves.
 
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from core.shared_utils import retry_sqlite
 
@@ -80,7 +80,7 @@ def record_decision(
                     confidence, edge, outcome, veto_reason, stake_cents, order_id)
                    VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (
-                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(UTC).isoformat(),
                     ticker,
                     market_price,
                     estimated_probability,
@@ -93,7 +93,7 @@ def record_decision(
                 ),
             )
             return cur.lastrowid
-    except Exception:  # noqa: BLE001 - the ledger must not break the engine
+    except Exception:
         return -1
 
 
@@ -123,7 +123,7 @@ def record_fill(ticker: str, stake_cents: int, order_id: str | None) -> int:
                 (int(stake_cents), order_id, ticker),
             )
             return cur.rowcount
-    except Exception:  # noqa: BLE001 - the ledger must not break the engine
+    except Exception:
         return 0
 
 
@@ -136,10 +136,10 @@ def record_settlement(ticker: str, settled_yes: bool) -> int:
                 """UPDATE decisions
                       SET settled_yes = ?, settled_at = ?
                     WHERE ticker = ? AND settled_yes IS NULL""",
-                (1 if settled_yes else 0, datetime.now(timezone.utc).isoformat(), ticker),
+                (1 if settled_yes else 0, datetime.now(UTC).isoformat(), ticker),
             )
             return cur.rowcount
-    except Exception:  # noqa: BLE001
+    except Exception:
         return 0
 
 
@@ -151,12 +151,10 @@ def calibration(buckets: int = 5) -> list[dict]:
     confidently wrong in a way no amount of downstream engineering can fix.
     """
     with _connect() as conn:
-        rows = conn.execute(
-            """SELECT estimated_probability, settled_yes
+        rows = conn.execute("""SELECT estimated_probability, settled_yes
                  FROM decisions
                 WHERE settled_yes IS NOT NULL
-                  AND estimated_probability IS NOT NULL"""
-        ).fetchall()
+                  AND estimated_probability IS NOT NULL""").fetchall()
 
     if not rows:
         return []
@@ -192,13 +190,11 @@ def realised_edge() -> dict:
     strategy works.
     """
     with _connect() as conn:
-        rows = conn.execute(
-            """SELECT market_price, edge, settled_yes
+        rows = conn.execute("""SELECT market_price, edge, settled_yes
                  FROM decisions
                 WHERE settled_yes IS NOT NULL
                   AND outcome = 'APPROVED'
-                  AND edge IS NOT NULL"""
-        ).fetchall()
+                  AND edge IS NOT NULL""").fetchall()
 
     if not rows:
         return {"n": 0, "expected": None, "realised": None}

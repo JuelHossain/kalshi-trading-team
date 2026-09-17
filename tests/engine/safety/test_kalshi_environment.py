@@ -8,8 +8,8 @@ without pointing real credentials at real markets.
 
 These tests fix the safe default in place. `KALSHI_ENV` unset means demo.
 """
-import pytest
 
+import pytest
 from core.network import KalshiClient
 
 
@@ -26,17 +26,17 @@ def _client(monkeypatch, **env):
 def _clear_kalshi_env(monkeypatch):
     for var in (
         "KALSHI_ENV",
-        "KALSHI_DEMO_KEY_ID", "KALSHI_DEMO_PRIVATE_KEY",
-        "KALSHI_PROD_KEY_ID", "KALSHI_PROD_PRIVATE_KEY",
+        "KALSHI_DEMO_KEY_ID",
+        "KALSHI_DEMO_PRIVATE_KEY",
+        "KALSHI_PROD_KEY_ID",
+        "KALSHI_PROD_PRIVATE_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
 
 
 def test_defaults_to_demo(monkeypatch):
     """Unset must mean demo. A missing setting costs play money, not real money."""
-    client = _client(
-        monkeypatch, KALSHI_DEMO_KEY_ID="demo-id", KALSHI_DEMO_PRIVATE_KEY="not-a-key"
-    )
+    client = _client(monkeypatch, KALSHI_DEMO_KEY_ID="demo-id", KALSHI_DEMO_PRIVATE_KEY="not-a-key")
 
     assert client.env == "demo"
     assert client.base_url == "https://demo-api.kalshi.co/trade-api/v2"

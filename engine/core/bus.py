@@ -1,3 +1,13 @@
+"""The in-process event bus every agent talks through.
+
+publish() delivers one Message to every subscriber of its topic and awaits
+them all, so a publisher inherits its subscribers' runtime. Two rules
+follow from that and are enforced here: sensitive keys in SYSTEM_LOG
+payloads are masked before delivery, and a publish of topic X issued from
+inside X's own dispatch is dropped and counted rather than allowed to
+recurse forever.
+"""
+
 import asyncio
 import contextvars
 from collections.abc import Callable
@@ -12,11 +22,12 @@ SENSITIVE_KEYS = {"api_key", "secret", "private_key", "password", "token", "sign
 
 
 class Message(BaseModel):
+    """One event on the bus: topic, payload, sender and timestamp."""
+
     topic: str
     payload: dict[str, Any]
     sender: str
     timestamp: datetime = Field(default_factory=datetime.now)
-
 
 
 def mask_sensitives(data: Any) -> Any:
@@ -52,6 +63,7 @@ class EventBus:
         self.reentrant_drops = 0
 
     async def subscribe(self, topic: str, callback: Callable[[Message], Any]):
+        """Register `callback` for `topic`. Callbacks may be sync or async."""
         if topic not in self.subscribers:
             self.subscribers[topic] = []
         self.subscribers[topic].append(callback)
@@ -59,6 +71,7 @@ class EventBus:
         # print(f"[BUS] Subscriber added to {topic}")
 
     async def publish(self, topic: str, payload: dict[str, Any], sender: str):
+        """Deliver one event to every subscriber, awaiting each; see the re-entrancy note below."""
         # Mask sensitive data before creating the message if it's a log
         if topic == "SYSTEM_LOG":
             payload = mask_sensitives(payload)
@@ -92,15 +105,11 @@ class EventBus:
             )
             return
 
-
         if topic in self.subscribers:
             token = _dispatching.set(active | {topic})
             try:
                 # Dispatch to all subscribers in parallel
-                tasks = [
-                    self._safe_dispatch(callback, msg)
-                    for callback in self.subscribers[topic]
-                ]
+                tasks = [self._safe_dispatch(callback, msg) for callback in self.subscribers[topic]]
                 if tasks:
                     await asyncio.gather(*tasks)
             finally:
@@ -115,4 +124,3 @@ class EventBus:
                 callback(msg)
         except Exception as e:
             log_error(f"Callback failed for topic {msg.topic}: {e}", AgentType.SOUL)
-

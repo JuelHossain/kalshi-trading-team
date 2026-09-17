@@ -4,8 +4,8 @@ stake_cents and order_id were columns from the first schema and nothing ever
 wrote them. Five paper fills in one run left zero filled rows. A paper soak
 that cannot report what it staked is not measuring anything.
 """
-import pytest
 
+import pytest
 from core import ledger
 
 
@@ -25,8 +25,9 @@ def _filled_rows():
 
 class TestFillsAttachToTheirDecision:
     def test_the_regression_a_fill_is_recorded(self):
-        ledger.record_decision("T", 0.35, outcome="APPROVED",
-                               estimated_probability=0.37, confidence=0.85)
+        ledger.record_decision(
+            "T", 0.35, outcome="APPROVED", estimated_probability=0.37, confidence=0.85
+        )
 
         updated = ledger.record_fill("T", 245, "PAPER-buy-yes-T-35x7")
 

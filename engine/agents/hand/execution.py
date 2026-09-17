@@ -2,6 +2,7 @@
 Order Execution Logic for Hand Agent
 Handles trade validation, order placement, and notifications.
 """
+
 import os
 
 import aiohttp
@@ -75,12 +76,14 @@ def parse_orderbook(raw, side: str = "yes") -> dict | None:
         no_bids = _levels(legacy.get("no"), dollars=False)
     elif "bids" in raw or "asks" in raw:
         yes_bids = [
-            (int(l["price"]), float(l.get("count", 0)))
-            for l in raw.get("bids", []) if isinstance(l, dict) and "price" in l
+            (int(lvl["price"]), float(lvl.get("count", 0)))
+            for lvl in raw.get("bids", [])
+            if isinstance(lvl, dict) and "price" in lvl
         ]
         explicit_yes_asks = [
-            (int(l["price"]), float(l.get("count", 0)))
-            for l in raw.get("asks", []) if isinstance(l, dict) and "price" in l
+            (int(lvl["price"]), float(lvl.get("count", 0)))
+            for lvl in raw.get("asks", [])
+            if isinstance(lvl, dict) and "price" in lvl
         ]
         # A YES ask at p is a NO bid at 100 - p.
         no_bids = [(100 - p, q) for p, q in explicit_yes_asks]
@@ -92,11 +95,13 @@ def parse_orderbook(raw, side: str = "yes") -> dict | None:
         asks = [(100 - p, q) for p, q in yes_bids]
     else:
         bids = yes_bids
-        asks = explicit_yes_asks if explicit_yes_asks is not None else [
-            (100 - p, q) for p, q in no_bids
-        ]
+        asks = (
+            explicit_yes_asks
+            if explicit_yes_asks is not None
+            else [(100 - p, q) for p, q in no_bids]
+        )
 
-    asks = sorted((lvl for lvl in asks if 0 < lvl[0] < 100), key=lambda l: l[0])
+    asks = sorted((lvl for lvl in asks if 0 < lvl[0] < 100), key=lambda lvl: lvl[0])
     bids = [lvl for lvl in bids if 0 < lvl[0] < 100]
 
     return {
@@ -236,14 +241,17 @@ async def execute_order(
         return {"success": False, "error": f"Stake must be positive integer, got: {stake}"}
 
     if stake > max_stake_cents:
-        return {"success": False, "error": f"Stake ${stake/100:.2f} exceeds max ${max_stake_cents/100:.2f}"}
+        return {
+            "success": False,
+            "error": f"Stake ${stake/100:.2f} exceeds max ${max_stake_cents/100:.2f}",
+        }
 
     # 5. Check available balance
     available_balance = vault.get_available_balance()
     if available_balance < stake:
         return {
             "success": False,
-            "error": f"Insufficient funds: available=${available_balance/100:.2f}, required=${stake/100:.2f}"
+            "error": f"Insufficient funds: available=${available_balance/100:.2f}, required=${stake/100:.2f}",
         }
 
     # 6. Check hard floor
@@ -329,7 +337,7 @@ async def has_open_position(kalshi_client, ticker: str) -> bool:
 
     try:
         positions = await kalshi_client.get_positions()
-    except Exception:  # noqa: BLE001 - unreadable positions must not open new risk
+    except Exception:
         return True
 
     return any(

@@ -12,6 +12,7 @@ breaker below opens on the first failure and stays open for
 BREAKER_SECONDS, so an unreachable sink costs one attempt per window rather
 than one per tick per agent.
 """
+
 import os
 import time
 from datetime import UTC, datetime
@@ -30,7 +31,7 @@ supabase: Client | None = None
 if url and key:
     try:
         supabase = create_client(url, key)
-    except Exception as e:  # noqa: BLE001 - optional dependency must not stop import
+    except Exception as e:
         log_error(f"Failed to initialize Supabase: {e}")
 
 # Seconds to stop trying after a failure. Long enough that a dead project
@@ -80,7 +81,7 @@ async def send_heartbeat(agent_id: int, name: str, status: str = "ACTIVE") -> No
             },
             on_conflict="agent_id",
         ).execute()
-    except Exception as e:  # noqa: BLE001 - telemetry must not raise
+    except Exception as e:
         _trip_breaker(f"Heartbeat for {name}", e)
 
 
@@ -96,7 +97,7 @@ async def log_to_db(table: str, data: dict) -> None:
         return
     try:
         supabase.table(table).insert(data).execute()
-    except Exception as e:  # noqa: BLE001 - telemetry must not raise
+    except Exception as e:
         _trip_breaker(f"Insert into {table}", e)
 
 
@@ -111,6 +112,6 @@ async def check_connection() -> bool:
     try:
         supabase.table("agent_heartbeats").select("agent_id", count="exact").limit(1).execute()
         return True
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         _trip_breaker("Connection probe", e)
         return False

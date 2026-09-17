@@ -4,6 +4,8 @@ Role: Tactical Executioner
 
 Core HandAgent class with trade execution capabilities.
 """
+
+from datetime import UTC
 from typing import Any
 
 from agents.base import BaseAgent
@@ -43,6 +45,7 @@ class HandAgent(BaseAgent):
         self.kalshi_client = kalshi_client
 
     async def setup(self):
+        """Subscribe to execution signals and the cycle-end exit review."""
         await self.log("Hand online. Precision strike capability ready.")
         await self.bus.subscribe("EXECUTION_READY", self.on_execution_ready)
         # Exits are checked once per cycle. Entering a position and never
@@ -61,7 +64,7 @@ class HandAgent(BaseAgent):
 
         try:
             positions = list(await self.kalshi_client.get_positions() or [])
-        except Exception as e:  # noqa: BLE001 - a failed review must not break the cycle
+        except Exception as e:
             await self.log(f"Could not read positions for exit review: {e}", level="ERROR")
             positions = []
 
@@ -110,14 +113,16 @@ class HandAgent(BaseAgent):
                 result = await self.kalshi_client.close_position(
                     ticker, abs(int(quantity)), side=side
                 )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 await self.log(f"Failed to close {ticker}: {e}", level="ERROR")
                 continue
 
             if result:
                 closed += 1
                 record_decision(
-                    ticker, current / 100.0, outcome="EXITED",
+                    ticker,
+                    current / 100.0,
+                    outcome="EXITED",
                     veto_reason=decision.reason,
                 )
                 await self.bus.publish(
@@ -136,7 +141,7 @@ class HandAgent(BaseAgent):
         """
         try:
             book = await self.kalshi_client.get_orderbook(ticker)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
 
         asks = (book or {}).get("asks") or []
@@ -151,7 +156,7 @@ class HandAgent(BaseAgent):
     @staticmethod
     def _hours_to_expiry(position: dict) -> float | None:
         """Hours until settlement, or None when the row does not say."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         raw = position.get("expiration_time") or position.get("expiration")
         if not raw:
@@ -161,8 +166,8 @@ class HandAgent(BaseAgent):
         except (TypeError, ValueError):
             return None
         if expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=timezone.utc)
-        return (expiry - datetime.now(timezone.utc)).total_seconds() / 3600.0
+            expiry = expiry.replace(tzinfo=UTC)
+        return (expiry - datetime.now(UTC)).total_seconds() / 3600.0
 
     async def on_execution_ready(self, message):
         """Execute approved trade from Brain > Synapse (Primary) or Brain Ref (Legacy)"""
@@ -188,11 +193,13 @@ class HandAgent(BaseAgent):
                         "side_probability": signal_model.side_probability,
                         "reasoning": signal_model.reasoning,
                         "suggested_size": signal_model.suggested_count,
-                        "market_data": signal_model.target_opportunity.market_data.raw_response
+                        "market_data": signal_model.target_opportunity.market_data.raw_response,
                     }
             except Exception as e:
                 await self.log(f"Synapse Pop (Execution) Error: {e}", level="ERROR")
-                await self.bus.publish("SYSTEM_FATAL", {"message": f"Hand Agent Failed: {e!s}"}, self.name)
+                await self.bus.publish(
+                    "SYSTEM_FATAL", {"message": f"Hand Agent Failed: {e!s}"}, self.name
+                )
 
         if not target:
             return
@@ -262,11 +269,15 @@ class HandAgent(BaseAgent):
         )
 
         if order_result.get("success"):
-            await self.log(f"ORDER EXECUTED: {side.upper()} {ticker} @ {entry_price}¢ for ${stake/100:.2f}")
+            await self.log(
+                f"ORDER EXECUTED: {side.upper()} {ticker} @ {entry_price}¢ for ${stake/100:.2f}"
+            )
             record_fill(ticker, stake, order_result.get("order_id"))
 
             # 4. Check for Vault Lock
-            should_lock, current_profit = check_profit_lock_threshold(self.vault, self.PROFIT_LOCK_THRESHOLD)
+            should_lock, _current_profit = check_profit_lock_threshold(
+                self.vault, self.PROFIT_LOCK_THRESHOLD
+            )
             if should_lock:
                 self.vault.lock_principal()
                 await self.log("VAULT LOCKED: $300 principal secured. Trading house money!")
@@ -299,7 +310,7 @@ class HandAgent(BaseAgent):
             price=price,
             stake=stake,
             max_stake_cents=self.MAX_STAKE_CENTS,
-            log_callback=self.log
+            log_callback=self.log,
         )
 
     def calculate_kelly_stake(

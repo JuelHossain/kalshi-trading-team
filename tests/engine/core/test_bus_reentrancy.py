@@ -9,10 +9,10 @@ The Gateway did this for SIM_RESULT, SYSTEM_HEALTH and SYSTEM_ERROR. The
 Brain's next await after "AI Prob: ..." is a SIM_RESULT publish; no decision
 was ever logged after it, and the engine reported healthy throughout.
 """
+
 import asyncio
 
 import pytest
-
 from core.bus import EventBus
 
 
@@ -112,6 +112,7 @@ class TestLegitimatePublishingStillWorks:
     @pytest.mark.asyncio
     async def test_the_guard_is_released_after_dispatch(self, bus):
         """A topic must be publishable again once its dispatch completes."""
+
         async def noop(msg):
             pass
 

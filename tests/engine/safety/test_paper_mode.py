@@ -7,8 +7,8 @@ live order to Kalshi, because the order path never consulted the flag.
 These tests assert the guard at the one place money moves, and that every route
 to an order -- entry, exit, and Ragnarok's flatten -- is covered by it.
 """
-import pytest
 
+import pytest
 from core import trading_mode
 from core.network import KalshiClient
 

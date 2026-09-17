@@ -1,15 +1,49 @@
 [tool.black]
 line-length = 100
-target-version = ['py312']
+target-version = ["py311"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["engine/venv", ".venv311", "frontend", "node_modules"]
 
+# A rule set that is actually green, and enforced in CI. The previous
+# configuration selected nearly every family ruff has and reported 782
+# findings that nobody acted on; a linter that is never clean enforces
+# nothing. Style questions are black's; ruff covers correctness and hygiene.
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "UP", "YTT", "S", "BLE", "FBT", "B", "A", "COM", "C4", "DTZ", "T10", "DJ", "EM", "EXE", "FA", "ISC", "ICN", "G", "INP", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TID", "TCH", "INT", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "FLY", "NPY", "AIR", "PERF", "FURB", "LOG", "RUF"]
-ignore = ["S101", "S104", "COM812", "ISC001"]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes: undefined names, unused imports/variables
+    "I",    # import order
+    "UP",   # modern syntax for the targeted Python
+    "B",    # bugbear: likely bugs and design problems
+    "SIM",  # simplifications that read better
+    "C4",   # comprehension correctness
+    "PIE",  # misc lint
+    "RUF",  # ruff-specific, incl. dangling asyncio tasks
+]
+ignore = [
+    "E501",   # line length is black's job; strings and comments may exceed it
+    "RUF012", # mutable class attributes are used deliberately as constant tables
+    "B027",   # BaseAgent's empty setup/teardown/on_tick are override hooks, not abstract
+    "SIM102", # a nested if with a comment between the conditions is often clearer
+    "SIM105", # try/except/pass vs contextlib.suppress is taste, not correctness
+    "UP046",  # PEP 695 generics: the module-level TypeVar is shared across modules
+    "UP047",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
-"test_*.py" = ["S101"]
+# These put the engine on sys.path before importing from it; the imports
+# cannot be at the top.
+"tests/**" = ["E402"]
+"engine/scripts/**" = ["E402"]
+"engine/main.py" = ["E402"]
+"research/**" = ["E402"]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: needs real Kalshi demo credentials and network; skipped otherwise",
+    "network_internals: drives KalshiClient.request against a fake session",
+]

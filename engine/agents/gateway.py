@@ -1,3 +1,12 @@
+"""Relay bus events outward for the dashboard.
+
+Subscribes to log, simulation, health and error topics and formats them
+for the SSE stream and, when JSON_LOGS is set, for stdout. It publishes
+only what it originates itself (VAULT_UPDATE and SYSTEM_STATE from
+on_tick). Republishing a relayed topic re-invokes this agent's own
+handler, and because publish awaits every subscriber that never returns.
+"""
+
 import json
 import os
 from typing import Any
@@ -21,6 +30,7 @@ class GatewayAgent(BaseAgent):
         self.vault = vault
 
     async def setup(self):
+        """Subscribe to the topics this agent relays outward."""
         await self.log("Gateway Bridge Online. Routing events to stdout...")
 
         # Subscribe to critical topics
@@ -29,8 +39,8 @@ class GatewayAgent(BaseAgent):
         await self.bus.subscribe("SYSTEM_HEALTH", self.handle_health)
         await self.bus.subscribe("SYSTEM_ERROR", self.handle_error)  # Add error handler
 
-
     async def handle_system_log(self, message):
+        """Shape a SYSTEM_LOG event for the dashboard and emit it."""
 
         payload = message.payload
         sender = payload.get("agent_name")
@@ -45,6 +55,7 @@ class GatewayAgent(BaseAgent):
             await self.emit("STATE", {"activeAgentId": agent_id})
 
     async def on_tick(self, payload: dict[str, Any]):
+        """Publish vault state and a STATE heartbeat once per tick."""
         # Every cycle, we push a VAULT update and a STATE heartbeat
         await publish_vault_state(self.bus, self.vault, self.name)
 
@@ -52,6 +63,7 @@ class GatewayAgent(BaseAgent):
         await self.emit("STATE", {"cycleCount": payload.get("cycle"), "isProcessing": True})
 
     async def handle_sim(self, message):
+        """Relay a Brain simulation result outward. Never republished to the bus."""
         payload = message.payload
         sim_data = {
             "ticker": payload.get("ticker"),
@@ -64,6 +76,7 @@ class GatewayAgent(BaseAgent):
         await self.emit("SIMULATION", sim_data)
 
     async def handle_health(self, message):
+        """Relay a health report outward. Never republished to the bus."""
         await self.emit("HEALTH", message.payload)
 
     async def handle_error(self, message):
@@ -77,7 +90,7 @@ class GatewayAgent(BaseAgent):
             error_data,
             1,  # cycleId - will be updated by main.py
             FULL_AGENT_TO_PHASE,
-            AGENT_NAME_TO_ID
+            AGENT_NAME_TO_ID,
         )
 
         await self.emit("ERROR", error_event)

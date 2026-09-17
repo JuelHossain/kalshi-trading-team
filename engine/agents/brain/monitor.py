@@ -2,6 +2,7 @@
 Queue Monitoring Logic for Brain Agent
 Continuous monitoring and processing of opportunities from Synapse.
 """
+
 import asyncio
 from datetime import datetime
 
@@ -15,13 +16,7 @@ def _should_stop(stop_requested) -> bool:
     return bool(stop_requested() if callable(stop_requested) else stop_requested)
 
 
-async def monitor_queue(
-    brain_agent,
-    stop_requested,
-    synapse,
-    log_callback,
-    process_callback
-):
+async def monitor_queue(brain_agent, stop_requested, synapse, log_callback, process_callback):
     """
     CONTINUOUS MONITORING LOOP
     Checks Synapse opportunity queue and processes ALL items until empty.
@@ -47,7 +42,10 @@ async def monitor_queue(
             # FLOW CONTROL: Check if execution queue is at limit
             is_at_limit, exec_size = await check_execution_queue_limit(synapse)
             if is_at_limit:
-                await log_callback(f"Flow Control: Execution queue at limit ({exec_size}/10). Pausing analysis.", level="WARN")
+                await log_callback(
+                    f"Flow Control: Execution queue at limit ({exec_size}/10). Pausing analysis.",
+                    level="WARN",
+                )
                 await asyncio.sleep(2)
                 continue
 
@@ -60,13 +58,18 @@ async def monitor_queue(
                 continue
 
             # Process ALL opportunities in queue until empty
-            await log_callback(f"Found {queue_size} opportunities. Processing batch...", level="INFO")
+            await log_callback(
+                f"Found {queue_size} opportunities. Processing batch...", level="INFO"
+            )
 
             while queue_size > 0 and not _should_stop(stop_requested):
                 # Check execution queue limit before each item
                 is_at_limit, exec_size = await check_execution_queue_limit(synapse)
                 if is_at_limit:
-                    await log_callback(f"Flow Control: Execution queue at limit ({exec_size}/10). Stopping batch.", level="WARN")
+                    await log_callback(
+                        f"Flow Control: Execution queue at limit ({exec_size}/10). Stopping batch.",
+                        level="WARN",
+                    )
                     break
 
                 # Process ONE opportunity
@@ -81,7 +84,9 @@ async def monitor_queue(
             if queue_size == 0:
                 await log_callback("Batch complete. All opportunities processed.", level="SUCCESS")
             else:
-                await log_callback(f"Batch stopped. {queue_size} opportunities remaining.", level="DEBUG")
+                await log_callback(
+                    f"Batch stopped. {queue_size} opportunities remaining.", level="DEBUG"
+                )
 
         except Exception as e:
             await log_callback(f"Monitor loop error: {str(e)[:100]}", level="ERROR")
@@ -97,7 +102,7 @@ async def process_single_item_from_queue(
     process_opportunity_callback,
     bus,
     dumped_count: int,
-    last_restock_time: float
+    last_restock_time: float,
 ) -> str:
     """
     Process ONE opportunity from Synapse queue.
@@ -138,12 +143,7 @@ async def process_single_item_from_queue(
 
 
 async def handle_restock_trigger(
-    result: str,
-    dumped_count: int,
-    last_restock_time: float,
-    synapse,
-    bus,
-    log_callback
+    result: str, dumped_count: int, last_restock_time: float, synapse, bus, log_callback
 ):
     """
     Handle restock triggering when opportunities are vetoed.
@@ -163,20 +163,18 @@ async def handle_restock_trigger(
         # When 5 opportunities dumped, request restock from Senses
         if dumped_count >= 5:
             import time
+
             now = time.time()
 
             # Check if we should restock using centralized flow control
-            should_request = await should_restock(
-                synapse,
-                dumped_count,
-                last_restock_time,
-                now
-            )
+            should_request = await should_restock(synapse, dumped_count, last_restock_time, now)
 
             exec_size = await synapse.executions.size() if synapse else 0
 
             if should_request:
-                await log_callback(f"Dumped {dumped_count} opportunities. Requesting restock from Senses...")
+                await log_callback(
+                    f"Dumped {dumped_count} opportunities. Requesting restock from Senses..."
+                )
                 # Scheduled, not awaited. EventBus.publish gathers every
                 # subscriber, so awaiting this parks the Brain until Senses
                 # has finished a full market scan -- paging Kalshi and
@@ -189,10 +187,16 @@ async def handle_restock_trigger(
                 fire_and_forget(bus.publish("REQUEST_RESTOCK", {}, "BRAIN"))
                 return (True, now)  # Reset counter and update time
             if exec_size >= 10:
-                await log_callback(f"Flow Control: Execution queue at limit ({exec_size}/10). NOT requesting restock.", level="WARN")
+                await log_callback(
+                    f"Flow Control: Execution queue at limit ({exec_size}/10). NOT requesting restock.",
+                    level="WARN",
+                )
             else:
                 cooldown = 60  # 60 seconds cooldown
-                await log_callback(f"Flow Control: Restock cooldown active ({cooldown - (now - last_restock_time):.0f}s remaining).", level="DEBUG")
+                await log_callback(
+                    f"Flow Control: Restock cooldown active ({cooldown - (now - last_restock_time):.0f}s remaining).",
+                    level="DEBUG",
+                )
 
             return (True, last_restock_time)  # Reset counter only
     elif result == "APPROVED":
@@ -229,11 +233,21 @@ def check_opportunity_freshness(opportunity: dict, log_callback) -> tuple[bool, 
     if ts:
         age = (now - ts).total_seconds()
         if age >= BRAIN_STALE_OPPORTUNITY_SECONDS:
-            fire_and_forget(log_callback(f"[STALE] Opportunity expired: {ticker} (Age: {age:.0f}s) - skipping", level="WARN"))
+            fire_and_forget(
+                log_callback(
+                    f"[STALE] Opportunity expired: {ticker} (Age: {age:.0f}s) - skipping",
+                    level="WARN",
+                )
+            )
             return (False, "STALE")
     else:
         # For safety, if no timestamp exists, treat as potentially stale
-        fire_and_forget(log_callback(f"[STALE] Opportunity has no timestamp: {ticker} - skipping for safety", level="WARN"))
+        fire_and_forget(
+            log_callback(
+                f"[STALE] Opportunity has no timestamp: {ticker} - skipping for safety",
+                level="WARN",
+            )
+        )
         return (False, "STALE")
 
     return (True, "FRESH")

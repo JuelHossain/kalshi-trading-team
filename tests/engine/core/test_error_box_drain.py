@@ -6,8 +6,8 @@ a stub with no body, and no endpoint drained the box. A single recoverable
 error -- a model 404, a paused analytics project -- therefore bricked the
 engine until someone deleted rows from SQLite by hand.
 """
-import pytest
 
+import pytest
 from core.synapse import Synapse, SynapseError
 
 

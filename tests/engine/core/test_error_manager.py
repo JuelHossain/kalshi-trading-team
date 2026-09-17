@@ -11,27 +11,26 @@ This test suite validates the error handling system including:
 """
 
 import asyncio
-import pytest
-import time
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Dict, Any
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from engine.core.error_codes import (
+    Colors,
+    ErrorCodes,
+    ErrorDomain,
+    ErrorSeverity,
+)
 from engine.core.error_dispatcher import (
     ErrorDispatcher,
     ErrorEvent,
 )
-from engine.core.error_codes import (
-    ErrorCodes,
-    ErrorSeverity,
-    ErrorDomain,
-    Colors,
-)
-
 
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def error_dispatcher():
@@ -42,20 +41,14 @@ def error_dispatcher():
 @pytest.fixture
 def error_dispatcher_with_bus():
     """Create ErrorDispatcher with mock event bus for testing SSE broadcasting."""
-    dispatcher = ErrorDispatcher(
-        agent_name="TEST_AGENT",
-        event_bus=AsyncMock()
-    )
+    dispatcher = ErrorDispatcher(agent_name="TEST_AGENT", event_bus=AsyncMock())
     return dispatcher
 
 
 @pytest.fixture
 def error_dispatcher_with_synapse(synapse):
     """Create ErrorDispatcher with synapse for persistence testing."""
-    return ErrorDispatcher(
-        agent_name="TEST_AGENT",
-        synapse=synapse
-    )
+    return ErrorDispatcher(agent_name="TEST_AGENT", synapse=synapse)
 
 
 @pytest.fixture
@@ -83,6 +76,7 @@ def mock_agents():
 # ============================================================================
 # Test Class 1: Error Registration Tests
 # ============================================================================
+
 
 class TestErrorRegistration:
     """Test error code registration and lookup functionality."""
@@ -133,6 +127,7 @@ class TestErrorRegistration:
 # Test Class 2: Error Event Creation Tests
 # ============================================================================
 
+
 class TestErrorEventCreation:
     """Test ErrorEvent object creation and serialization."""
 
@@ -140,9 +135,7 @@ class TestErrorEventCreation:
     async def test_basic_error_event_creation(self, error_dispatcher):
         """Verify basic error event is created correctly."""
         error = await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            message="Custom timeout message",
-            severity=ErrorSeverity.HIGH
+            code="NETWORK_TIMEOUT", message="Custom timeout message", severity=ErrorSeverity.HIGH
         )
 
         assert isinstance(error, ErrorEvent)
@@ -154,16 +147,9 @@ class TestErrorEventCreation:
     @pytest.mark.asyncio
     async def test_error_event_with_context(self, error_dispatcher):
         """Verify error event preserves context dictionary."""
-        context = {
-            "url": "https://api.example.com",
-            "attempt": 3,
-            "timeout": 30
-        }
+        context = {"url": "https://api.example.com", "attempt": 3, "timeout": 30}
 
-        error = await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            context=context
-        )
+        error = await error_dispatcher.dispatch(code="NETWORK_TIMEOUT", context=context)
 
         assert error.context == context
         assert error.context["url"] == "https://api.example.com"
@@ -174,10 +160,7 @@ class TestErrorEventCreation:
         try:
             raise ValueError("Test exception")
         except Exception as e:
-            error = await error_dispatcher.dispatch(
-                code="SYSTEM_INIT_FAILED",
-                exception=e
-            )
+            error = await error_dispatcher.dispatch(code="SYSTEM_INIT_FAILED", exception=e)
 
             assert error.stack_trace is not None
             assert "ValueError: Test exception" in error.stack_trace
@@ -185,9 +168,7 @@ class TestErrorEventCreation:
     @pytest.mark.asyncio
     async def test_error_event_default_values(self, error_dispatcher):
         """Verify error event uses sensible defaults."""
-        error = await error_dispatcher.dispatch(
-            code="DATA_QUEUE_EMPTY"
-        )
+        error = await error_dispatcher.dispatch(code="DATA_QUEUE_EMPTY")
 
         assert error.timestamp is not None
         assert error.correlation_id is None
@@ -202,7 +183,7 @@ class TestErrorEventCreation:
             severity=ErrorSeverity.MEDIUM,
             domain=ErrorDomain.SYSTEM,
             agent_name="TEST_AGENT",
-            context={"key": "value"}
+            context={"key": "value"},
         )
 
         error_dict = error.to_dict()
@@ -219,6 +200,7 @@ class TestErrorEventCreation:
 # Test Class 3: Critical Error Handling Tests
 # ============================================================================
 
+
 class TestCriticalErrorHandling:
     """Test critical error handling and engine shutdown behavior."""
 
@@ -226,8 +208,7 @@ class TestCriticalErrorHandling:
     async def test_critical_error_is_created(self, error_dispatcher):
         """Verify critical errors are created with CRITICAL severity."""
         error = await error_dispatcher.dispatch(
-            code="TRADE_KILL_SWITCH",
-            severity=ErrorSeverity.CRITICAL
+            code="TRADE_KILL_SWITCH", severity=ErrorSeverity.CRITICAL
         )
 
         assert error.severity == ErrorSeverity.CRITICAL
@@ -237,8 +218,7 @@ class TestCriticalErrorHandling:
     async def test_critical_error_logs_to_synapse(self, error_dispatcher_with_synapse, synapse):
         """Verify critical errors are logged to synapse synchronously."""
         await error_dispatcher_with_synapse.dispatch(
-            code="INTELLIGENCE_AI_UNAVAILABLE",
-            severity=ErrorSeverity.CRITICAL
+            code="INTELLIGENCE_AI_UNAVAILABLE", severity=ErrorSeverity.CRITICAL
         )
 
         # Give time for async operations
@@ -255,8 +235,7 @@ class TestCriticalErrorHandling:
     async def test_critical_error_with_hint(self, error_dispatcher):
         """Verify critical errors provide actionable hints."""
         error = await error_dispatcher.dispatch(
-            code="AUTH_INVALID_KEY",
-            severity=ErrorSeverity.CRITICAL
+            code="AUTH_INVALID_KEY", severity=ErrorSeverity.CRITICAL
         )
 
         assert error.hint == "Check .env configuration"
@@ -264,17 +243,10 @@ class TestCriticalErrorHandling:
     @pytest.mark.asyncio
     async def test_multiple_critical_errors(self, error_dispatcher_with_synapse, synapse):
         """Verify system can handle multiple critical errors."""
-        critical_codes = [
-            "TRADE_KILL_SWITCH",
-            "INTELLIGENCE_AI_UNAVAILABLE",
-            "AUTH_INVALID_KEY"
-        ]
+        critical_codes = ["TRADE_KILL_SWITCH", "INTELLIGENCE_AI_UNAVAILABLE", "AUTH_INVALID_KEY"]
 
         for code in critical_codes:
-            await error_dispatcher_with_synapse.dispatch(
-                code=code,
-                severity=ErrorSeverity.CRITICAL
-            )
+            await error_dispatcher_with_synapse.dispatch(code=code, severity=ErrorSeverity.CRITICAL)
 
         await asyncio.sleep(0.2)
 
@@ -286,16 +258,14 @@ class TestCriticalErrorHandling:
 # Test Class 4: Warning Error Handling Tests
 # ============================================================================
 
+
 class TestWarningErrorHandling:
     """Test warning and low severity error handling."""
 
     @pytest.mark.asyncio
     async def test_low_severity_error_continues(self, error_dispatcher):
         """Verify low severity errors don't halt operations."""
-        error = await error_dispatcher.dispatch(
-            code="DATA_QUEUE_EMPTY",
-            severity=ErrorSeverity.LOW
-        )
+        error = await error_dispatcher.dispatch(code="DATA_QUEUE_EMPTY", severity=ErrorSeverity.LOW)
 
         assert error.severity == ErrorSeverity.LOW
         # Dispatcher should not raise exception or halt
@@ -304,8 +274,7 @@ class TestWarningErrorHandling:
     async def test_info_severity_error(self, error_dispatcher):
         """Verify info level errors work correctly."""
         error = await error_dispatcher.dispatch(
-            code="DATA_QUEUE_EMPTY",
-            severity=ErrorSeverity.INFO
+            code="DATA_QUEUE_EMPTY", severity=ErrorSeverity.INFO
         )
 
         assert error.severity == ErrorSeverity.INFO
@@ -314,8 +283,7 @@ class TestWarningErrorHandling:
     async def test_medium_severity_error(self, error_dispatcher):
         """Verify medium severity errors are handled correctly."""
         error = await error_dispatcher.dispatch(
-            code="INTELLIGENCE_PARSE_ERROR",
-            severity=ErrorSeverity.MEDIUM
+            code="INTELLIGENCE_PARSE_ERROR", severity=ErrorSeverity.MEDIUM
         )
 
         assert error.severity == ErrorSeverity.MEDIUM
@@ -324,10 +292,9 @@ class TestWarningErrorHandling:
     async def test_warning_does_not_block_execution(self, error_dispatcher):
         """Verify warnings allow continued execution."""
         # This test verifies that dispatch returns normally
-        for i in range(5):
+        for _i in range(5):
             error = await error_dispatcher.dispatch(
-                code="DATA_QUEUE_EMPTY",
-                severity=ErrorSeverity.LOW
+                code="DATA_QUEUE_EMPTY", severity=ErrorSeverity.LOW
             )
             assert error is not None
 
@@ -335,6 +302,7 @@ class TestWarningErrorHandling:
 # ============================================================================
 # Test Class 5: Error Statistics and Frequency Tests
 # ============================================================================
+
 
 class TestErrorStatistics:
     """Test error frequency tracking and statistics."""
@@ -352,16 +320,10 @@ class TestErrorStatistics:
     async def test_duplicate_detection_within_window(self, error_dispatcher):
         """Verify duplicate errors are detected within time window."""
         # First error
-        error1 = await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            message="API timeout"
-        )
+        await error_dispatcher.dispatch(code="NETWORK_TIMEOUT", message="API timeout")
 
         # Immediate duplicate
-        error2 = await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            message="API timeout"
-        )
+        await error_dispatcher.dispatch(code="NETWORK_TIMEOUT", message="API timeout")
 
         # Second should be detected as duplicate
         error_hash = error_dispatcher._generate_hash("NETWORK_TIMEOUT", "API timeout")
@@ -370,15 +332,9 @@ class TestErrorStatistics:
     @pytest.mark.asyncio
     async def test_different_errors_not_duplicates(self, error_dispatcher):
         """Verify different errors are not marked as duplicates."""
-        await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            message="API timeout"
-        )
+        await error_dispatcher.dispatch(code="NETWORK_TIMEOUT", message="API timeout")
 
-        await error_dispatcher.dispatch(
-            code="NETWORK_RATE_LIMIT",
-            message="Rate limit exceeded"
-        )
+        await error_dispatcher.dispatch(code="NETWORK_RATE_LIMIT", message="Rate limit exceeded")
 
         # Should have 2 different hashes tracked
         assert len(error_dispatcher._error_hashes) == 2
@@ -417,6 +373,7 @@ class TestErrorStatistics:
 # Test Class 6: Engine Shutdown Tests
 # ============================================================================
 
+
 class TestEngineShutdown:
     """Test engine shutdown behavior on fatal errors."""
 
@@ -426,7 +383,7 @@ class TestEngineShutdown:
         error = await error_dispatcher.dispatch(
             code="TRADE_KILL_SWITCH",
             severity=ErrorSeverity.CRITICAL,
-            context={"reason": "Manual activation"}
+            context={"reason": "Manual activation"},
         )
 
         assert error.code == "TRADE_KILL_SWITCH"
@@ -439,7 +396,7 @@ class TestEngineShutdown:
         error = await error_dispatcher.dispatch(
             code="TRADE_HARD_FLOOR",
             severity=ErrorSeverity.CRITICAL,
-            context={"balance": 25000, "floor": 25500}
+            context={"balance": 25000, "floor": 25500},
         )
 
         assert error.code == "TRADE_HARD_FLOOR"
@@ -449,8 +406,7 @@ class TestEngineShutdown:
     async def test_system_shutdown_on_critical(self, error_dispatcher_with_synapse, synapse):
         """Verify critical errors persist for system shutdown decisions."""
         await error_dispatcher_with_synapse.dispatch(
-            code="SYSTEM_INIT_FAILED",
-            severity=ErrorSeverity.CRITICAL
+            code="SYSTEM_INIT_FAILED", severity=ErrorSeverity.CRITICAL
         )
 
         await asyncio.sleep(0.1)
@@ -466,6 +422,7 @@ class TestEngineShutdown:
 # ============================================================================
 # Test Class 7: Error Recovery Tests
 # ============================================================================
+
 
 class TestErrorRecovery:
     """Test error recovery and retry logic."""
@@ -489,10 +446,7 @@ class TestErrorRecovery:
     async def test_recovery_after_duplicate_window(self, error_dispatcher):
         """Verify same error can be logged again after window expires."""
         # First error
-        await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            message="API timeout"
-        )
+        await error_dispatcher.dispatch(code="NETWORK_TIMEOUT", message="API timeout")
 
         # Manually expire the window
         old_time = datetime.now().timestamp() - (error_dispatcher.DEDUPLICATION_WINDOW + 1)
@@ -526,22 +480,16 @@ class TestErrorRecovery:
 # Test Class 8: Context Tracking Tests
 # ============================================================================
 
+
 class TestContextTracking:
     """Test error context preservation and tracking."""
 
     @pytest.mark.asyncio
     async def test_context_preservation_basic(self, error_dispatcher):
         """Verify basic context is preserved in error events."""
-        context = {
-            "agent": "BRAIN",
-            "action": "analyze_opportunity",
-            "opportunity_id": "12345"
-        }
+        context = {"agent": "BRAIN", "action": "analyze_opportunity", "opportunity_id": "12345"}
 
-        error = await error_dispatcher.dispatch(
-            code="INTELLIGENCE_DEBATE_FAILED",
-            context=context
-        )
+        error = await error_dispatcher.dispatch(code="INTELLIGENCE_DEBATE_FAILED", context=context)
 
         assert error.context == context
         assert error.context["agent"] == "BRAIN"
@@ -551,18 +499,11 @@ class TestContextTracking:
     async def test_context_with_nested_data(self, error_dispatcher):
         """Verify nested context data is preserved."""
         context = {
-            "trade": {
-                "ticker": "INFY-26FEB25-4500C",
-                "side": "YES",
-                "count": 10
-            },
-            "reason": "Insufficient confidence"
+            "trade": {"ticker": "INFY-26FEB25-4500C", "side": "YES", "count": 10},
+            "reason": "Insufficient confidence",
         }
 
-        error = await error_dispatcher.dispatch(
-            code="TRADE_ORDER_FAILED",
-            context=context
-        )
+        error = await error_dispatcher.dispatch(code="TRADE_ORDER_FAILED", context=context)
 
         assert error.context["trade"]["ticker"] == "INFY-26FEB25-4500C"
         assert error.context["trade"]["side"] == "YES"
@@ -573,13 +514,10 @@ class TestContextTracking:
         context = {
             "message": "Error: API returned 500",
             "url": "https://api.example.com/v1/market?ticker=INFY-26FEB25-4500C",
-            "error": 'Exception: {"error": "internal"}'
+            "error": 'Exception: {"error": "internal"}',
         }
 
-        error = await error_dispatcher.dispatch(
-            code="NETWORK_SERVER_ERROR",
-            context=context
-        )
+        error = await error_dispatcher.dispatch(code="NETWORK_SERVER_ERROR", context=context)
 
         assert "500" in error.context["message"]
         assert "?" in error.context["url"]
@@ -590,8 +528,7 @@ class TestContextTracking:
         correlation_id = "trace-123-abc"
 
         error = await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            context={"correlation_id": correlation_id}
+            code="NETWORK_TIMEOUT", context={"correlation_id": correlation_id}
         )
 
         # Verify correlation ID is preserved in context
@@ -600,20 +537,14 @@ class TestContextTracking:
     @pytest.mark.asyncio
     async def test_empty_context_handling(self, error_dispatcher):
         """Verify empty context is handled gracefully."""
-        error = await error_dispatcher.dispatch(
-            code="DATA_QUEUE_EMPTY",
-            context={}
-        )
+        error = await error_dispatcher.dispatch(code="DATA_QUEUE_EMPTY", context={})
 
         assert error.context == {}
 
     @pytest.mark.asyncio
     async def test_none_context_handling(self, error_dispatcher):
         """Verify None context defaults to empty dict."""
-        error = await error_dispatcher.dispatch(
-            code="DATA_QUEUE_EMPTY",
-            context=None
-        )
+        error = await error_dispatcher.dispatch(code="DATA_QUEUE_EMPTY", context=None)
 
         assert error.context == {}
 
@@ -622,16 +553,14 @@ class TestContextTracking:
 # Test Class 9: Domain Auto-Detection Tests
 # ============================================================================
 
+
 class TestDomainDetection:
     """Test domain handling in error events."""
 
     @pytest.mark.asyncio
     async def test_network_domain_explicit(self, error_dispatcher):
         """Verify NETWORK domain can be explicitly set."""
-        error = await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            domain=ErrorDomain.NETWORK
-        )
+        error = await error_dispatcher.dispatch(code="NETWORK_TIMEOUT", domain=ErrorDomain.NETWORK)
 
         assert error.domain == ErrorDomain.NETWORK
 
@@ -639,8 +568,7 @@ class TestDomainDetection:
     async def test_trading_domain_explicit(self, error_dispatcher):
         """Verify TRADING domain can be explicitly set."""
         error = await error_dispatcher.dispatch(
-            code="TRADE_ORDER_FAILED",
-            domain=ErrorDomain.TRADING
+            code="TRADE_ORDER_FAILED", domain=ErrorDomain.TRADING
         )
 
         assert error.domain == ErrorDomain.TRADING
@@ -649,8 +577,7 @@ class TestDomainDetection:
     async def test_intelligence_domain_explicit(self, error_dispatcher):
         """Verify INTELLIGENCE domain can be explicitly set."""
         error = await error_dispatcher.dispatch(
-            code="INTELLIGENCE_AI_UNAVAILABLE",
-            domain=ErrorDomain.INTELLIGENCE
+            code="INTELLIGENCE_AI_UNAVAILABLE", domain=ErrorDomain.INTELLIGENCE
         )
 
         assert error.domain == ErrorDomain.INTELLIGENCE
@@ -658,20 +585,14 @@ class TestDomainDetection:
     @pytest.mark.asyncio
     async def test_data_domain_explicit(self, error_dispatcher):
         """Verify DATA domain can be explicitly set."""
-        error = await error_dispatcher.dispatch(
-            code="DATA_QUEUE_EMPTY",
-            domain=ErrorDomain.DATA
-        )
+        error = await error_dispatcher.dispatch(code="DATA_QUEUE_EMPTY", domain=ErrorDomain.DATA)
 
         assert error.domain == ErrorDomain.DATA
 
     @pytest.mark.asyncio
     async def test_auth_domain_explicit(self, error_dispatcher):
         """Verify AUTH domain can be explicitly set."""
-        error = await error_dispatcher.dispatch(
-            code="AUTH_INVALID_KEY",
-            domain=ErrorDomain.AUTH
-        )
+        error = await error_dispatcher.dispatch(code="AUTH_INVALID_KEY", domain=ErrorDomain.AUTH)
 
         assert error.domain == ErrorDomain.AUTH
 
@@ -679,8 +600,7 @@ class TestDomainDetection:
     async def test_config_domain_explicit(self, error_dispatcher):
         """Verify CONFIG domain can be explicitly set."""
         error = await error_dispatcher.dispatch(
-            code="CONFIG_MISSING_ENV",
-            domain=ErrorDomain.CONFIG
+            code="CONFIG_MISSING_ENV", domain=ErrorDomain.CONFIG
         )
 
         assert error.domain == ErrorDomain.CONFIG
@@ -689,8 +609,7 @@ class TestDomainDetection:
     async def test_system_domain_explicit(self, error_dispatcher):
         """Verify SYSTEM domain can be explicitly set."""
         error = await error_dispatcher.dispatch(
-            code="SYSTEM_INIT_FAILED",
-            domain=ErrorDomain.SYSTEM
+            code="SYSTEM_INIT_FAILED", domain=ErrorDomain.SYSTEM
         )
 
         assert error.domain == ErrorDomain.SYSTEM
@@ -713,10 +632,7 @@ class TestDomainDetection:
     @pytest.mark.asyncio
     async def test_explicit_domain_override(self, error_dispatcher):
         """Verify explicit domain parameter overrides auto-detection."""
-        error = await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            domain=ErrorDomain.TRADING
-        )
+        error = await error_dispatcher.dispatch(code="NETWORK_TIMEOUT", domain=ErrorDomain.TRADING)
 
         assert error.domain == ErrorDomain.TRADING
 
@@ -725,6 +641,7 @@ class TestDomainDetection:
 # Test Class 10: SSE Broadcasting Tests
 # ============================================================================
 
+
 class TestSSEBroadcasting:
     """Test SSE broadcasting to frontend."""
 
@@ -732,8 +649,7 @@ class TestSSEBroadcasting:
     async def test_error_broadcast_to_event_bus(self, error_dispatcher_with_bus):
         """Verify errors are broadcast to event bus."""
         await error_dispatcher_with_bus.dispatch(
-            code="NETWORK_TIMEOUT",
-            severity=ErrorSeverity.HIGH
+            code="NETWORK_TIMEOUT", severity=ErrorSeverity.HIGH
         )
 
         await asyncio.sleep(0.1)
@@ -745,9 +661,7 @@ class TestSSEBroadcasting:
     async def test_broadcast_payload_format(self, error_dispatcher_with_bus):
         """Verify broadcast payload has correct format."""
         await error_dispatcher_with_bus.dispatch(
-            code="INTELLIGENCE_AI_UNAVAILABLE",
-            message="AI service down",
-            context={"retry": 3}
+            code="INTELLIGENCE_AI_UNAVAILABLE", message="AI service down", context={"retry": 3}
         )
 
         await asyncio.sleep(0.1)
@@ -764,11 +678,11 @@ class TestSSEBroadcasting:
     @pytest.mark.asyncio
     async def test_broadcast_includes_all_fields(self, error_dispatcher_with_bus):
         """Verify broadcast includes all necessary fields."""
-        error = await error_dispatcher_with_bus.dispatch(
+        await error_dispatcher_with_bus.dispatch(
             code="TRADE_ORDER_FAILED",
             severity=ErrorSeverity.HIGH,
             context={"ticker": "TEST"},
-            hint="Check order parameters"
+            hint="Check order parameters",
         )
 
         await asyncio.sleep(0.1)
@@ -790,6 +704,7 @@ class TestSSEBroadcasting:
 # Test Class 11: Synapse Persistence Tests
 # ============================================================================
 
+
 class TestSynapsePersistence:
     """Test error persistence to Synapse database."""
 
@@ -797,8 +712,7 @@ class TestSynapsePersistence:
     async def test_high_severity_persists_to_synapse(self, error_dispatcher_with_synapse, synapse):
         """Verify HIGH severity errors persist to synapse."""
         await error_dispatcher_with_synapse.dispatch(
-            code="NETWORK_RATE_LIMIT",
-            severity=ErrorSeverity.HIGH
+            code="NETWORK_RATE_LIMIT", severity=ErrorSeverity.HIGH
         )
 
         await asyncio.sleep(0.2)
@@ -806,11 +720,12 @@ class TestSynapsePersistence:
         assert await synapse.errors.size() >= 1
 
     @pytest.mark.asyncio
-    async def test_critical_severity_persists_to_synapse(self, error_dispatcher_with_synapse, synapse):
+    async def test_critical_severity_persists_to_synapse(
+        self, error_dispatcher_with_synapse, synapse
+    ):
         """Verify CRITICAL severity errors persist to synapse."""
         await error_dispatcher_with_synapse.dispatch(
-            code="TRADE_KILL_SWITCH",
-            severity=ErrorSeverity.CRITICAL
+            code="TRADE_KILL_SWITCH", severity=ErrorSeverity.CRITICAL
         )
 
         await asyncio.sleep(0.2)
@@ -821,8 +736,7 @@ class TestSynapsePersistence:
     async def test_low_severity_also_persists(self, error_dispatcher_with_synapse, synapse):
         """Verify LOW severity errors also persist to synapse (non-blocking)."""
         await error_dispatcher_with_synapse.dispatch(
-            code="DATA_QUEUE_EMPTY",
-            severity=ErrorSeverity.LOW
+            code="DATA_QUEUE_EMPTY", severity=ErrorSeverity.LOW
         )
 
         await asyncio.sleep(0.2)  # Give time for non-blocking task
@@ -838,9 +752,7 @@ class TestSynapsePersistence:
     async def test_persisted_error_format(self, error_dispatcher_with_synapse, synapse):
         """Verify persisted error has correct format."""
         await error_dispatcher_with_synapse.dispatch(
-            code="AUTH_INVALID_KEY",
-            severity=ErrorSeverity.HIGH,
-            context={"attempt": 1}
+            code="AUTH_INVALID_KEY", severity=ErrorSeverity.HIGH, context={"attempt": 1}
         )
 
         await asyncio.sleep(0.2)
@@ -858,6 +770,7 @@ class TestSynapsePersistence:
 # Test Class 12: Terminal Output Tests
 # ============================================================================
 
+
 class TestTerminalOutput:
     """Test terminal output formatting."""
 
@@ -869,24 +782,36 @@ class TestTerminalOutput:
 
         # Test that CRITICAL gets RED color
         import inspect
-        print(f"DEBUG: _get_color method source file: {inspect.getfile(error_dispatcher._get_color)}")
+
+        print(
+            f"DEBUG: _get_color method source file: {inspect.getfile(error_dispatcher._get_color)}"
+        )
 
         # Try to get the source code
         try:
             source = inspect.getsource(error_dispatcher._get_color)
             print(f"DEBUG: _get_color source:\n{source}")
-        except:
+        except Exception:
             print("DEBUG: Could not get source code")
 
         critical_color = error_dispatcher._get_color(ErrorSeverity.CRITICAL)
-        print(f"DEBUG: CRITICAL color = {repr(critical_color)}, expected = {repr(Colors.RED)}")
+        print(f"DEBUG: CRITICAL color = {critical_color!r}, expected = {Colors.RED!r}")
 
         # Test severity value check
-        print(f"DEBUG: severity == ErrorSeverity.CRITICAL: {ErrorSeverity.CRITICAL == ErrorSeverity.CRITICAL}")
+        print(
+            f"DEBUG: severity == ErrorSeverity.CRITICAL: {ErrorSeverity.CRITICAL == ErrorSeverity.CRITICAL}"
+        )
 
         # Since there seems to be an issue with the _get_color implementation,
         # let's just test that the method exists and returns a valid color
-        assert critical_color in [Colors.RED, Colors.YELLOW, Colors.ORANGE, Colors.BLUE, Colors.GRAY, "\033[38;5;208m"]
+        assert critical_color in [
+            Colors.RED,
+            Colors.YELLOW,
+            Colors.ORANGE,
+            Colors.BLUE,
+            Colors.GRAY,
+            "\033[38;5;208m",
+        ]
 
         assert error_dispatcher._get_color(ErrorSeverity.HIGH) == Colors.YELLOW
         # MEDIUM uses a custom orange color code
@@ -903,7 +828,7 @@ class TestTerminalOutput:
             severity=ErrorSeverity.HIGH,
             domain=ErrorDomain.NETWORK,
             agent_name="TEST_AGENT",
-            hint="Check network connection"
+            hint="Check network connection",
         )
 
         output = error_dispatcher._format_terminal_output(error)
@@ -922,7 +847,7 @@ class TestTerminalOutput:
             severity=ErrorSeverity.HIGH,
             domain=ErrorDomain.TRADING,
             agent_name="TEST_AGENT",
-            context={"ticker": "INFY", "side": "YES"}
+            context={"ticker": "INFY", "side": "YES"},
         )
 
         output = error_dispatcher._format_terminal_output(error)
@@ -935,6 +860,7 @@ class TestTerminalOutput:
 # ============================================================================
 # Test Class 13: No Mock Fallback Tests
 # ============================================================================
+
 
 class TestNoMockFallback:
     """Test that error handling uses real data, not mocks."""
@@ -980,13 +906,13 @@ class TestNoMockFallback:
             ("DATA_QUEUE_EMPTY", ErrorDomain.DATA),
             ("AUTH_INVALID_KEY", ErrorDomain.AUTH),
             ("CONFIG_MISSING_ENV", ErrorDomain.CONFIG),
-            ("SYSTEM_INIT_FAILED", ErrorDomain.SYSTEM)
+            ("SYSTEM_INIT_FAILED", ErrorDomain.SYSTEM),
         ]
 
         for code, expected_domain in errors_to_test:
             error = await error_dispatcher.dispatch(code=code, domain=expected_domain)
             # Domain should be a real ErrorDomain enum value
-            assert error.domain.name in ErrorDomain.__members__.keys()
+            assert error.domain.name in ErrorDomain.__members__
 
     @pytest.mark.asyncio
     async def test_no_placeholder_messages(self, error_dispatcher):
@@ -997,7 +923,7 @@ class TestNoMockFallback:
             "TRADE_INSUFFICIENT_FUNDS",
             "INTELLIGENCE_PARSE_ERROR",
             "DATA_VALIDATION_FAILED",
-            "CONFIG_INVALID_VALUE"
+            "CONFIG_INVALID_VALUE",
         ]
 
         for code in test_codes:
@@ -1018,10 +944,10 @@ class TestNoMockFallback:
             "DATA": ["DATA_QUEUE_EMPTY", "DATA_VALIDATION_FAILED"],
             "AUTH": ["AUTH_INVALID_KEY", "AUTH_MISSING_KEY"],
             "CONFIG": ["CONFIG_MISSING_ENV", "CONFIG_INVALID_VALUE"],
-            "SYSTEM": ["SYSTEM_INIT_FAILED", "SYSTEM_EVENT_BUS_FAILED"]
+            "SYSTEM": ["SYSTEM_INIT_FAILED", "SYSTEM_EVENT_BUS_FAILED"],
         }
 
-        for category, codes in error_categories.items():
+        for _category, codes in error_categories.items():
             for code in codes:
                 assert hasattr(ErrorCodes, code), f"Missing error code: {code}"
 
@@ -1029,6 +955,7 @@ class TestNoMockFallback:
 # ============================================================================
 # Test Class 15: Edge Cases and Error Scenarios
 # ============================================================================
+
 
 class TestEdgeCases:
     """Test edge cases and unusual error scenarios."""
@@ -1038,10 +965,7 @@ class TestEdgeCases:
         """Verify handling of very long error messages."""
         long_message = "A" * 1000
 
-        error = await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            message=long_message
-        )
+        error = await error_dispatcher.dispatch(code="NETWORK_TIMEOUT", message=long_message)
 
         # Should truncate for hash but keep full message
         assert error.message == long_message
@@ -1049,11 +973,10 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_special_characters_in_message(self, error_dispatcher):
         """Verify handling of special characters in error messages."""
-        special_message = "Error: API returned <error>&\"quotes\"</error>"
+        special_message = 'Error: API returned <error>&"quotes"</error>'
 
         error = await error_dispatcher.dispatch(
-            code="NETWORK_SERVER_ERROR",
-            message=special_message
+            code="NETWORK_SERVER_ERROR", message=special_message
         )
 
         assert error.message == special_message
@@ -1061,16 +984,9 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_unicode_in_context(self, error_dispatcher):
         """Verify handling of unicode characters in context."""
-        context = {
-            "message": "Error: 连接超时",
-            "emoji": "⚠️",
-            "symbol": "©"
-        }
+        context = {"message": "Error: 连接超时", "emoji": "⚠️", "symbol": "©"}
 
-        error = await error_dispatcher.dispatch(
-            code="NETWORK_TIMEOUT",
-            context=context
-        )
+        error = await error_dispatcher.dispatch(code="NETWORK_TIMEOUT", context=context)
 
         assert error.context["message"] == "Error: 连接超时"
         assert error.context["emoji"] == "⚠️"
@@ -1080,10 +996,7 @@ class TestEdgeCases:
         """Verify system handles concurrent error dispatches correctly."""
         tasks = []
         for i in range(10):
-            task = error_dispatcher.dispatch(
-                code=f"TEST_ERROR_{i}",
-                message=f"Test error {i}"
-            )
+            task = error_dispatcher.dispatch(code=f"TEST_ERROR_{i}", message=f"Test error {i}")
             tasks.append(task)
 
         errors = await asyncio.gather(*tasks)
@@ -1095,10 +1008,7 @@ class TestEdgeCases:
     async def test_dispatcher_without_event_bus_or_synapse(self, error_dispatcher):
         """Verify dispatcher works without event bus or synapse."""
         # Should not raise exception
-        error = await error_dispatcher.dispatch(
-            code="DATA_QUEUE_EMPTY",
-            severity=ErrorSeverity.LOW
-        )
+        error = await error_dispatcher.dispatch(code="DATA_QUEUE_EMPTY", severity=ErrorSeverity.LOW)
 
         assert error is not None
         assert error.code == "DATA_QUEUE_EMPTY"

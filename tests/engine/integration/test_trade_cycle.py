@@ -12,65 +12,12 @@ actually happened -- including the safety rules refusing a trade.
 """
 
 from datetime import datetime, timedelta
-
-from core.constants import BRAIN_STALE_OPPORTUNITY_SECONDS as STALE_AFTER
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
+from core.constants import BRAIN_STALE_OPPORTUNITY_SECONDS as STALE_AFTER
 
-from agents.brain import BrainAgent
-from agents.hand import HandAgent
-from core.bus import EventBus
-from core.synapse import Synapse
-from core.vault import RecursiveVault
-
-
-def _opportunity(ticker="KXTEST-01", **over):
-    opp = {
-        "ticker": ticker,
-        "title": "Integration test market",
-        "yes_price": 50,
-        "no_price": 50,
-        "volume": 10000,
-        "timestamp": datetime.now().isoformat(),
-    }
-    opp.update(over)
-    return opp
-
-
-def _debate(confidence=0.95, probability=0.80):
-    return AsyncMock(
-        return_value={
-            "estimated_probability": probability,
-            "confidence": confidence,
-            "reasoning": "integration test",
-        }
-    )
-
-
-@pytest.fixture
-def cycle(test_db):
-    """A Brain and Hand wired to one bus, one synapse and a funded vault."""
-    bus = EventBus()
-    synapse = Synapse(db_path=test_db)
-    vault = RecursiveVault(test_mode=True)
-
-    kalshi = AsyncMock()
-    kalshi.get_balance = AsyncMock(return_value=100_000)  # $1000
-    kalshi.get_orderbook = AsyncMock(
-        return_value={
-            "bids": [{"price": 48, "count": 400}],
-            "asks": [{"price": 51, "count": 400}],
-        }
-    )
-    kalshi.place_order = AsyncMock(return_value={"order_id": "integration-order-1"})
-
-    brain = BrainAgent(3, bus, synapse=synapse)
-    hand = HandAgent(4, bus, vault=vault, kalshi_client=kalshi, synapse=synapse)
-    return {
-        "bus": bus, "synapse": synapse, "vault": vault,
-        "kalshi": kalshi, "brain": brain, "hand": hand,
-    }
+from tests.engine.support import _debate, _opportunity
 
 
 class TestApprovedTradeReachesTheMarket:
@@ -118,9 +65,7 @@ class TestSafetyRulesRefuseTheTrade:
         cycle["brain"].run_debate = _debate()
         old = (datetime.now() - timedelta(seconds=STALE_AFTER + 60)).isoformat()
 
-        result = await cycle["brain"].process_single_opportunity(
-            _opportunity(timestamp=old)
-        )
+        result = await cycle["brain"].process_single_opportunity(_opportunity(timestamp=old))
 
         assert result == "STALE"
         assert await cycle["synapse"].executions.size() == 0
@@ -166,9 +111,7 @@ class TestSafetyRulesRefuseTheTrade:
         # Price 0.50, estimate 0.52 -> edge 0.02, under the 0.05 minimum.
         brain.run_debate = _debate(probability=0.52)
 
-        await brain.process_single_opportunity(
-            _opportunity(kalshi_price=0.50)
-        )
+        await brain.process_single_opportunity(_opportunity(kalshi_price=0.50))
 
         assert await cycle["synapse"].executions.size() == 0
 
@@ -178,9 +121,7 @@ class TestSafetyRulesRefuseTheTrade:
         brain = cycle["brain"]
         brain.run_debate = _debate(probability=0.50 + brain.MIN_EDGE)
 
-        await brain.process_single_opportunity(
-            _opportunity(kalshi_price=0.50)
-        )
+        await brain.process_single_opportunity(_opportunity(kalshi_price=0.50))
 
         assert await cycle["synapse"].executions.size() == 1
 
@@ -274,7 +215,8 @@ class TestEveryDecisionIsRecorded:
 
         seen = []
         monkeypatch.setattr(
-            brain_agent, "record_decision",
+            brain_agent,
+            "record_decision",
             lambda *a, **k: seen.append(k.get("outcome")) or 1,
         )
 

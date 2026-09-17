@@ -9,6 +9,7 @@ history and any screenshot of either. Lengths and PEM validity are enough to
 tell a missing key from a malformed one, which is the only question worth
 asking here.
 """
+
 import argparse
 import asyncio
 import hashlib
@@ -21,9 +22,7 @@ sys.path.insert(0, str(ENGINE))
 
 # The password that was committed to this repository. Stored as a digest so
 # checking for it does not put the value back in the source tree.
-LEAKED_AUTH_PASSWORD_SHA256 = (  # noqa: S105 - a digest of a leaked value, kept so preflight can refuse it
-    "ab74c38e108520a4a8d2ad754ab7e5f1ae347c3f61888d9023b78ef0214e345b"
-)
+LEAKED_AUTH_PASSWORD_SHA256 = "ab74c38e108520a4a8d2ad754ab7e5f1ae347c3f61888d9023b78ef0214e345b"
 
 OK, WARN, BAD = "  ok  ", " warn ", " FAIL "
 
@@ -50,10 +49,9 @@ def _row(status: str, name: str, detail: str = "") -> bool:
 
 
 def main() -> int:
+    """Check this machine's configuration and print a readiness report; exit 1 on any blocker."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--connect", action="store_true", help="attempt a real Kalshi handshake"
-    )
+    parser.add_argument("--connect", action="store_true", help="attempt a real Kalshi handshake")
     args = parser.parse_args()
 
     env_file = _load_env()
@@ -93,7 +91,7 @@ def main() -> int:
             body = pem.replace("\\n", "\n").strip().strip('"')
             serialization.load_pem_private_key(body.encode(), password=None)
             _row(OK, f"{prefix}_PRIVATE_KEY", "valid PEM, parsed")
-        except Exception as e:  # noqa: BLE001 - the reason is the useful part
+        except Exception as e:
             failures += 1
             _row(BAD, f"{prefix}_PRIVATE_KEY", f"will not parse: {str(e)[:60]}")
 
@@ -139,6 +137,7 @@ def _handshake(env: str) -> int:
         from core.network import KalshiClient
 
         async def go():
+            """Run the signed handshake against Kalshi and report the outcome."""
             client = KalshiClient()
             balance = await client.get_balance()
             await client.close()
@@ -148,7 +147,7 @@ def _handshake(env: str) -> int:
         _row(OK, "handshake", f"{url}")
         _row(OK, "balance", f"${balance / 100:,.2f}")
         return 0
-    except Exception as e:  # noqa: BLE001 - any failure here is the answer
+    except Exception as e:
         _row(BAD, "handshake", str(e)[:120])
         return 1
 

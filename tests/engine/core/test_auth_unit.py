@@ -137,10 +137,7 @@ class TestLoginHandler:
     async def test_login_rejects_empty_password(self):
         """An empty password is refused. Demo mode no longer grants access."""
         mock_request = MagicMock()
-        mock_request.json = AsyncMock(return_value={
-            "password": "",
-            "mode": "demo"
-        })
+        mock_request.json = AsyncMock(return_value={"password": "", "mode": "demo"})
 
         response = await login_handler(mock_request)
 
@@ -151,10 +148,9 @@ class TestLoginHandler:
     async def test_login_production_mode_correct_password(self):
         """Login with correct password sets production mode."""
         mock_request = MagicMock()
-        mock_request.json = AsyncMock(return_value={
-            "password": os.environ["AUTH_PASSWORD"],
-            "mode": "production"
-        })
+        mock_request.json = AsyncMock(
+            return_value={"password": os.environ["AUTH_PASSWORD"], "mode": "production"}
+        )
 
         response = await login_handler(mock_request)
 
@@ -171,10 +167,9 @@ class TestLoginHandler:
     async def test_login_production_mode_wrong_password(self):
         """Login with wrong password returns 401."""
         mock_request = MagicMock()
-        mock_request.json = AsyncMock(return_value={
-            "password": "wrong-password",
-            "mode": "production"
-        })
+        mock_request.json = AsyncMock(
+            return_value={"password": "wrong-password", "mode": "production"}
+        )
 
         response = await login_handler(mock_request)
 
@@ -191,10 +186,9 @@ class TestLoginHandler:
         The client must not be able to talk the engine into a weaker session.
         """
         mock_request = MagicMock()
-        mock_request.json = AsyncMock(return_value={
-            "password": os.environ["AUTH_PASSWORD"],
-            "mode": "demo"
-        })
+        mock_request.json = AsyncMock(
+            return_value={"password": os.environ["AUTH_PASSWORD"], "mode": "demo"}
+        )
 
         response = await login_handler(mock_request)
 
@@ -326,9 +320,7 @@ class TestAuthManagerStateTransitions:
         """Complete flow: login -> verify -> logout."""
         # Login
         mock_request = MagicMock()
-        mock_request.json = AsyncMock(
-            return_value={"password": os.environ["AUTH_PASSWORD"]}
-        )
+        mock_request.json = AsyncMock(return_value={"password": os.environ["AUTH_PASSWORD"]})
         response = await login_handler(mock_request)
         assert response.status == 200
 
@@ -355,10 +347,9 @@ class TestAuthManagerStateTransitions:
         """Complete flow: login (production) -> verify -> logout."""
         # Login
         mock_request = MagicMock()
-        mock_request.json = AsyncMock(return_value={
-            "password": os.environ["AUTH_PASSWORD"],
-            "mode": "production"
-        })
+        mock_request.json = AsyncMock(
+            return_value={"password": os.environ["AUTH_PASSWORD"], "mode": "production"}
+        )
         response = await login_handler(mock_request)
         assert response.status == 200
 
@@ -387,17 +378,14 @@ class TestAuthManagerStateTransitions:
         """Failed login attempt does not modify auth state."""
         # First successful login
         mock_request = MagicMock()
-        mock_request.json = AsyncMock(
-            return_value={"password": os.environ["AUTH_PASSWORD"]}
-        )
+        mock_request.json = AsyncMock(return_value={"password": os.environ["AUTH_PASSWORD"]})
         await login_handler(mock_request)
 
         # Failed login attempt
         mock_request = MagicMock()
-        mock_request.json = AsyncMock(return_value={
-            "password": "wrong-password",
-            "mode": "production"
-        })
+        mock_request.json = AsyncMock(
+            return_value={"password": "wrong-password", "mode": "production"}
+        )
         response = await login_handler(mock_request)
         assert response.status == 401
 

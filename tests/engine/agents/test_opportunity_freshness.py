@@ -10,10 +10,9 @@ The check measures time spent waiting in the queue, not market movement.
 Execution freshness is the Hand's job: it re-reads the live orderbook
 before any order.
 """
+
 import importlib
 from datetime import datetime, timedelta
-
-import pytest
 
 from agents.brain import monitor
 from core import constants

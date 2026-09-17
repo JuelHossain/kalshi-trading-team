@@ -1,6 +1,7 @@
 """
 HTTP server setup with CORS middleware for Ghost Engine.
 """
+
 import os
 
 from aiohttp import web
@@ -24,7 +25,10 @@ def create_cors_middleware():
         ALLOWED_ORIGINS.append(prod_origin)
 
     async def cors_middleware(app, handler):
+        """aiohttp middleware factory adding the CORS headers the dashboard needs."""
+
         async def middleware_handler(request):
+            """Answer OPTIONS directly; add CORS headers to every other response."""
             # Get origin from request
             origin = request.headers.get("Origin", "")
 
@@ -40,6 +44,7 @@ def create_cors_middleware():
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
             response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
             return response
+
         return middleware_handler
 
     return cors_middleware
@@ -70,6 +75,7 @@ async def start_server(app, host="0.0.0.0", port=3002):
         port: Server port
     """
     from core.logger import get_logger
+
     logger = get_logger("GHOST")
 
     runner = web.AppRunner(app)

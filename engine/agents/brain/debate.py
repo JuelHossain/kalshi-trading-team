@@ -2,6 +2,7 @@
 AI Debate Logic for Brain Agent
 Multi-persona debate using Gemini with OpenRouter fallback.
 """
+
 import asyncio
 import json
 import os
@@ -23,7 +24,9 @@ from core.logger import get_logger
 #
 # Set BRAIN_SEARCH_GROUNDING=false to get the old behaviour for comparison.
 GROUNDING_ENABLED = os.getenv("BRAIN_SEARCH_GROUNDING", "true").strip().lower() not in (
-    "false", "0", "no"
+    "false",
+    "0",
+    "no",
 )
 
 
@@ -41,9 +44,7 @@ def build_grounding_config():
         from google.genai import types
     except ImportError:
         return None
-    return types.GenerateContentConfig(
-        tools=[types.Tool(google_search=types.GoogleSearch())]
-    )
+    return types.GenerateContentConfig(tools=[types.Tool(google_search=types.GoogleSearch())])
 
 
 def load_personas(base_path: str = "ai-env/personas") -> dict[str, str]:
@@ -58,7 +59,7 @@ def load_personas(base_path: str = "ai-env/personas") -> dict[str, str]:
     """
     personas = {
         "optimist": "OPTIMIST: Argue why this is a great opportunity.",
-        "critic": "CRITIC: Argue against this trade."
+        "critic": "CRITIC: Argue against this trade.",
     }
 
     try:
@@ -128,7 +129,7 @@ async def run_debate(
     trading_instructions: str,
     ai_client: Any,
     log_callback: Any,
-    log_error_callback: Any
+    log_error_callback: Any,
 ) -> dict:
     """
     Run multi-persona AI debate using Gemini.
@@ -151,13 +152,13 @@ async def run_debate(
         await log_error_callback(
             code="INTELLIGENCE_AI_UNAVAILABLE",
             severity=ErrorSeverity.HIGH,
-            context={"opportunity": opportunity.get("ticker", "UNKNOWN")}
+            context={"opportunity": opportunity.get("ticker", "UNKNOWN")},
         )
         # Return zero confidence to trigger veto
         return {
             "confidence": 0.0,
             "reasoning": "AI service unavailable - trade rejected for safety",
-            "estimated_probability": None
+            "estimated_probability": None,
         }
 
     ticker = opportunity.get("ticker", "UNKNOWN")
@@ -228,7 +229,10 @@ Respond in JSON format:
             text = response.text
         except Exception as e:
             # Fallback: OpenRouter
-            await log_callback(f"[BRAIN] Primary AI failed ({str(e)[:50]})... Attempting OpenRouter Fallback.", level="WARN")
+            await log_callback(
+                f"[BRAIN] Primary AI failed ({str(e)[:50]})... Attempting OpenRouter Fallback.",
+                level="WARN",
+            )
             text = await ai_client._call_openrouter(prompt) if ai_client else None
             if not text:
                 raise e
@@ -262,25 +266,41 @@ Respond in JSON format:
                     "estimated_probability": probability,
                 }
             except json.JSONDecodeError as je:
-                await log_callback(f"JSON parse error for {ticker}. Response: {text[:200]}", level="ERROR")
+                await log_callback(
+                    f"JSON parse error for {ticker}. Response: {text[:200]}", level="ERROR"
+                )
                 await log_error_callback(
                     code="INTELLIGENCE_PARSE_ERROR",
                     message=f"JSON parsing failed for {ticker}",
                     severity=ErrorSeverity.HIGH,
-                    context={"ticker": ticker, "error": str(je)[:100], "response_preview": text[:200]},
-                    exception=je
+                    context={
+                        "ticker": ticker,
+                        "error": str(je)[:100],
+                        "response_preview": text[:200],
+                    },
+                    exception=je,
                 )
-                return {"confidence": 0.0, "reasoning": f"JSON parse error - trade rejected: {str(je)[:50]}", "estimated_probability": None}
+                return {
+                    "confidence": 0.0,
+                    "reasoning": f"JSON parse error - trade rejected: {str(je)[:50]}",
+                    "estimated_probability": None,
+                }
 
         # No JSON found at all
-        await log_callback(f"No JSON found in AI response for {ticker}. Response: {text[:200]}", level="ERROR")
+        await log_callback(
+            f"No JSON found in AI response for {ticker}. Response: {text[:200]}", level="ERROR"
+        )
         await log_error_callback(
             code="INTELLIGENCE_PARSE_ERROR",
             message="No JSON found in AI response",
             severity=ErrorSeverity.HIGH,
-            context={"ticker": ticker, "response_preview": text[:200]}
+            context={"ticker": ticker, "response_preview": text[:200]},
         )
-        return {"confidence": 0.0, "reasoning": "Invalid AI response format - trade rejected", "estimated_probability": None}
+        return {
+            "confidence": 0.0,
+            "reasoning": "Invalid AI response format - trade rejected",
+            "estimated_probability": None,
+        }
 
     except json.JSONDecodeError as e:
         await log_callback(f"JSON decode error for {ticker}: {str(e)[:100]}", level="ERROR")
@@ -289,9 +309,13 @@ Respond in JSON format:
             message=f"JSON parsing failed for {ticker}",
             severity=ErrorSeverity.HIGH,
             context={"ticker": ticker, "error": str(e)[:100]},
-            exception=e
+            exception=e,
         )
-        return {"confidence": 0.0, "reasoning": f"JSON parse error - trade rejected: {str(e)[:50]}", "estimated_probability": None}
+        return {
+            "confidence": 0.0,
+            "reasoning": f"JSON parse error - trade rejected: {str(e)[:50]}",
+            "estimated_probability": None,
+        }
 
     except AttributeError as e:
         await log_error_callback(
@@ -299,9 +323,13 @@ Respond in JSON format:
             message="AI response format error",
             severity=ErrorSeverity.HIGH,
             context={"ticker": ticker, "error": str(e)[:100]},
-            exception=e
+            exception=e,
         )
-        return {"confidence": 0.0, "reasoning": f"Invalid AI response format - trade rejected: {str(e)[:50]}", "estimated_probability": None}
+        return {
+            "confidence": 0.0,
+            "reasoning": f"Invalid AI response format - trade rejected: {str(e)[:50]}",
+            "estimated_probability": None,
+        }
 
     except ConnectionError as e:
         await log_error_callback(
@@ -309,10 +337,14 @@ Respond in JSON format:
             message="AI API connection failed",
             severity=ErrorSeverity.HIGH,
             context={"ticker": ticker, "error": str(e)[:100]},
-            exception=e
+            exception=e,
         )
         await asyncio.sleep(0.5)
-        return {"confidence": 0.0, "reasoning": "AI service unavailable - trade rejected", "estimated_probability": None}
+        return {
+            "confidence": 0.0,
+            "reasoning": "AI service unavailable - trade rejected",
+            "estimated_probability": None,
+        }
 
     except Exception as e:
         error_type = type(e).__name__
@@ -321,10 +353,14 @@ Respond in JSON format:
             message=f"Debate error ({error_type}) for {ticker}",
             severity=ErrorSeverity.HIGH,
             context={"ticker": ticker, "error_type": error_type, "error": str(e)[:100]},
-            exception=e
+            exception=e,
         )
         await asyncio.sleep(0.5)
-        return {"confidence": 0.0, "reasoning": f"Debate failed ({error_type}) - trade rejected", "estimated_probability": None}
+        return {
+            "confidence": 0.0,
+            "reasoning": f"Debate failed ({error_type}) - trade rejected",
+            "estimated_probability": None,
+        }
 
 
 async def run_debate_ensemble(samples: int = 1, **kwargs) -> dict:
@@ -359,8 +395,7 @@ async def run_debate_ensemble(samples: int = 1, **kwargs) -> dict:
     )
 
     usable = [
-        r for r in results
-        if isinstance(r, dict) and r.get("estimated_probability") is not None
+        r for r in results if isinstance(r, dict) and r.get("estimated_probability") is not None
     ]
 
     if not usable:

@@ -6,7 +6,6 @@ from the outside to one that is right, until the money is gone.
 """
 
 import pytest
-
 from core.ledger import calibration, realised_edge, record_decision, record_settlement
 
 
@@ -21,8 +20,9 @@ class TestRecording:
 
     def test_vetoes_are_recorded_too(self):
         """A veto is a prediction. A bot that vetoes its winners is worth catching."""
-        record_decision("KXC", 0.50, "VETOED", estimated_probability=0.52,
-                        veto_reason="edge below minimum")
+        record_decision(
+            "KXC", 0.50, "VETOED", estimated_probability=0.52, veto_reason="edge below minimum"
+        )
         record_settlement("KXC", settled_yes=True)
         assert calibration()[0]["n"] == 1
 
@@ -48,7 +48,7 @@ class TestCalibration:
             record_decision(f"C{i}", 0.5, "APPROVED", estimated_probability=0.80)
             record_settlement(f"C{i}", settled_yes=i < 80)  # exactly 80%
 
-        bucket = [b for b in calibration() if b["n"] == 100][0]
+        bucket = next(b for b in calibration() if b["n"] == 100)
         assert bucket["predicted"] == pytest.approx(0.80)
         assert bucket["actual"] == pytest.approx(0.80)
         assert abs(bucket["gap"]) < 0.01
@@ -59,7 +59,7 @@ class TestCalibration:
             record_decision(f"O{i}", 0.5, "APPROVED", estimated_probability=0.90)
             record_settlement(f"O{i}", settled_yes=i < 50)  # claims 90%, delivers 50%
 
-        bucket = [b for b in calibration() if b["n"] == 100][0]
+        bucket = next(b for b in calibration() if b["n"] == 100)
         assert bucket["gap"] < -0.3, "a 40-point miss was not surfaced"
 
 
