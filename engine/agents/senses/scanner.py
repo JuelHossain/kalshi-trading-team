@@ -3,6 +3,7 @@ Market Scanning Logic for Senses Agent
 Handles Kalshi market fetching, filtering, and stock management.
 """
 import re
+from datetime import UTC, datetime, timedelta
 
 from core.error_dispatcher import ErrorSeverity
 from core.flow_control import check_execution_queue_limit
@@ -11,16 +12,66 @@ from core.flow_control import check_execution_queue_limit
 TICKER_DATE_PATTERN = re.compile(r"(\d{2}[A-Z]{3}\d{2})")
 
 
+# Kalshi lists enormous numbers of multi-variate "cross category" combo
+# shards. They carry no volume, no quotes and machine-generated titles, and
+# they dominate the market listing -- 8,000 consecutive markets during
+# investigation were all shards. Excluded by prefix so they never consume a
+# page of results.
+MVE_PREFIX = "KXMVE"
+
+MIN_VOLUME = 200
+MAX_SPREAD_CENTS = 8
+MAX_DAYS_TO_CLOSE = 10
+
+
+def _money(value) -> float:
+    """Kalshi returns prices and volumes as decimal strings, not numbers."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def market_probability(market: dict) -> float | None:
+    """The market's implied probability of YES, or None if unquoted.
+
+    Prices arrive as *_dollars strings, so they are already 0-1. The old
+    code read a "yes_price" key that no longer exists, so every market
+    silently defaulted to 0.50 and the Brain scored a phantom price.
+    """
+    bid = _money(market.get("yes_bid_dollars"))
+    ask = _money(market.get("yes_ask_dollars"))
+    if 0 < bid < 1 and 0 < ask < 1:
+        return (bid + ask) / 2
+    last = _money(market.get("last_price_dollars"))
+    return last if 0 < last < 1 else None
+
+
+def is_tradeable(market: dict) -> bool:
+    """Reject markets whose price carries no information.
+
+    A zero-volume market with no quotes has no opinion to disagree with, so
+    analysing it burns an AI call to compare an estimate against nothing.
+    """
+    if str(market.get("ticker", "")).startswith(MVE_PREFIX):
+        return False
+
+    bid = _money(market.get("yes_bid_dollars"))
+    ask = _money(market.get("yes_ask_dollars"))
+    if not (0 < bid < 1 and 0 < ask < 1):
+        return False
+    # Compare in whole cents. Kalshi quotes in cents, and doing this in
+    # floats rejects the exact boundary: (0.33 - 0.25) * 100 evaluates to
+    # 8.000000000000002, so an 8c spread failed an "at most 8c" rule.
+    if round(ask * 100) - round(bid * 100) > MAX_SPREAD_CENTS:
+        return False
+
+    return _money(market.get("volume_fp")) >= MIN_VOLUME
+
+
 def is_today_market(market: dict) -> bool:
-    """Check if market expires today (based on title or expiration time)"""
-    title = market.get("title", "").lower()
-    ticker = market.get("ticker", "")
-
-    # Check ticker for today's date (e.g., 26JAN30 in KX...-26JAN30-...)
-    if TICKER_DATE_PATTERN.search(ticker):
-        return True
-
-    return True  # Default to true if we can't determine
+    """Retained for compatibility; real selection is is_tradeable."""
+    return is_tradeable(market)
 
 
 async def fetch_kalshi_markets(kalshi_client, log_callback) -> list[dict]:
@@ -30,8 +81,14 @@ async def fetch_kalshi_markets(kalshi_client, log_callback) -> list[dict]:
         return []
 
     try:
-        # Request more markets to have better selection (limit=100)
-        markets = await kalshi_client.get_active_markets(limit=100)
+        # Bound by close time server-side, otherwise the response is all
+        # combo shards and nothing tradeable is ever reached.
+        now = datetime.now(UTC)
+        markets = await kalshi_client.get_active_markets(
+            limit=1000,
+            min_close_ts=int(now.timestamp()),
+            max_close_ts=int((now + timedelta(days=MAX_DAYS_TO_CLOSE)).timestamp()),
+        )
 
         if markets is None:
             await log_callback(
@@ -47,12 +104,16 @@ async def fetch_kalshi_markets(kalshi_client, log_callback) -> list[dict]:
             )
             return []
 
-        # Filter to today's markets only
-        today_markets = [m for m in markets if is_today_market(m)]
+        tradeable = [m for m in markets if is_tradeable(m)]
+        tradeable.sort(key=lambda m: _money(m.get("volume_fp")), reverse=True)
 
-        await log_callback(f"Filtered to {len(today_markets)} today's markets from {len(markets)} total", level="INFO")
+        await log_callback(
+            f"Filtered to {len(tradeable)} tradeable markets from {len(markets)} "
+            f"fetched (volume >= {MIN_VOLUME}, spread <= {MAX_SPREAD_CENTS}c)",
+            level="INFO",
+        )
 
-        return today_markets
+        return tradeable
 
     except Exception as e:
         await log_callback(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
@@ -82,8 +143,11 @@ async def queue_from_stock(
     for market in to_queue:
         # Convert market dict to opportunity format
         ticker = market.get("ticker", "")
-        kalshi_price = market.get("yes_price", 50) / 100
-        volume = market.get("volume", 0)
+        kalshi_price = market_probability(market)
+        if kalshi_price is None:
+            await log_callback(f"Skipping unquoted market {ticker}", level="WARN")
+            continue
+        volume = int(_money(market.get("volume_fp")))
         title = market.get("title", ticker)
 
         # Fetch context

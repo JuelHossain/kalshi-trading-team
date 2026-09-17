@@ -157,9 +157,25 @@ class KalshiClient:
 
         raise RuntimeError(f"Request failed after {retries} retries: {method} {path}")
 
-    async def get_active_markets(self, limit: int = 100, status: str = "open") -> list[dict]:
+    async def get_active_markets(
+        self,
+        limit: int = 100,
+        status: str = "open",
+        min_close_ts: int | None = None,
+        max_close_ts: int | None = None,
+    ) -> list[dict]:
+        """Fetch markets, optionally bounded by close time.
+
+        The close window matters more than it looks: without it the response
+        is almost entirely KXMVE combo shards, and real markets are never
+        reached no matter how many pages are read.
+        """
         path = "/markets"
         params = {"limit": limit, "status": status}
+        if min_close_ts is not None:
+            params["min_close_ts"] = min_close_ts
+        if max_close_ts is not None:
+            params["max_close_ts"] = max_close_ts
         res = await self.request("GET", path, params=params)
         if res and "markets" in res:
             return res["markets"]

@@ -7,8 +7,11 @@ import asyncio
 
 async def generate_with_fallback(client, ai_client, prompt: str, log_callback) -> str | None:
     """Try generating content with fallback models."""
-    # Priority: 3.0 Pro -> 1.5 Flash
-    models = ["gemini-3-pro-preview", "gemini-1.5-flash"]
+    # Both previous ids 404. Model names rot quickly, so the *-latest alias
+    # sits last as a floor that follows Google's current release.
+    from core.ai_utils import get_default_models
+
+    models = get_default_models()
 
     for model in models:
         try:
