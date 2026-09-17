@@ -41,7 +41,6 @@ def hand_agent(mock_bus, mock_vault):
         agent_id=4,
         bus=mock_bus,
         vault=mock_vault,
-        brain_agent=None,
         kalshi_client=None,  # tests that need one attach a mock explicitly
         synapse=None
     )
