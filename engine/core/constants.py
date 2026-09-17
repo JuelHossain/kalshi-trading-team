@@ -7,6 +7,8 @@ Eliminates duplication across main.py, gateway.py, and other modules.
 # AGENT IDENTIFIERS
 # ==============================================================================
 
+from core.shared_utils import get_env_float
+
 AGENT_ID_SOUL = 1
 AGENT_ID_SENSES = 2
 AGENT_ID_BRAIN = 3
@@ -89,7 +91,11 @@ BRAIN_CONFIDENCE_THRESHOLD = 0.85  # 85% minimum AI confidence in its estimate
 # outcome is p(1-p), whose maximum is exactly the 0.25 the veto tested against.
 # Edge is the quantity that actually decides whether a trade is worth taking,
 # and a floor on it keeps the engine out of thin edges that the spread eats.
-BRAIN_MIN_EDGE = 0.05  # 5c of expected profit per $1 contract
+# Overridable so the execution path can be exercised on demand. With the
+# floor at its default the Brain vetoes nearly everything -- correct, but it
+# means an untested order path can sit behind the veto indefinitely looking
+# fine. Lower it in paper mode to prove the Hand actually fills.
+BRAIN_MIN_EDGE = get_env_float("BRAIN_MIN_EDGE", 0.05)
 
 # How many independent estimates to draw per market. One opinion has no
 # uncertainty attached to it; several do. Set to 1 to disable sampling and pay

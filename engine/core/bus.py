@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 from collections import deque
 from collections.abc import Callable
 from datetime import datetime
@@ -33,6 +34,14 @@ def mask_sensitives(data: Any) -> Any:
     return data
 
 
+# Topics whose dispatch is in progress somewhere up the current task tree.
+# A frozenset, replaced rather than mutated: asyncio copies the Context into
+# each gathered task, and a shared mutable set would leak across siblings.
+_dispatching: contextvars.ContextVar[frozenset[str]] = contextvars.ContextVar(
+    "eventbus_dispatching", default=frozenset()
+)
+
+
 class EventBus:
     """
     Asynchronous JSON Message Bus.
@@ -43,6 +52,9 @@ class EventBus:
         self.subscribers: dict[str, list[Callable[[Message], Any]]] = {}
         self.history: deque[Message] = deque(maxlen=1000)  # Short-term memory with auto-trim
         self._lock = asyncio.Lock()
+        # Re-entrant publishes refused. Non-zero means a subscriber is
+        # publishing the topic it handles; see publish().
+        self.reentrant_drops = 0
 
     async def subscribe(self, topic: str, callback: Callable[[Message], Any]):
         async with self._lock:
@@ -63,17 +75,44 @@ class EventBus:
             log_error(f"Failed to validate message for {topic}: {e}", AgentType.SOUL)
             return
 
+        # Refuse to re-enter a topic from inside its own dispatch.
+        #
+        # publish awaits every subscriber. If a subscriber publishes the same
+        # topic, this call cannot complete until that nested call completes,
+        # which cannot complete until *its* nested call does. Each level runs
+        # as a fresh gathered task, so the recursion limit never trips and no
+        # error is raised: the publisher simply never returns. The Gateway
+        # did exactly this for three topics, and it froze the Brain's queue
+        # loop with the engine reporting healthy.
+        #
+        # Dropping the nested publish and saying so is the only safe answer.
+        # The outer dispatch already delivers this event to every subscriber.
+        active = _dispatching.get()
+        if topic in active:
+            self.reentrant_drops += 1
+            log_error(
+                f"Dropped re-entrant publish of {topic} from {sender}: a "
+                f"subscriber to {topic} is publishing {topic}. That would never "
+                f"return. Fix the subscriber.",
+                AgentType.SOUL,
+            )
+            return
+
         async with self._lock:
             self.history.append(msg)  # Auto-trims when maxlen exceeded
 
         if topic in self.subscribers:
-            # Dispatch to all subscribers in parallel
-            tasks = []
-            for callback in self.subscribers[topic]:
-                tasks.append(self._safe_dispatch(callback, msg))
-
-            if tasks:
-                await asyncio.gather(*tasks)
+            token = _dispatching.set(active | {topic})
+            try:
+                # Dispatch to all subscribers in parallel
+                tasks = [
+                    self._safe_dispatch(callback, msg)
+                    for callback in self.subscribers[topic]
+                ]
+                if tasks:
+                    await asyncio.gather(*tasks)
+            finally:
+                _dispatching.reset(token)
 
     async def _safe_dispatch(self, callback: Callable[[Message], Any], msg: Message):
         """Wrapper to prevent one failing subscriber from crashing the bus."""

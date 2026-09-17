@@ -83,19 +83,26 @@ class GatewayAgent(BaseAgent):
         await self.emit("ERROR", error_event)
 
     async def emit(self, msg_type: str, data: Any):
-        """Helper to print JSON to stdout and publish to bus for SSE streaming."""
-        # Wrap for bus if needed
-        bus_topic = None
-        if msg_type == "VAULT":
-            bus_topic = "VAULT_UPDATE"
-        elif msg_type == "SIMULATION":
-            bus_topic = "SIM_RESULT"
-        elif msg_type == "HEALTH":
-            bus_topic = "SYSTEM_HEALTH"
-        elif msg_type == "STATE":
-            bus_topic = "SYSTEM_STATE"
-        elif msg_type == "ERROR":
-            bus_topic = "SYSTEM_ERROR"
+        """Print JSON to stdout, and publish to the bus only what this agent originates.
+
+        Only VAULT and STATE go back onto the bus. They are produced here, in
+        on_tick, and the HTTP layer subscribes to them.
+
+        SIMULATION, HEALTH and ERROR must not. This agent *receives* them from
+        the bus (SIM_RESULT, SYSTEM_HEALTH, SYSTEM_ERROR) and used to republish
+        each one under the same topic -- which re-invoked this agent's own
+        handler, which republished it again. Because EventBus.publish awaits
+        every subscriber, the original publisher never got its await back.
+        That was the Brain: its very next line after "AI Prob: ..." is a
+        SIM_RESULT publish, and no decision was ever logged after it. The
+        engine reported healthy the whole time.
+
+        The relay-to-bus existed for a Node backend that read this process's
+        stdout. The HTTP server now subscribes to the bus directly, so
+        republishing relayed events is not just looping, it is redundant.
+        """
+        ORIGINATED_HERE = {"VAULT": "VAULT_UPDATE", "STATE": "SYSTEM_STATE"}
+        bus_topic = ORIGINATED_HERE.get(msg_type)
 
         if bus_topic:
             await self.bus.publish(bus_topic, data, self.name)
