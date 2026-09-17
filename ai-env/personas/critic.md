@@ -16,7 +16,7 @@ Focus:
 
 **Files Changed**:
 - `.claude/skills/git-handoff.yaml`
-- `engine/agents/hand.py`
+- `engine/agents/hand/`
 - `engine/tests/test_hand.py`
 - `scripts/handoff.sh`
 
@@ -30,7 +30,7 @@ Review related logic gates in `ai-env/schemas/logic_gates.md`.
 
 **Files Changed**:
 - `.claude/skills/git-handoff.yaml`
-- `engine/agents/hand.py`
+- `engine/agents/hand/`
 - `engine/tests/test_hand.py`
 - `scripts/handoff.sh`
 

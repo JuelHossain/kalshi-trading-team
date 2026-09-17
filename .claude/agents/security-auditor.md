@@ -139,7 +139,7 @@ Check vault access code:
 - [ ] No direct database manipulation
 
 #### Hand Agent Audit
-Check `engine/agents/hand.py`:
+Check `engine/agents/hand/`:
 - [ ] Only executes Brain-approved trades
 - [ ] Validates position sizes against risk limits
 - [ ] Proper error handling for failed executions

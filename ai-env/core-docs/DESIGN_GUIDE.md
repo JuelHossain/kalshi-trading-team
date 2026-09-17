@@ -29,7 +29,7 @@ All core logic must reside within one of the 4 Pillars:
 - **Framework**: `asyncio` for all I/O, `aiohttp.web` for API endpoints.
 - **Persistence**: **Synapse** (Persistent SQLite Queue) for inter-agent signals (Opps/Signals).
 - **Communication**: Internal `EventBus` for triggers; Synapse for data handoff.
-- **Diagnostics**: Independent agent taps (e.g., `brain_tap.py`) for isolated testing.
+- **Diagnostics**: `tests/engine/agents/` exercises each agent in isolation.
 - **Safety**: Ragnarok Protocol and Autopilot Control managed via the Executive (Soul).
 
 ## 4. Coding Conventions

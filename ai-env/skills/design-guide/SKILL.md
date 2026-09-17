@@ -22,7 +22,7 @@ This skill outlines the design language, coding conventions, and architectural p
 
 - **Root**: `frontend/`, `engine/`, `shared/`, `walkthroughs/`, `legacy/`
 - **Frontend/src**: `components/` (Shadcn), `store/` (Zustand), `hooks/` (Data)
-- **Engine**: `agents/`, `core/` (Synapse, Bus), `diagnostics/` (Tap scripts)
+- **Engine**: `agents/`, `core/` (Synapse, Bus), `http_api/` (routes)
 - **Shared**: Common Typescript interfaces.
 
 ## Frontend Patterns (React/Vite)
@@ -47,7 +47,7 @@ This skill outlines the design language, coding conventions, and architectural p
 
 ## Development Workflow
 
-- **Diagnostics**: Use `engine/diagnostics/` (e.g., `brain_tap.py`) for isolated tests.
+- **Diagnostics**: `pytest tests/engine/agents/` exercises each agent in isolation.
 - **Walkthroughs**: Record every major logic change in a new walkthrough file.
 - **Safety**: Always build and deploy to verify changes in the UI.
 

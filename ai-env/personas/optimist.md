@@ -15,7 +15,7 @@ Focus:
 **Agent Modified**: `brain`
 
 **Files Changed**:
-- `engine/agents/brain.py`
+- `engine/agents/brain/`
 
 **Impact**: Logic changes may affect decision thresholds and behavior patterns.
 Review related logic gates in `ai-env/schemas/logic_gates.md`.
@@ -28,7 +28,7 @@ Review related logic gates in `ai-env/schemas/logic_gates.md`.
 **Agent Modified**: `senses`
 
 **Files Changed**:
-- `engine/agents/senses.py`
+- `engine/agents/senses/`
 
 **Impact**: Logic changes may affect decision thresholds and behavior patterns.
 Review related logic gates in `ai-env/schemas/logic_gates.md`.
@@ -41,7 +41,7 @@ Review related logic gates in `ai-env/schemas/logic_gates.md`.
 **Agent Modified**: `brain`
 
 **Files Changed**:
-- `engine/agents/brain.py`
+- `engine/agents/brain/`
 
 **Impact**: Logic changes may affect decision thresholds and behavior patterns.
 Review related logic gates in `ai-env/schemas/logic_gates.md`.
@@ -52,7 +52,7 @@ Review related logic gates in `ai-env/schemas/logic_gates.md`.
 **Agent Modified**: `senses`
 
 **Files Changed**:
-- `engine/agents/senses.py`
+- `engine/agents/senses/`
 
 **Impact**: Logic changes may affect decision thresholds and behavior patterns.
 Review related logic gates in `ai-env/schemas/logic_gates.md`.

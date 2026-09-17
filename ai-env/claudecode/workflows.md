@@ -10,7 +10,7 @@ Claude Code uses built-in skills for common operations. See `.claude/skills/`:
 
 ## Workflow: Logic Verification
 **Trigger**: After modifying the Brain or Hand agents.
-1. Run engine unit tests: `pytest tests/unit/`.
+1. Run the engine tests: `pytest tests/ -q`.
 2. Run persona check: `python3 tests/verify_personas.py`.
 3. If successful, record the change in a new `walkthroughs/` document.
 

@@ -41,16 +41,17 @@ Sentient Alpha is an autonomous 2-tier trading system on Kalshi.
 - **Production Distribution**: `npm run build`
 
 ### Python Engine
-- **Setup**: `pip install -r engine/requirements.txt`
+- **Setup**: `pip install -r engine/requirements-dev.txt`
 - **Standard Run**: `python3 engine/main.py`
-- **Isolated Tests**: `python3 engine/diagnostics/brain_tap.py`
+- **Tests**: `pytest tests/ -q` (no network or credentials needed)
+- **Lint**: `ruff check engine tests && black --check engine tests`
 
 ### React Frontend
 - **Setup**: `cd frontend && npm install`
 - **Build Verification**: `npm run build`
 
 ## 🧪 Testing Instructions
-- **Unit Tests**: Run `pytest tests/unit/` before every engine commit.
+- **Tests**: Run `pytest tests/ -q` before every engine commit.
 - **Persona Verification**: Run `python3 tests/verify_personas.py` after Brain logic changes.
 - **Safety**: Ensure `IS_PAPER_TRADING: true` is set in `.env` for all non-monitored tests.
 
@@ -83,13 +84,13 @@ Sentient Alpha is an autonomous 2-tier trading system on Kalshi.
 
 ## 🔄 Maintenance & Evolution
 - **Sync**: After any logic refactor, use the `/sync` workflow to update `.opencode/` and `ai-env/` folders.
-- **Handoff**: Document every major change in `walkthroughs/`.
+- **Handoff**: Long-form design narratives go in `docs/history/walkthroughs/`.
 
 ## 📂 Project Structure
 - `engine/`: Core Python logic and 4 Mega-Agents.
 - `frontend/`: React application.
 - `shared/`: TypeScript type definitions.
-- `walkthroughs/`: Mission history and task handoffs.
+- `docs/`: Architecture, API reference, and history.
 - `ai-env/`: The Universal source of truth for all AI assistants.
   - `skills/`: Centralized tools (Linked via `.opencode/skills`).
   - `workflows/`: Operational runbooks (Linked via `.agent/workflows`).

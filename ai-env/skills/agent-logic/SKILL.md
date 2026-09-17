@@ -23,23 +23,23 @@ Agents should load these personas when generating prompts for the Brain's Gemini
 ## Evolution Context
 ### Evolution Entry [2026-01-29 20:34]
 - **Trigger**: Code changes detected
-- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Files**: `engine/agents/base.py`, `engine/agents/brain/`, `engine/agents/gateway.py`
 - **Additional**: 2 more files
 
 
 ### Evolution Entry [2026-01-29 20:34]
 - **Trigger**: Code changes detected
-- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Files**: `engine/agents/base.py`, `engine/agents/brain/`, `engine/agents/gateway.py`
 - **Additional**: 2 more files
 
 
 ### Evolution Entry [2026-01-29 20:34]
 - **Trigger**: Code changes detected
-- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Files**: `engine/agents/base.py`, `engine/agents/brain/`, `engine/agents/gateway.py`
 - **Additional**: 2 more files
 
 
 ### Evolution Entry [2026-01-29 20:34]
 - **Trigger**: Code changes detected
-- **Files**: `engine/agents/base.py`, `engine/agents/brain.py`, `engine/agents/gateway.py`
+- **Files**: `engine/agents/base.py`, `engine/agents/brain/`, `engine/agents/gateway.py`
 - **Additional**: 2 more files

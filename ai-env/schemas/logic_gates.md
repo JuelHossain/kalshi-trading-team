@@ -28,6 +28,6 @@ A trade is **VETOED** if:
 Thresholds can only be lowered if the **Historian Agent** provides a PnL analysis showing that higher variance trades have outperformed the 0.25 cap over a 30-day window.---
 
 *Last schema evolution: 2026-01-29 20:34*
-*Triggered by changes in: `engine/agents/brain.py`, `engine/agents/hand.py`, `engine/core/vault.py`*
-*Triggered by changes in: `engine/agents/brain.py`, `engine/agents/hand.py`, `engine/core/vault.py`*
-*Triggered by changes in: `engine/agents/brain.py`, `engine/agents/hand.py`, `engine/core/vault.py`*
+*Triggered by changes in: `engine/agents/brain/`, `engine/agents/hand/`, `engine/core/vault.py`*
+*Triggered by changes in: `engine/agents/brain/`, `engine/agents/hand/`, `engine/core/vault.py`*
+*Triggered by changes in: `engine/agents/brain/`, `engine/agents/hand/`, `engine/core/vault.py`*

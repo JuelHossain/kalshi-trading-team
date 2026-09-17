@@ -26,7 +26,7 @@ This skill enforces the Safety pillar of the Sentient Alpha constitution. It pri
 - **Safety**: Hard floor check at $255 to prevent total loss.
 
 ### Isolated Testing
-- **Diagnostics**: Use `engine/diagnostics/` tools (e.g., `brain_tap.py`) to test agent logic without firing live signals.
+- **Diagnostics**: `pytest tests/engine/agents/` tests agent logic without firing live signals.
 - **Simulation**: Monte Carlo results must have variance < 25%.
 
 ## Implementation

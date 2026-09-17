@@ -1,246 +1,54 @@
-# API Documentation
+# HTTP API
 
-Welcome to the Kalshi Trading Team API documentation.
+The engine serves an aiohttp application on port 3002. Every route below is
+also mounted under `/api/` (for example `/api/trigger`) so a dashboard can
+proxy a single prefix. All bodies are JSON.
 
-## Overview
+## Control
 
-This system exposes a RESTful API for controlling and monitoring the automated trading agents. The API is built using FastAPI and provides comprehensive endpoints for all system operations.
+| Method | Route | What it does |
+|---|---|---|
+| `POST` | `/trigger` | Start one cycle. Body `{"isPaperTrading": true}`. Refused if a cycle is running or the engine is halted. |
+| `POST` | `/cancel` | Cancel the running cycle and release reservations. |
+| `POST` | `/autopilot/start` | Let Soul start a new cycle after each one completes. Body as `/trigger`. |
+| `POST` | `/autopilot/stop` | Stop after the current cycle. |
+| `GET` | `/autopilot/status` | Whether autopilot is on. |
 
-## Base URL
+## Safety
 
-```
-http://localhost:8000/api
-```
+| Method | Route | What it does |
+|---|---|---|
+| `POST` | `/kill-switch` | Halt: no cycle will be authorised until deactivated. |
+| `POST` | `/deactivate-kill-switch` | Lift the manual kill switch. |
+| `POST` | `/reset` | Return the engine to a runnable state: clears the kill switch and processing flag, drains the error box, lifts a Soul lockdown. Does not stop the engine; that is what the kill switch is for. |
+| `POST` | `/ragnarok` | Cancel every open order and flatten positions. |
 
-## Authentication
+## Observability
 
-All API endpoints require authentication using Bearer tokens. Include the token in the Authorization header:
+| Method | Route | What it does |
+|---|---|---|
+| `GET` | `/health` | `{"status", "agents", "cycle", "balance"}`. Note that "healthy" means the process is up, not that a cycle can run. |
+| `GET` | `/env-health` | Which optional services are configured and reachable. |
+| `GET` | `/synapse/queues` | Sizes of the opportunity, execution and error queues. |
+| `GET` | `/pnl` | Balance history. |
+| `GET` | `/pnl/heatmap` | Daily P&L. |
+| `GET` | `/stream` | Server-sent events. Frames are `{"type": ...}` with type `LOG`, `VAULT`, `SIMULATION`, `STATE` or `ERROR`. |
 
-```
-Authorization: Bearer <your-token-here>
-```
+## Auth
 
-### Getting an API Token
+| Method | Route | What it does |
+|---|---|---|
+| `POST` | `/auth/login` | Body `{"mode": "demo"}` or `{"mode": "production", "password": ...}`. Production mode is rate limited to 5 attempts per minute per IP. |
+| `GET` | `/auth/verify` | Current session state. |
+| `POST` | `/auth/logout` | Clear it. |
+| `POST` | `/auth` | Legacy check used by the original dashboard. |
 
-API tokens can be generated through the authentication endpoint or configured in the system settings.
+Routes not in the public list require `Authorization: Bearer <GHOST_API_KEY>`.
+The public list is in `core/auth.py`.
 
-## API Endpoints
+## Paper vs live
 
-### Agent Management
-
-#### List All Agents
-```http
-GET /api/agents
-```
-Returns a list of all active and inactive agents with their current status.
-
-#### Get Agent Status
-```http
-GET /api/agents/{agent_id}
-```
-Retrieves detailed status information for a specific agent.
-
-#### Start Agent
-```http
-POST /api/agents/{agent_id}/start
-```
-Starts a specific agent.
-
-#### Stop Agent
-```http
-POST /api/agents/{agent_id}/stop
-```
-Stops a running agent.
-
-### Market Data
-
-#### Get Market List
-```http
-GET /api/markets
-```
-Retrieves available markets with current pricing.
-
-#### Get Market Details
-```http
-GET /api/markets/{market_id}
-```
-Gets detailed information for a specific market.
-
-#### Get Market History
-```http
-GET /api/markets/{market_id}/history
-```
-Retrieves historical data for a market.
-
-### Trading Operations
-
-#### Place Order
-```http
-POST /api/orders
-Content-Type: application/json
-
-{
-  "market_id": "string",
-  "side": "yes" | "no",
-  "quantity": number,
-  "price": number,
-  "client_order_id": "string"
-}
-```
-
-#### Get Order Status
-```http
-GET /api/orders/{order_id}
-```
-Retrieves the status of a specific order.
-
-#### Cancel Order
-```http
-DELETE /api/orders/{order_id}
-```
-Cancels a pending order.
-
-#### Get Order History
-```http
-GET /api/orders/history
-```
-Retrieves historical order data with optional filtering.
-
-### System Health
-
-#### Health Check
-```http
-GET /api/health
-```
-Returns system health status and component availability.
-
-#### Get System Metrics
-```http
-GET /api/metrics
-```
-Retrieves performance metrics and statistics.
-
-## Response Format
-
-All API responses follow a consistent format:
-
-### Success Response
-```json
-{
-  "success": true,
-  "data": { ... },
-  "message": "Operation completed successfully"
-}
-```
-
-### Error Response
-```json
-{
-  "success": false,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error message",
-    "details": { ... }
-  }
-}
-```
-
-## Error Codes
-
-| Code | Description |
-|------|-------------|
-| `AUTH_FAILED` | Authentication failed |
-| `INVALID_PARAMS` | Invalid request parameters |
-| `AGENT_NOT_FOUND` | Agent does not exist |
-| `MARKET_CLOSED` | Market is not open for trading |
-| `INSUFFICIENT_BALANCE` | Insufficient funds for order |
-| `RATE_LIMITED` | Too many requests |
-| `SYSTEM_ERROR` | Internal system error |
-
-## Rate Limiting
-
-API requests are rate-limited to prevent abuse:
-- Standard tier: 100 requests per minute
-- Premium tier: 1000 requests per minute
-
-Rate limit headers are included in all responses:
-```
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1640995200
-```
-
-## WebSocket API
-
-Real-time updates are available through WebSocket connections:
-
-```
-ws://localhost:8000/api/ws
-```
-
-### WebSocket Events
-
-- `market_update`: Market price changes
-- `order_update`: Order status changes
-- `agent_status`: Agent state changes
-- `system_alert`: System notifications
-
-## SDK Examples
-
-### Python
-```python
-import requests
-
-response = requests.get(
-    'http://localhost:8000/api/agents',
-    headers={'Authorization': 'Bearer YOUR_TOKEN'}
-)
-data = response.json()
-```
-
-### JavaScript
-```javascript
-fetch('http://localhost:8000/api/agents', {
-  headers: {
-    'Authorization': 'Bearer YOUR_TOKEN'
-  }
-})
-.then(res => res.json())
-.then(data => console.log(data));
-```
-
-### curl
-```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:8000/api/agents
-```
-
-## Testing
-
-Use the provided Postman collection or OpenAPI specification for API testing:
-- OpenAPI Spec: `/api/openapi.json`
-- Postman Collection: `/docs/postman/`
-
-## Versioning
-
-The API is versioned using URL paths. Current version: `v1`
-
-Include the version in your requests:
-```
-http://localhost:8000/api/v1/agents
-```
-
-## Changelog
-
-### v1.0.0 (2025-01-31)
-- Initial API release
-- Agent management endpoints
-- Market data endpoints
-- Trading operations
-- WebSocket support
-
----
-
-For detailed endpoint specifications with request/response schemas, see the OpenAPI specification.
-
-Last updated: 2025-01-31
+The request body's `isPaperTrading` is honoured *unless* the environment
+sets `IS_PAPER_TRADING=true`, which pins every cycle to paper on the server
+regardless of what the client asks. In paper mode `place_order` returns a
+simulated fill with an id beginning `PAPER-` and Kalshi is never contacted.

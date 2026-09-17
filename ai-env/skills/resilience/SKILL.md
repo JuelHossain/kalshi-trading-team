@@ -26,7 +26,7 @@ This skill enforces the Resilience pillar, ensuring robust operation and seamles
 
 ### Process Management
 - **PM2**: Only two primary services (Frontend and Engine) via `ecosystem.config.cjs`.
-- **Monitoring**: Use `brain_tap.py` for health diagnostics.
+- **Monitoring**: `GET /health` and `GET /synapse/queues` on the running engine.
 - **Standard**: All services must be managed and monitored via PM2.
 
 ## Implementation

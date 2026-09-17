@@ -17,10 +17,10 @@ python3 ai-env/skills/market-intel/scripts/inspect_signals.py
 This workflow depends on:
 
 - `engine/agents/base.py`
-- `engine/agents/brain.py`
+- `engine/agents/brain/`
 - `engine/agents/gateway.py`
-- `engine/agents/hand.py`
-- `engine/agents/senses.py`
+- `engine/agents/hand/`
+- `engine/agents/senses/`
 - *and 1 more files*
 
 ---

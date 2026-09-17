@@ -3,7 +3,7 @@
 ## Workflow: Persona Tuning
 **Trigger**: Need to refine AI decision bias.
 1. Edit target persona in `ai-env/personas/`.
-2. Perform a "Brain Tap" to see the effect: `python3 engine/diagnostics/brain_tap.py`.
+2. Run the Brain tests to see the effect: `pytest tests/engine/agents -q`.
 3. Verify via `tests/verify_personas.py`.
 
 ## Workflow: Signal Audit

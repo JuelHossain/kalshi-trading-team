@@ -91,7 +91,7 @@ credentials or network.
 In a second terminal:
 
 ```bash
-./run_dashboard.sh
+cd frontend && npm run dev   # the React dashboard is being replaced
 ```
 
 Opens on <http://localhost:5173> and proxies `/api` to the engine on `:3002`.
@@ -134,7 +134,7 @@ suite:
 
 The kill switch trips at 85% of principal, computed in `RecursiveVault`.
 
-> `engine/config.py` reads `CONFIDENCE_THRESHOLD` and `MAX_VARIANCE` from the
+> `engine/core/constants.py` reads `CONFIDENCE_THRESHOLD` and `MAX_VARIANCE` from the
 > environment, and nothing imports that module. Setting those variables changes
 > nothing. Do not rely on them.
 
@@ -159,7 +159,6 @@ npx pm2 logs sentient-alpha-engine
 | `KILL SWITCH ACTIVATED` at startup | Balance read as $0. Check credentials and network. |
 | `Supabase not configured; skipping analytics` | Harmless. Supabase is optional. |
 | `Gemini API key not found` | The Brain is inert. Set `GEMINI_API_KEY`. |
-| `No module named 'ddgs'` | Dependencies not installed into the active venv. |
 | Dashboard shows nothing | Engine not running, or not on `:3002`. |
 
 ## Is the bot any good?

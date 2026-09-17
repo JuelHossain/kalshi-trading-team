@@ -22,10 +22,10 @@ npx pm2 status
 This workflow depends on:
 
 - `engine/agents/base.py`
-- `engine/agents/brain.py`
+- `engine/agents/brain/`
 - `engine/agents/gateway.py`
-- `engine/agents/hand.py`
-- `engine/agents/senses.py`
+- `engine/agents/hand/`
+- `engine/agents/senses/`
 - *and 7 more files*
 
 ---
