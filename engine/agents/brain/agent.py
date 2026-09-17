@@ -20,6 +20,7 @@ from core.constants import (
     BRAIN_MIN_EDGE,
 )
 from core.db import log_to_db
+from core.shared_utils import fire_and_forget
 from core.ledger import record_decision
 from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
 
@@ -93,6 +94,28 @@ class BrainAgent(BaseAgent):
 
         # Start the continuous monitoring loop
         self._monitoring_task = asyncio.create_task(self.monitor_queue())
+        self._monitoring_task.add_done_callback(self._on_monitor_exit)
+
+    def _on_monitor_exit(self, task: asyncio.Task) -> None:
+        """Report a monitor loop that stopped, instead of losing it.
+
+        The loop is the only thing draining the opportunity queue. When it
+        died the queue simply stopped moving: no traceback, no log line, and
+        nine analysed-nothing opportunities left sitting in SQLite while the
+        engine reported healthy. asyncio stores an unretrieved task
+        exception and says nothing, so nobody saw it.
+        """
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is None:
+            fire_and_forget(self.log("Brain monitor loop exited cleanly.", level="WARN"))
+            return
+        fire_and_forget(self.log(
+            f"Brain monitor loop DIED: {type(error).__name__}: {str(error)[:200]}. "
+            f"The opportunity queue will not drain until the engine restarts.",
+            level="ERROR",
+        ))
 
     async def on_system_control(self, message):
         """Handle stop signals immediately"""
@@ -110,7 +133,10 @@ class BrainAgent(BaseAgent):
         """CONTINUOUS MONITORING LOOP - delegates to monitor module"""
         await monitor_queue(
             brain_agent=self,
-            stop_requested=self.stop_requested,
+            # Passed as a callable, not a bool. A snapshot is read once at
+            # task creation, so the loop could never observe a later
+            # STOP_AUTOPILOT and "while not stop_requested" ran forever.
+            stop_requested=lambda: self.stop_requested,
             synapse=self.synapse,
             log_callback=self.log,
             process_callback=self.process_single_item_from_queue

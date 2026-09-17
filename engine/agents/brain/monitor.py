@@ -9,9 +9,14 @@ from core.flow_control import check_execution_queue_limit, should_restock
 from core.shared_utils import fire_and_forget
 
 
+def _should_stop(stop_requested) -> bool:
+    """Accept either a callable or a plain bool, for older call sites."""
+    return bool(stop_requested() if callable(stop_requested) else stop_requested)
+
+
 async def monitor_queue(
     brain_agent,
-    stop_requested: bool,
+    stop_requested,
     synapse,
     log_callback,
     process_callback
@@ -22,14 +27,16 @@ async def monitor_queue(
 
     Args:
         brain_agent: BrainAgent instance
-        stop_requested: Flag to stop monitoring
+        stop_requested: Callable returning True when the loop should stop.
+            Must stay a callable: a bool is evaluated once when the task is
+            created, so a later stop signal is never seen.
         synapse: Synapse instance
         log_callback: Async function for logging
         process_callback: Async function to process single item
     """
     await log_callback("Starting continuous queue monitoring loop...", level="DEBUG")
 
-    while not stop_requested:
+    while not _should_stop(stop_requested):
         try:
             # Check if Synapse exists
             if not synapse:
@@ -54,7 +61,7 @@ async def monitor_queue(
             # Process ALL opportunities in queue until empty
             await log_callback(f"Found {queue_size} opportunities. Processing batch...", level="INFO")
 
-            while queue_size > 0 and not stop_requested:
+            while queue_size > 0 and not _should_stop(stop_requested):
                 # Check execution queue limit before each item
                 is_at_limit, exec_size = await check_execution_queue_limit(synapse)
                 if is_at_limit:
