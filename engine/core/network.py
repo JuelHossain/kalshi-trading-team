@@ -157,6 +157,35 @@ class KalshiClient:
 
         raise RuntimeError(f"Request failed after {retries} retries: {method} {path}")
 
+    async def get_markets_page(
+        self,
+        limit: int = 500,
+        status: str = "open",
+        min_close_ts: int | None = None,
+        max_close_ts: int | None = None,
+        cursor: str | None = None,
+    ) -> tuple[list[dict], str | None]:
+        """Fetch one page of markets and the cursor for the next.
+
+        Exposed per-page so a caller filtering for tradeable markets can
+        stop as soon as it has enough, rather than pulling thousands it will
+        discard. The listing is dominated by KXMVE combo shards, so the
+        first page inside a close window can contain nothing usable.
+        """
+        params: dict = {"limit": limit, "status": status}
+        if min_close_ts is not None:
+            params["min_close_ts"] = min_close_ts
+        if max_close_ts is not None:
+            params["max_close_ts"] = max_close_ts
+        if cursor:
+            params["cursor"] = cursor
+
+        res = await self.request("GET", "/markets", params=params)
+        if not res or "markets" not in res:
+            msg = "Failed to get markets: invalid response format"
+            raise RuntimeError(msg)
+        return res["markets"], res.get("cursor")
+
     async def get_active_markets(
         self,
         limit: int = 100,
@@ -164,22 +193,14 @@ class KalshiClient:
         min_close_ts: int | None = None,
         max_close_ts: int | None = None,
     ) -> list[dict]:
-        """Fetch markets, optionally bounded by close time.
-
-        The close window matters more than it looks: without it the response
-        is almost entirely KXMVE combo shards, and real markets are never
-        reached no matter how many pages are read.
-        """
-        path = "/markets"
-        params = {"limit": limit, "status": status}
-        if min_close_ts is not None:
-            params["min_close_ts"] = min_close_ts
-        if max_close_ts is not None:
-            params["max_close_ts"] = max_close_ts
-        res = await self.request("GET", path, params=params)
-        if res and "markets" in res:
-            return res["markets"]
-        raise RuntimeError(f"Failed to get active markets: invalid response format")
+        """Fetch a single page of markets, optionally bounded by close time."""
+        markets, _ = await self.get_markets_page(
+            limit=limit,
+            status=status,
+            min_close_ts=min_close_ts,
+            max_close_ts=max_close_ts,
+        )
+        return markets
 
     async def get_balance(self) -> int:
         """Fetch current balance. Returns cents."""

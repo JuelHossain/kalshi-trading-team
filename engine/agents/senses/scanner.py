@@ -23,6 +23,17 @@ MIN_VOLUME = 200
 MAX_SPREAD_CENTS = 8
 MAX_DAYS_TO_CLOSE = 10
 
+# Markets requested per page, and the ceiling on pages walked before giving
+# up. Paging exists only because combo shards crowd out real markets; the
+# loop stops the moment the stock buffer is full, so a normal restock reads
+# far fewer than the ceiling.
+MARKET_PAGE_SIZE = 500
+MAX_MARKET_PAGES = 8
+
+# Pages of 1000 to walk. One page inside the close window yielded zero
+# tradeable markets; real ones start appearing several pages in.
+MARKET_PAGES = 6
+
 
 def _money(value) -> float:
     """Kalshi returns prices and volumes as decimal strings, not numbers."""
@@ -74,46 +85,54 @@ def is_today_market(market: dict) -> bool:
     return is_tradeable(market)
 
 
-async def fetch_kalshi_markets(kalshi_client, log_callback) -> list[dict]:
-    """Fetch active markets from Kalshi (requests more for filtering)"""
+async def fetch_kalshi_markets(
+    kalshi_client, log_callback, needed: int = 30
+) -> list[dict]:
+    """Return up to `needed` tradeable markets, best volume first.
+
+    Walks pages only until the stock buffer can be filled. The buffer is
+    then drained a batch at a time across cycles, so one restock covers
+    several cycles and no cycle pulls thousands of markets it will discard.
+    """
     if not kalshi_client:
         await log_callback("ERROR: Kalshi client not initialized.", level="ERROR")
         return []
 
+    now = datetime.now(UTC)
+    min_close = int(now.timestamp())
+    max_close = int((now + timedelta(days=MAX_DAYS_TO_CLOSE)).timestamp())
+
+    tradeable: list[dict] = []
+    seen = 0
+    cursor: str | None = None
+
     try:
-        # Bound by close time server-side, otherwise the response is all
-        # combo shards and nothing tradeable is ever reached.
-        now = datetime.now(UTC)
-        markets = await kalshi_client.get_active_markets(
-            limit=1000,
-            min_close_ts=int(now.timestamp()),
-            max_close_ts=int((now + timedelta(days=MAX_DAYS_TO_CLOSE)).timestamp()),
-        )
-
-        if markets is None:
-            await log_callback(
-                "ERROR: Kalshi API request failed - check network and credentials",
-                level="ERROR",
+        for _ in range(MAX_MARKET_PAGES):
+            page, cursor = await kalshi_client.get_markets_page(
+                limit=MARKET_PAGE_SIZE,
+                min_close_ts=min_close,
+                max_close_ts=max_close,
+                cursor=cursor,
             )
-            return []
+            if not page:
+                break
 
-        if not isinstance(markets, list):
-            await log_callback(
-                f"ERROR: Expected list of markets, got {type(markets).__name__}",
-                level="ERROR",
-            )
-            return []
+            seen += len(page)
+            tradeable.extend(m for m in page if is_tradeable(m))
 
-        tradeable = [m for m in markets if is_tradeable(m)]
+            if len(tradeable) >= needed or not cursor:
+                break
+
         tradeable.sort(key=lambda m: _money(m.get("volume_fp")), reverse=True)
+        selected = tradeable[:needed]
 
         await log_callback(
-            f"Filtered to {len(tradeable)} tradeable markets from {len(markets)} "
-            f"fetched (volume >= {MIN_VOLUME}, spread <= {MAX_SPREAD_CENTS}c)",
+            f"Selected {len(selected)} tradeable markets from {seen} scanned "
+            f"(volume >= {MIN_VOLUME}, spread <= {MAX_SPREAD_CENTS}c, "
+            f"closing within {MAX_DAYS_TO_CLOSE}d)",
             level="INFO",
         )
-
-        return tradeable
+        return selected
 
     except Exception as e:
         await log_callback(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
@@ -195,7 +214,9 @@ async def surveillance_loop(
                 return
 
         # 1. Fetch Kalshi markets
-        markets = await fetch_kalshi_markets(senses_agent.kalshi_client, log_callback)
+        markets = await fetch_kalshi_markets(
+            senses_agent.kalshi_client, log_callback, needed=stock_buffer_size
+        )
 
         if not markets:
             await log_callback("No markets found to scan.", level="WARN")

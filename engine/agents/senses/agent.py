@@ -173,10 +173,14 @@ class SensesAgent(BaseAgent):
         # If stock is low, pull fresh from Kalshi
         if len(self.market_stock) < self.QUEUE_BATCH_SIZE:
             await self.log("Stock buffer low. Fetching fresh markets from Kalshi...")
-            markets = await fetch_kalshi_markets(self.kalshi_client, self.log)
+            # fetch_kalshi_markets already filters, sorts by volume and
+            # truncates. Re-sorting here on "volume" -- a key Kalshi no
+            # longer sends -- scored every market as 0 and undid the order.
+            markets = await fetch_kalshi_markets(
+                self.kalshi_client, self.log, needed=self.STOCK_BUFFER_SIZE
+            )
             if markets:
-                sorted_markets = sorted(markets, key=lambda x: x.get("volume", 0), reverse=True)
-                self.market_stock = sorted_markets[:self.STOCK_BUFFER_SIZE]
+                self.market_stock = markets
                 await self.log(f"Stock buffer refilled with {len(self.market_stock)} markets")
             else:
                 await self.log("Failed to fetch fresh markets. No restock.", level="ERROR")
