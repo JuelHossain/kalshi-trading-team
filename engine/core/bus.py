@@ -1,12 +1,11 @@
 import asyncio
 import contextvars
-from collections import deque
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from core.display import AgentType, log_error
 from pydantic import BaseModel, Field
-from core.display import log_error, AgentType
 
 # Sensitive patterns to mask in logs
 SENSITIVE_KEYS = {"api_key", "secret", "private_key", "password", "token", "signature"}
@@ -18,8 +17,6 @@ class Message(BaseModel):
     sender: str
     timestamp: datetime = Field(default_factory=datetime.now)
 
-    def to_json(self) -> str:
-        return self.model_dump_json()
 
 
 def mask_sensitives(data: Any) -> Any:
@@ -50,17 +47,14 @@ class EventBus:
 
     def __init__(self):
         self.subscribers: dict[str, list[Callable[[Message], Any]]] = {}
-        self.history: deque[Message] = deque(maxlen=1000)  # Short-term memory with auto-trim
-        self._lock = asyncio.Lock()
         # Re-entrant publishes refused. Non-zero means a subscriber is
         # publishing the topic it handles; see publish().
         self.reentrant_drops = 0
 
     async def subscribe(self, topic: str, callback: Callable[[Message], Any]):
-        async with self._lock:
-            if topic not in self.subscribers:
-                self.subscribers[topic] = []
-            self.subscribers[topic].append(callback)
+        if topic not in self.subscribers:
+            self.subscribers[topic] = []
+        self.subscribers[topic].append(callback)
         # We don't print to stdout here to keep logs clean, or we mask it
         # print(f"[BUS] Subscriber added to {topic}")
 
@@ -98,8 +92,6 @@ class EventBus:
             )
             return
 
-        async with self._lock:
-            self.history.append(msg)  # Auto-trims when maxlen exceeded
 
         if topic in self.subscribers:
             token = _dispatching.set(active | {topic})
@@ -124,5 +116,3 @@ class EventBus:
         except Exception as e:
             log_error(f"Callback failed for topic {msg.topic}: {e}", AgentType.SOUL)
 
-    def get_history(self) -> list[Message]:
-        return self.history

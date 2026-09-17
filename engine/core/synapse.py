@@ -5,9 +5,8 @@ import uuid
 from datetime import datetime
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel, Field
-
 from core.shared_utils import retry_sqlite
+from pydantic import BaseModel, Field
 
 # -------------------------------------------------------------------------
 # 1. Type Definitions (Schemas)

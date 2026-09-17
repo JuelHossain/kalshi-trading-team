@@ -5,12 +5,11 @@ import os
 import time
 
 import aiohttp
+from core import trading_mode
+from core.display import AgentType, log_error, log_warning
+from core.lazy import lazy
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-
-from core.display import AgentType, log_warning, log_error, get_display
-from core.lazy import lazy
-from core import trading_mode
 
 
 class KalshiClient:
@@ -208,7 +207,7 @@ class KalshiClient:
         res = await self.request("GET", path)
         if res and "balance" in res:
             return int(res["balance"])
-        raise RuntimeError(f"Failed to get balance: invalid response format")
+        raise RuntimeError("Failed to get balance: invalid response format")
 
     async def get_orderbook(self, ticker: str) -> dict | None:
         path = f"/markets/{ticker}/orderbook"

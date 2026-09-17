@@ -5,13 +5,12 @@ Handles trade validation, order placement, and notifications.
 import os
 
 import aiohttp
+from agents.brain.simulation import kelly_fraction
 from core import trading_mode
 from core.constants import (
     HAND_KELLY_FRACTION,
     HAND_MAX_STAKE_CENTS,
-    HAND_PROFIT_LOCK_THRESHOLD,
 )
-from agents.brain.simulation import kelly_fraction
 
 
 def parse_orderbook(raw, side: str = "yes") -> dict | None:

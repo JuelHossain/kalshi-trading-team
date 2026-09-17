@@ -4,7 +4,7 @@ Safety & Risk Management Core
 import asyncio
 from typing import Any
 
-from core.display import AgentType, log_info, log_warning, log_error, log_critical
+from core.display import AgentType, log_critical, log_error, log_info
 from core.network import kalshi_client
 
 

@@ -5,16 +5,15 @@ Implements API key-based authentication for all trading endpoints.
 
 import os
 import secrets
-from functools import wraps
 
 from aiohttp import web
+from core.display import AgentType, log_error, log_success
 from core.http_utils import (
     auth_response,
     error_response,
     success_response,
     unauthorized_response,
 )
-from core.display import log_info, log_error, log_success, AgentType
 from core.lazy import lazy
 
 # API Path Constants
@@ -92,14 +91,6 @@ class AuthManager:
 
         return middleware_handler
 
-    def require_auth(self, handler):
-        """Decorator to require authentication on a specific handler."""
-        @wraps(handler)
-        async def wrapper(request):
-            if not self.validate_api_key(request):
-                return unauthorized_response()
-            return await handler(request)
-        return wrapper
 
 
 # Global auth manager instance

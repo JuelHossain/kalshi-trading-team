@@ -29,7 +29,6 @@ NO_ESTIMATE = {
 def run_simulation(
     opportunity: dict,
     override_prob: float | None = None,
-    simulation_iterations: int = 0,  # retained for call-site compatibility; unused
 ) -> dict:
     """Evaluate a binary contract exactly.
 
@@ -37,8 +36,6 @@ def run_simulation(
         opportunity: must carry `kalshi_price` as a 0-1 fraction.
         override_prob: the estimated true probability. Falls back to the
             opportunity's `vegas_prob` when not supplied.
-        simulation_iterations: ignored. Kept so existing callers and tests do
-            not break; there is nothing left to iterate.
 
     Returns:
         win_rate, ev, variance and edge. `edge` is the tradeable quantity:

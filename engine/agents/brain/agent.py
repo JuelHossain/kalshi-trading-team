@@ -10,8 +10,7 @@ import uuid
 from typing import Any
 
 from agents.base import BaseAgent
-from core.ai_client import AIClient
-from core.ai_utils import GEMINI_AVAILABLE, get_default_models, initialize_gemini_client
+from core.ai_utils import get_default_models, initialize_gemini_client
 from core.bus import EventBus
 from core.constants import (
     BRAIN_CONFIDENCE_THRESHOLD,
@@ -20,8 +19,8 @@ from core.constants import (
     BRAIN_MIN_EDGE,
 )
 from core.db import log_to_db
-from core.shared_utils import fire_and_forget
 from core.ledger import record_decision
+from core.shared_utils import fire_and_forget
 from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
 
 from .debate import load_personas, run_debate_ensemble
@@ -47,12 +46,10 @@ class BrainAgent(BaseAgent):
 
     def __init__(self, agent_id: int, bus: EventBus, synapse: Synapse = None, error_manager=None):
         super().__init__("BRAIN", agent_id, bus, synapse, error_manager)
-        self.execution_queue: list[dict] = []
         self.trading_instructions = ""
 
         # Flow control flags
         self.stop_requested = False
-        self._is_monitoring = False
         self._monitoring_task = None
         self._dumped_count = 0
         self._last_restock_time = 0
@@ -173,12 +170,6 @@ class BrainAgent(BaseAgent):
                 self._last_restock_time = new_time
         elif result == "APPROVED":
             self._dumped_count = 0
-
-    async def run_intelligence(self, opp_queue: asyncio.Queue, exec_queue: asyncio.Queue):
-        """Process opportunities from shared queue (Engine-driven)"""
-        if not opp_queue.empty():
-            opportunity = await opp_queue.get()
-            await self.process_single_opportunity(opportunity)
 
     async def process_single_opportunity(self, opportunity: dict):
         """Core analysis logic"""
@@ -373,8 +364,6 @@ class BrainAgent(BaseAgent):
             except Exception as e:
                 await self.log(f"Synapse Execution Push Failed: {e}", level="ERROR")
 
-        # 2. Legacy Flow (Keep for Hand compatibility)
-        self.execution_queue.append(target)
         await log_to_db("execution_queue", execution_package)
         await self.bus.publish(
             "EXECUTION_READY",
@@ -386,10 +375,6 @@ class BrainAgent(BaseAgent):
             },
             self.name,
         )
-
-    def pop_execution_target(self) -> dict | None:
-        """Get next target for Hand to execute"""
-        return self.execution_queue.pop(0) if self.execution_queue else None
 
     async def on_tick(self, payload: dict[str, Any]):
         pass  # Brain is event-driven

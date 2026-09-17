@@ -79,7 +79,6 @@ MIN_CYCLE_INTERVAL_SECONDS = 30
 # ==============================================================================
 
 # Senses Agent
-SENSES_MIN_LIQUIDITY = 1000  # $10 minimum liquidity
 SENSES_STOCK_BUFFER_SIZE = 30  # Total markets to pull from Kalshi
 SENSES_QUEUE_BATCH_SIZE = 10   # Markets to queue at once
 

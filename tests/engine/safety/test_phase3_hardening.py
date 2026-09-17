@@ -94,12 +94,10 @@ class TestPhase3Hardening:
         independent copy of the constant looks like. It now checks the values
         agree with core.constants, which is what "centralized" means.
         """
-        import config
         from core.constants import HARD_FLOOR_CENTS
 
         vault = RecursiveVault()
         assert vault.HARD_FLOOR_CENTS == HARD_FLOOR_CENTS
-        assert config.HARD_FLOOR_CENTS == HARD_FLOOR_CENTS
         
         # Check if other agents would see it (integration check)
         # We already grepped for this, so this is a logic check.

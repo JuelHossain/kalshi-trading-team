@@ -27,6 +27,7 @@ from agents.gateway import GatewayAgent
 from agents.hand import HandAgent
 from agents.senses import SensesAgent
 from agents.soul import SoulAgent
+from core import trading_mode
 
 # Core imports
 from core.auth import auth_manager
@@ -40,27 +41,26 @@ from core.constants import (
     MIN_CYCLE_INTERVAL_SECONDS,
 )
 from core.display import (
-    GhostDisplay,
     AgentType,
+    GhostDisplay,
     get_display,
-    show_startup_banner,
-    show_agent_status,
-    update_agent_status,
+    log_critical,
+    log_error,
     log_info,
     log_success,
     log_warning,
-    log_error,
-    log_critical,
+    show_agent_status,
     show_error,
+    show_startup_banner,
+    update_agent_status,
 )
 from core.error_codes import ErrorDomain, ErrorSeverity
-from core.error_manager import ErrorManager, get_error_manager, set_error_manager
+from core.error_manager import ErrorManager, set_error_manager
 from core.logger import get_logger
 from core.network import kalshi_client
 from core.shared_utils import get_env_bool
 from core.synapse import Synapse
 from core.vault import RecursiveVault
-from core import trading_mode
 from http_api.routes import register_all_routes, register_sse_subscriptions
 
 # HTTP imports

@@ -8,7 +8,7 @@ import asyncio
 from typing import Any
 
 from agents.base import BaseAgent
-from core.ai_utils import GEMINI_AVAILABLE, initialize_gemini_client
+from core.ai_utils import initialize_gemini_client
 from core.bus import EventBus
 from core.db import check_connection as check_supabase_connection
 from core.error_dispatcher import ErrorSeverity

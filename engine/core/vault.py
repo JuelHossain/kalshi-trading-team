@@ -1,13 +1,12 @@
 import asyncio
 import os
-from typing import Any
 
 from core.constants import HARD_FLOOR_CENTS
 from core.logger import get_logger
 from core.shared_utils import (
     format_cents_to_dollars,
-    validate_positive_amount,
     validate_amount_not_exceeding,
+    validate_positive_amount,
 )
 
 logger = get_logger("VAULT")

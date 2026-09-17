@@ -15,20 +15,18 @@ Features:
 - No Mock Fallbacks: All errors are real, actionable errors
 """
 import asyncio
-import sys
 import traceback
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Awaitable, Callable, Coroutine
+from typing import Any, Awaitable, Callable
 
+from core.error_codes import ErrorDomain, ErrorSeverity
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-
-from core.error_codes import ErrorDomain, ErrorSeverity
 
 
 class ErrorAction(Enum):
@@ -322,7 +320,7 @@ class ErrorManager:
 
         # Print stack trace if available and severity is HIGH or CRITICAL
         if error.stack_trace and error.severity.value >= ErrorSeverity.HIGH.value:
-            self.console.print(f"\n[gray]Stack trace:[/gray]")
+            self.console.print("\n[gray]Stack trace:[/gray]")
             self.console.print(f"[dim]{error.stack_trace}[/dim]\n")
 
     async def shutdown_engine(self, reason: str) -> None:

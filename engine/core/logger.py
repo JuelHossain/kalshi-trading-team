@@ -15,7 +15,6 @@ import logging
 import os
 import re
 import sys
-from typing import Optional
 
 # Import Rich display system
 try:
@@ -77,7 +76,7 @@ class RichIntegratedLogger:
     def __init__(self, name: str):
         self.name = name
         self._logger = logging.getLogger(name)
-        self._agent: Optional[AgentType] = None
+        self._agent: AgentType | None = None
 
         # Configure standard logger if not already configured
         if not self._logger.handlers:
@@ -134,7 +133,7 @@ class RichIntegratedLogger:
             get_display().error(f"{message} (see traceback)", self._agent)
 
 
-def get_logger(name: str, agent: Optional[AgentType] = None) -> RichIntegratedLogger:
+def get_logger(name: str, agent: AgentType | None = None) -> RichIntegratedLogger:
     """
     Factory to return a configured logger with Rich integration.
 
@@ -156,7 +155,7 @@ logger = get_logger("GHOST")
 
 
 # Convenience functions for quick access
-def log_debug(message: str, agent: Optional[AgentType] = None) -> None:
+def log_debug(message: str, agent: AgentType | None = None) -> None:
     """Log a debug message."""
     if RICH_AVAILABLE:
         get_display().debug(message, agent)
@@ -164,7 +163,7 @@ def log_debug(message: str, agent: Optional[AgentType] = None) -> None:
         logger.debug(message)
 
 
-def log_info(message: str, agent: Optional[AgentType] = None) -> None:
+def log_info(message: str, agent: AgentType | None = None) -> None:
     """Log an info message."""
     if RICH_AVAILABLE:
         get_display().info(message, agent)
@@ -172,7 +171,7 @@ def log_info(message: str, agent: Optional[AgentType] = None) -> None:
         logger.info(message)
 
 
-def log_warning(message: str, agent: Optional[AgentType] = None) -> None:
+def log_warning(message: str, agent: AgentType | None = None) -> None:
     """Log a warning message."""
     if RICH_AVAILABLE:
         get_display().warning(message, agent)
@@ -180,7 +179,7 @@ def log_warning(message: str, agent: Optional[AgentType] = None) -> None:
         logger.warning(message)
 
 
-def log_error(message: str, agent: Optional[AgentType] = None) -> None:
+def log_error(message: str, agent: AgentType | None = None) -> None:
     """Log an error message."""
     if RICH_AVAILABLE:
         get_display().error(message, agent)
@@ -188,7 +187,7 @@ def log_error(message: str, agent: Optional[AgentType] = None) -> None:
         logger.error(message)
 
 
-def log_critical(message: str, agent: Optional[AgentType] = None) -> None:
+def log_critical(message: str, agent: AgentType | None = None) -> None:
     """Log a critical message."""
     if RICH_AVAILABLE:
         get_display().critical(message, agent)
@@ -196,7 +195,7 @@ def log_critical(message: str, agent: Optional[AgentType] = None) -> None:
         logger.critical(message)
 
 
-def log_success(message: str, agent: Optional[AgentType] = None) -> None:
+def log_success(message: str, agent: AgentType | None = None) -> None:
     """Log a success message."""
     if RICH_AVAILABLE:
         get_display().success(message, agent)

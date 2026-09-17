@@ -83,12 +83,6 @@ class TestThePromptIsPriceBlind:
         assert "Will X happen?" in prompt
         assert "by Friday" in prompt
 
-    @pytest.mark.asyncio
-    async def test_news_context_is_still_supplied(self):
-        client = _client(GOOD)
-        await _run(client, {**OPPORTUNITY, "external_context": "Reuters: X is likely"})
-
-        assert "Reuters: X is likely" in client.sent["prompt"]
 
 
 class TestConfidenceScale:

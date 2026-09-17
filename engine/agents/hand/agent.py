@@ -9,22 +9,18 @@ from typing import Any
 from agents.base import BaseAgent
 from core import trading_mode
 from core.bus import EventBus
-from core.ledger import record_fill
 from core.constants import HAND_MAX_STAKE_CENTS, HAND_PROFIT_LOCK_THRESHOLD
-from core.ledger import record_decision
-
-from .exits import average_entry_price_cents, evaluate_exit
+from core.ledger import record_decision, record_fill
 from core.synapse import Synapse
 from core.vault import RecursiveVault
 from core.vault_utils import check_profit_lock_threshold, publish_vault_state
 
-from .execution import (
-    snipe_check as exec_snipe_check,
-    has_open_position as exec_has_open_position,
-    calculate_kelly_stake as exec_calculate_kelly_stake,
-    execute_order as exec_execute_order,
-    send_notification
-)
+from .execution import calculate_kelly_stake as exec_calculate_kelly_stake
+from .execution import execute_order as exec_execute_order
+from .execution import has_open_position as exec_has_open_position
+from .execution import send_notification
+from .execution import snipe_check as exec_snipe_check
+from .exits import average_entry_price_cents, evaluate_exit
 
 
 class HandAgent(BaseAgent):
@@ -38,16 +34,13 @@ class HandAgent(BaseAgent):
         agent_id: int,
         bus: EventBus,
         vault: RecursiveVault,
-        brain_agent=None,
         kalshi_client=None,
         synapse: Synapse = None,
         error_manager=None,
     ):
         super().__init__("HAND", agent_id, bus, synapse, error_manager)
         self.vault = vault
-        self.brain = brain_agent
         self.kalshi_client = kalshi_client
-        self.pending_orders = []
 
     async def setup(self):
         await self.log("Hand online. Precision strike capability ready.")

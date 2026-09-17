@@ -14,41 +14,5 @@ def senses_agent():
     bus.subscribe = AsyncMock()
     with patch.dict(os.environ, {}, clear=True):
         agent = SensesAgent(agent_id=2, bus=bus)
-    # Mock DDGS availability
-    with patch('agents.senses.DDGS_AVAILABLE', True):
-        yield agent
+    yield agent
 
-@pytest.mark.asyncio
-async def test_fetch_market_context_success(senses_agent):
-    """Test context fetching with mocked DDGS.
-
-    Patches ddgs.DDGS, not agents.senses.DDGS: fetch_market_context does a
-    local `from ddgs import DDGS` inside the function body, so it resolves the
-    name from the ddgs module at call time and never sees the package-level
-    alias. The old target patched a name nothing read, so the real search ran
-    (or failed) and returned [].
-    """
-    with patch('ddgs.DDGS') as MockDDGS:
-        mock_ddgs_instance = MockDDGS.return_value
-        mock_ddgs_instance.text.return_value = [
-            {"body": "News Item 1"},
-            {"body": "News Item 2"}
-        ]
-        
-        results = await senses_agent.fetch_market_context("TICKER", "Market Title")
-        
-        assert len(results) == 2
-        assert "News Item 1" in results
-        assert "News Item 2" in results
-
-@pytest.mark.asyncio
-async def test_fetch_market_context_failure(senses_agent):
-    """Test context fetching handling exception"""
-    with patch('ddgs.DDGS') as MockDDGS:
-        mock_ddgs_instance = MockDDGS.return_value
-        mock_ddgs_instance.text.side_effect = Exception("Search failed")
-        
-        results = await senses_agent.fetch_market_context("TICKER", "Market Title")
-        
-        # Should return empty list on error (as per my implementation)
-        assert results == []

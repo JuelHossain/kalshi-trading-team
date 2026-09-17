@@ -3,6 +3,7 @@ Instruction Evolution Logic for Soul Agent
 Self-optimization through AI-generated trading instructions.
 """
 import asyncio
+import functools
 
 
 async def generate_with_fallback(client, ai_client, prompt: str, log_callback) -> str | None:
@@ -17,10 +18,7 @@ async def generate_with_fallback(client, ai_client, prompt: str, log_callback) -
         try:
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: client.models.generate_content(
-                    model=model,
-                    contents=prompt
-                )
+                functools.partial(client.models.generate_content, model=model, contents=prompt),
             )
             if response and response.text:
                 return response.text

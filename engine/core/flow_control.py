@@ -5,6 +5,13 @@ Provides centralized checks to prevent system overload.
 
 from typing import TYPE_CHECKING
 
+from core.constants import (
+    MAX_EXECUTION_QUEUE_SIZE,
+    MAX_OPPORTUNITY_QUEUE_SIZE,
+    RESTOCK_COOLDOWN_SECONDS,
+    RESTOCK_THRESHOLD_VETO_COUNT,
+)
+
 if TYPE_CHECKING:
     from core.synapse import Synapse
 
@@ -13,13 +20,13 @@ if TYPE_CHECKING:
 # FLOW CONTROL CHECKS
 # ==============================================================================
 
-async def check_execution_queue_limit(synapse: "Synapse", limit: int = 10) -> tuple[bool, int]:
+async def check_execution_queue_limit(synapse: "Synapse", limit: int = MAX_EXECUTION_QUEUE_SIZE) -> tuple[bool, int]:
     """
     Check if execution queue is at limit.
 
     Args:
         synapse: The Synapse instance
-        limit: Maximum queue size (default: 10)
+        limit: Maximum queue size (default: MAX_EXECUTION_QUEUE_SIZE)
 
     Returns:
         Tuple of (is_at_limit, current_size)
@@ -33,13 +40,13 @@ async def check_execution_queue_limit(synapse: "Synapse", limit: int = 10) -> tu
     return is_at_limit, current_size
 
 
-async def check_opportunity_queue_limit(synapse: "Synapse", limit: int = 20) -> tuple[bool, int]:
+async def check_opportunity_queue_limit(synapse: "Synapse", limit: int = MAX_OPPORTUNITY_QUEUE_SIZE) -> tuple[bool, int]:
     """
     Check if opportunity queue is at limit.
 
     Args:
         synapse: The Synapse instance
-        limit: Maximum queue size (default: 20)
+        limit: Maximum queue size (default: MAX_OPPORTUNITY_QUEUE_SIZE)
 
     Returns:
         Tuple of (is_at_limit, current_size)
@@ -72,8 +79,8 @@ async def should_restock(
     dumped_count: int,
     last_restock_time: float,
     current_time: float,
-    veto_threshold: int = 5,
-    cooldown_seconds: int = 60
+    veto_threshold: int = RESTOCK_THRESHOLD_VETO_COUNT,
+    cooldown_seconds: int = RESTOCK_COOLDOWN_SECONDS,
 ) -> bool:
     """
     Determine if a restock should be requested from Senses.
@@ -83,8 +90,8 @@ async def should_restock(
         dumped_count: Number of opportunities vetoed since last restock
         last_restock_time: Unix timestamp of last restock
         current_time: Current Unix timestamp
-        veto_threshold: Minimum vetoes before restock (default: 5)
-        cooldown_seconds: Minimum seconds between restocks (default: 60)
+        veto_threshold: Minimum vetoes before restock (default: RESTOCK_THRESHOLD_VETO_COUNT)
+        cooldown_seconds: Minimum seconds between restocks (default: RESTOCK_COOLDOWN_SECONDS)
 
     Returns:
         True if restock should be requested, False otherwise

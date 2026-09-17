@@ -2,15 +2,10 @@
 Market Scanning Logic for Senses Agent
 Handles Kalshi market fetching, filtering, and stock management.
 """
-import re
 from datetime import UTC, datetime, timedelta
 
 from core.error_dispatcher import ErrorSeverity
 from core.flow_control import check_execution_queue_limit
-
-# Compiled regex for ticker date parsing
-TICKER_DATE_PATTERN = re.compile(r"(\d{2}[A-Z]{3}\d{2})")
-
 
 # Kalshi lists enormous numbers of multi-variate "cross category" combo
 # shards. They carry no volume, no quotes and machine-generated titles, and
@@ -29,10 +24,6 @@ MAX_DAYS_TO_CLOSE = 10
 # far fewer than the ceiling.
 MARKET_PAGE_SIZE = 500
 MAX_MARKET_PAGES = 8
-
-# Pages of 1000 to walk. One page inside the close window yielded zero
-# tradeable markets; real ones start appearing several pages in.
-MARKET_PAGES = 6
 
 
 def _money(value) -> float:
@@ -78,11 +69,6 @@ def is_tradeable(market: dict) -> bool:
         return False
 
     return _money(market.get("volume_fp")) >= MIN_VOLUME
-
-
-def is_today_market(market: dict) -> bool:
-    """Retained for compatibility; real selection is is_tradeable."""
-    return is_tradeable(market)
 
 
 async def fetch_kalshi_markets(
@@ -153,8 +139,7 @@ async def queue_from_stock(
     queue_batch_size: int,
     synapse,
     log_callback,
-    fetch_context_callback,
-    queue_opportunity_callback
+    queue_opportunity_callback,
 ) -> int:
     """Queue top markets from stock buffer to Synapse"""
     if not market_stock:
@@ -176,12 +161,6 @@ async def queue_from_stock(
             await log_callback(f"Skipping unquoted market {ticker}", level="WARN")
             continue
         volume = int(_money(market.get("volume_fp")))
-        title = market.get("title", ticker)
-
-        # Fetch context
-        context_snippets = await fetch_context_callback(ticker, title)
-        context_str = "\n".join(context_snippets)
-
         opportunity = {
             "ticker": ticker,
             "kalshi_price": kalshi_price,
@@ -189,7 +168,6 @@ async def queue_from_stock(
             "volume": volume,
             "market_data": market,
             "source": "Volume-Algo",
-            "external_context": context_str
         }
 
         await queue_opportunity_callback(opportunity)
@@ -234,21 +212,16 @@ async def surveillance_loop(
 
         await log_callback(f"Fetched {len(markets)} markets from Kalshi API")
 
-        # 2. Sort by volume and take top markets
-        sorted_markets = sorted(markets, key=lambda x: x.get("volume", 0), reverse=True)
-        top_markets = sorted_markets[:stock_buffer_size]
-
-        # 3. Populate stock buffer
-        senses_agent.market_stock = top_markets
+        # fetch_kalshi_markets already filtered, sorted by volume and truncated.
+        senses_agent.market_stock = markets
         await log_callback(f"Stock buffer populated with {len(senses_agent.market_stock)} markets")
 
         # 4. Queue top batch from stock
-        queued = await queue_from_stock(
+        await queue_from_stock(
             market_stock=senses_agent.market_stock,
             queue_batch_size=queue_batch_size,
             synapse=senses_agent.synapse,
             log_callback=log_callback,
-            fetch_context_callback=senses_agent.fetch_market_context,
             queue_opportunity_callback=senses_agent.queue_opportunity
         )
 

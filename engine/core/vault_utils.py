@@ -2,7 +2,6 @@
 Shared Vault Utilities for Agents
 Centralizes vault state broadcasting and common vault operations.
 """
-from typing import Any
 
 from core.bus import EventBus
 from core.vault import RecursiveVault

@@ -18,12 +18,7 @@ import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from core.error_codes import (
-    ErrorCodes,
-    ErrorDomain,
-    ErrorSeverity,
-    Colors
-)
+from core.error_codes import Colors, ErrorCodes, ErrorDomain, ErrorSeverity
 
 
 @dataclass

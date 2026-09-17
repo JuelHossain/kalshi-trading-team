@@ -147,7 +147,7 @@ def format_gateway_log_event(
     Returns:
         Formatted event dict for SSE
     """
-    sender = payload.get("agent_name")
+    payload.get("agent_name")
     agent_id = payload.get("agent_id", 0)
     phase_id = agent_to_phase.get(agent_id, 0)
 

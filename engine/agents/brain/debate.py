@@ -7,7 +7,6 @@ import json
 import os
 from typing import Any
 
-from core.ai_utils import GEMINI_AVAILABLE
 from core.error_dispatcher import ErrorSeverity
 from core.logger import get_logger
 
@@ -179,18 +178,11 @@ async def run_debate(
     # arithmetic. EV and sizing are computed in Python from the returned
     # probability and the real book price.
 
-    has_odds = opportunity.get("vegas_prob") is not None
-    odds_context = f"Independent market-implied probability: {opportunity['vegas_prob']*100:.1f}%" if has_odds else "No external odds available."
-
-    fetched_news = opportunity.get("external_context", "")
-    full_context = f"{odds_context}\nNEWS/CONTEXT:\n{fetched_news}" if fetched_news else f"{odds_context}\n(No news found)"
-
     prompt = f"""You are a forecasting committee estimating the probability of a real-world event.
 
 EVENT: {ticker}
 TITLE: {title}
 SUBTITLE: {subtitle}
-Context: {full_context}
 
 {f"Today's Trading Instructions: {trading_instructions[:500]}" if trading_instructions else ""}
 
@@ -204,7 +196,6 @@ you should not guess at one -- estimate the event on its merits alone.
 1. OPTIMIST: argue why the event is more likely than it first appears.
 2. CRITIC: argue why it is less likely than it first appears.
 3. JUDGE: weigh both and commit to a single probability.
-4. Reference the NEWS/CONTEXT explicitly if any was provided.
 
 PERSONAS:
 {personas['optimist']}

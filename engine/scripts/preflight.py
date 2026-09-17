@@ -21,7 +21,7 @@ sys.path.insert(0, str(ENGINE))
 
 # The password that was committed to this repository. Stored as a digest so
 # checking for it does not put the value back in the source tree.
-LEAKED_AUTH_PASSWORD_SHA256 = (
+LEAKED_AUTH_PASSWORD_SHA256 = (  # noqa: S105 - a digest of a leaked value, kept so preflight can refuse it
     "ab74c38e108520a4a8d2ad754ab7e5f1ae347c3f61888d9023b78ef0214e345b"
 )
 

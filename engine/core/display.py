@@ -14,12 +14,11 @@ Features:
 
 import os
 import sys
-import time
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, List, Any
+from typing import Dict
 
 from rich.align import Align
 from rich.console import Console, Group
@@ -35,7 +34,7 @@ from rich.progress import (
 )
 from rich.table import Table
 from rich.text import Text
-from rich.tree import Tree
+
 
 def _force_utf8_stdio() -> None:
     """Make stdout able to carry the emoji this module prints.
@@ -140,8 +139,8 @@ class GhostDisplay:
 
     def __init__(self):
         self.console = console
-        self.live: Optional[Live] = None
-        self.layout: Optional[Layout] = None
+        self.live: Live | None = None
+        self.layout: Layout | None = None
         self.agent_status: Dict[AgentType, str] = {
             agent: "IDLE" for agent in AGENT_INFO.keys()
         }
@@ -378,10 +377,10 @@ class GhostDisplay:
         self,
         title: str,
         message: str,
-        context: Optional[str] = None,
-        hint: Optional[str] = None,
+        context: str | None = None,
+        hint: str | None = None,
         severity: str = "ERROR",
-        agent: Optional[AgentType] = None,
+        agent: AgentType | None = None,
     ) -> None:
         """
         Display a beautiful error panel with context and hints.
@@ -448,7 +447,7 @@ class GhostDisplay:
         self,
         level: str,
         message: str,
-        agent: Optional[AgentType] = None,
+        agent: AgentType | None = None,
     ) -> None:
         """
         Display a log message with visual distinction for different levels.
@@ -480,27 +479,27 @@ class GhostDisplay:
             f"[dim]{timestamp}[/] [{style}]{emoji}[/] {agent_prefix}[{style}]{message}[/{style}]"
         )
 
-    def debug(self, message: str, agent: Optional[AgentType] = None) -> None:
+    def debug(self, message: str, agent: AgentType | None = None) -> None:
         """Log a debug message."""
         self.log("DEBUG", message, agent)
 
-    def info(self, message: str, agent: Optional[AgentType] = None) -> None:
+    def info(self, message: str, agent: AgentType | None = None) -> None:
         """Log an info message."""
         self.log("INFO", message, agent)
 
-    def warning(self, message: str, agent: Optional[AgentType] = None) -> None:
+    def warning(self, message: str, agent: AgentType | None = None) -> None:
         """Log a warning message."""
         self.log("WARNING", message, agent)
 
-    def error(self, message: str, agent: Optional[AgentType] = None) -> None:
+    def error(self, message: str, agent: AgentType | None = None) -> None:
         """Log an error message."""
         self.log("ERROR", message, agent)
 
-    def critical(self, message: str, agent: Optional[AgentType] = None) -> None:
+    def critical(self, message: str, agent: AgentType | None = None) -> None:
         """Log a critical error message."""
         self.log("CRITICAL", message, agent)
 
-    def success(self, message: str, agent: Optional[AgentType] = None) -> None:
+    def success(self, message: str, agent: AgentType | None = None) -> None:
         """Log a success message."""
         self.log("SUCCESS", message, agent)
 
@@ -641,7 +640,7 @@ class GhostDisplay:
 # =============================================================================
 
 # Global display instance
-_display: Optional[GhostDisplay] = None
+_display: GhostDisplay | None = None
 
 
 def get_display() -> GhostDisplay:
@@ -667,32 +666,32 @@ def update_agent_status(agent: AgentType, status: str) -> None:
     get_display().update_agent_status(agent, status)
 
 
-def log_debug(message: str, agent: Optional[AgentType] = None) -> None:
+def log_debug(message: str, agent: AgentType | None = None) -> None:
     """Log a debug message."""
     get_display().debug(message, agent)
 
 
-def log_info(message: str, agent: Optional[AgentType] = None) -> None:
+def log_info(message: str, agent: AgentType | None = None) -> None:
     """Log an info message."""
     get_display().info(message, agent)
 
 
-def log_warning(message: str, agent: Optional[AgentType] = None) -> None:
+def log_warning(message: str, agent: AgentType | None = None) -> None:
     """Log a warning message."""
     get_display().warning(message, agent)
 
 
-def log_error(message: str, agent: Optional[AgentType] = None) -> None:
+def log_error(message: str, agent: AgentType | None = None) -> None:
     """Log an error message."""
     get_display().error(message, agent)
 
 
-def log_critical(message: str, agent: Optional[AgentType] = None) -> None:
+def log_critical(message: str, agent: AgentType | None = None) -> None:
     """Log a critical message."""
     get_display().critical(message, agent)
 
 
-def log_success(message: str, agent: Optional[AgentType] = None) -> None:
+def log_success(message: str, agent: AgentType | None = None) -> None:
     """Log a success message."""
     get_display().success(message, agent)
 
@@ -700,10 +699,10 @@ def log_success(message: str, agent: Optional[AgentType] = None) -> None:
 def show_error(
     title: str,
     message: str,
-    context: Optional[str] = None,
-    hint: Optional[str] = None,
+    context: str | None = None,
+    hint: str | None = None,
     severity: str = "ERROR",
-    agent: Optional[AgentType] = None,
+    agent: AgentType | None = None,
 ) -> None:
     """Show an error panel."""
     get_display().show_error(title, message, context, hint, severity, agent)
