@@ -12,6 +12,8 @@ actually happened -- including the safety rules refusing a trade.
 """
 
 from datetime import datetime, timedelta
+
+from core.constants import BRAIN_STALE_OPPORTUNITY_SECONDS as STALE_AFTER
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -114,7 +116,7 @@ class TestSafetyRulesRefuseTheTrade:
     @pytest.mark.asyncio
     async def test_stale_market_data_is_not_traded(self, cycle):
         cycle["brain"].run_debate = _debate()
-        old = (datetime.now() - timedelta(seconds=120)).isoformat()
+        old = (datetime.now() - timedelta(seconds=STALE_AFTER + 60)).isoformat()
 
         result = await cycle["brain"].process_single_opportunity(
             _opportunity(timestamp=old)
@@ -277,7 +279,7 @@ class TestEveryDecisionIsRecorded:
         )
 
         cycle["brain"].run_debate = _debate()
-        stale = (datetime.now() - timedelta(seconds=120)).isoformat()
+        stale = (datetime.now() - timedelta(seconds=STALE_AFTER + 60)).isoformat()
         await cycle["brain"].process_single_opportunity(_opportunity(timestamp=stale))
 
         assert "STALE" in seen, f"stale rejection left no ledger entry, saw {seen}"

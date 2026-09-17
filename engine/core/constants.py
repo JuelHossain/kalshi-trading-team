@@ -97,6 +97,18 @@ BRAIN_CONFIDENCE_THRESHOLD = 0.85  # 85% minimum AI confidence in its estimate
 # fine. Lower it in paper mode to prove the Hand actually fills.
 BRAIN_MIN_EDGE = get_env_float("BRAIN_MIN_EDGE", 0.05)
 
+# How long a queued opportunity may wait before the Brain refuses it.
+#
+# This measures queue wait, not market movement: the Hand re-reads the live
+# orderbook before any order, so execution freshness is guarded there. What
+# this protects against is analysing a snapshot from a different cycle.
+#
+# It was a hardcoded 60s, tuned when an estimate took ~2s. Search-grounded
+# estimates take ~15s, so in a batch of ten the fifth item onward was
+# already "stale" -- observed live at 65-74s -- and half of every batch was
+# discarded unanalysed. Ten grounded calls plus slack is the floor here.
+BRAIN_STALE_OPPORTUNITY_SECONDS = get_env_float("BRAIN_STALE_OPPORTUNITY_SECONDS", 300.0)
+
 # How many independent estimates to draw per market. One opinion has no
 # uncertainty attached to it; several do. Set to 1 to disable sampling and pay
 # a single API call per market.

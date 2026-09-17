@@ -1,13 +1,19 @@
 """
 Test suite for stale opportunity detection in BrainAgent.
 
-This test reproduces the risk of processing stale market data (>60 seconds old).
+This test reproduces the risk of processing stale market data (older than the freshness threshold).
 TDD Phase: RED - Tests should fail before the fix is implemented.
 """
 
 import pytest
 import asyncio
 from datetime import datetime, timedelta
+
+# Ages are relative to the real threshold. Hardcoding 60 here made the
+# suite a second copy of the number: when the threshold moved (grounded
+# estimates take ~15s, so 60s discarded half of every batch) these tests
+# failed while asserting nothing about behaviour.
+from core.constants import BRAIN_STALE_OPPORTUNITY_SECONDS as STALE_AFTER
 from unittest.mock import AsyncMock, MagicMock, patch
 import uuid
 
@@ -40,10 +46,10 @@ class TestStaleOpportunityDetection:
     @pytest.mark.asyncio
     async def test_stale_opportunity_rejected(self, brain_agent, caplog):
         """
-        TEST: Opportunities older than 60 seconds should be rejected with STALE status
+        TEST: Opportunities older than the threshold should be rejected with STALE status
         """
         # Create an opportunity with timestamp > 60 seconds ago
-        old_timestamp = datetime.now() - timedelta(seconds=120)  # 2 minutes old
+        old_timestamp = datetime.now() - timedelta(seconds=STALE_AFTER + 60)  # well past the threshold
 
         stale_opportunity = {
             "id": str(uuid.uuid4()),
@@ -61,12 +67,12 @@ class TestStaleOpportunityDetection:
         result = await brain_agent.process_single_opportunity(stale_opportunity)
 
         # Should return 'STALE' for old opportunities
-        assert result == "STALE", "Should return STALE for opportunities > 60 seconds old"
+        assert result == "STALE", "Should return STALE for opportunities past the threshold"
 
     @pytest.mark.asyncio
     async def test_fresh_opportunity_accepted(self, brain_agent):
         """
-        TEST: Opportunities younger than 60 seconds should be processed normally
+        TEST: Opportunities younger than the threshold should be processed normally
         """
         # Create a fresh opportunity (current timestamp)
         fresh_opportunity = {
@@ -100,12 +106,12 @@ class TestStaleOpportunityDetection:
         assert result != "STALE", "Should not return STALE for fresh opportunities"
 
     @pytest.mark.asyncio
-    async def test_exactly_60_seconds_old_rejected(self, brain_agent):
+    async def test_exactly_at_threshold_rejected(self, brain_agent):
         """
-        TEST: Opportunities exactly 60 seconds old should be rejected (boundary test)
+        TEST: Opportunities exactly at the threshold should be rejected (boundary test)
         """
         # Create an opportunity exactly 60 seconds old
-        boundary_timestamp = datetime.now() - timedelta(seconds=60)
+        boundary_timestamp = datetime.now() - timedelta(seconds=STALE_AFTER)
 
         boundary_opportunity = {
             "id": str(uuid.uuid4()),
@@ -123,15 +129,15 @@ class TestStaleOpportunityDetection:
         result = await brain_agent.process_single_opportunity(boundary_opportunity)
 
         # Should return 'STALE' for opportunities at exactly 60 seconds
-        assert result == "STALE", "Should return STALE for opportunities exactly 60 seconds old"
+        assert result == "STALE", "Should return STALE at exactly the threshold"
 
     @pytest.mark.asyncio
-    async def test_59_seconds_old_accepted(self, brain_agent):
+    async def test_just_under_threshold_accepted(self, brain_agent):
         """
-        TEST: Opportunities 59 seconds old should be processed (boundary test)
+        TEST: Opportunities just under the threshold should be processed (boundary test)
         """
         # Create an opportunity 59 seconds old
-        fresh_timestamp = datetime.now() - timedelta(seconds=59)
+        fresh_timestamp = datetime.now() - timedelta(seconds=STALE_AFTER - 1)
 
         fresh_opportunity = {
             "id": str(uuid.uuid4()),
@@ -161,7 +167,7 @@ class TestStaleOpportunityDetection:
         result = await brain_agent.process_single_opportunity(fresh_opportunity)
 
         # Should NOT return 'STALE' for 59 second old opportunities
-        assert result != "STALE", "Should not return STALE for opportunities 59 seconds old"
+        assert result != "STALE", "Should not return STALE just under the threshold"
 
     @pytest.mark.asyncio
     async def test_missing_timestamp_treated_as_stale(self, brain_agent):
@@ -191,7 +197,7 @@ class TestStaleOpportunityDetection:
         """
         TEST: Stale opportunities should log '[STALE] Opportunity expired' message
         """
-        old_timestamp = datetime.now() - timedelta(seconds=120)
+        old_timestamp = datetime.now() - timedelta(seconds=STALE_AFTER + 60)
 
         stale_opportunity = {
             "id": str(uuid.uuid4()),

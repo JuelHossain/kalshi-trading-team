@@ -13,6 +13,99 @@ from core.constants import (
 from agents.brain.simulation import kelly_fraction
 
 
+def parse_orderbook(raw, side: str = "yes") -> dict | None:
+    """Normalise a Kalshi orderbook into the requested side's own price space.
+
+    Returns None when the book is unreadable. Otherwise:
+        best_bid    best resting bid for `side`, in cents, or None if empty
+        best_ask    best price to buy `side` at, in cents, or None if empty
+        ask_levels  [(price_cents, contracts)] ascending -- what a buyer
+                    of `side` crosses, for the depth check
+
+    Kalshi quotes one book and no explicit asks: a resting NO bid at x IS a
+    YES ask at 100 - x, and the reverse. Every shape is reduced to YES-side
+    bid levels and NO-side bid levels first, then mirrored for the side
+    requested.
+
+    Three shapes are accepted:
+
+      orderbook_fp   {"yes_dollars": [["0.3300","21717"], ...],
+                      "no_dollars":  [["0.6500","77618"], ...]}
+                     What the API returns today. Dollars as strings, sizes
+                     as decimal strings. Levels ascending by price, so the
+                     FIRST entry is the worst bid, not the best -- a 1c
+                     junk bid sits at the front of nearly every book.
+      orderbook      {"yes": [[33, 100], ...], "no": [[65, 50], ...]}
+                     The previous API shape, integer cents.
+      bids/asks      [{"price": 45, "count": 300}, ...]
+                     Not a Kalshi shape. It is what the existing tests
+                     construct; kept so they continue to exercise the
+                     spread and depth logic below.
+
+    The previous implementation read only the third shape. Against a real
+    book both lookups missed and fell to their defaults of 45 and 55, so
+    every snipe check reported a 10c spread and every approved signal died
+    here. The engine never placed an order, paper or otherwise.
+    """
+    if not isinstance(raw, dict):
+        return None
+
+    def _levels(entries, *, dollars: bool):
+        out = []
+        for entry in entries or []:
+            try:
+                price, size = entry[0], entry[1]
+                cents = round(float(price) * 100) if dollars else int(price)
+                out.append((cents, float(size)))
+            except (TypeError, ValueError, IndexError):
+                continue
+        return out
+
+    yes_bids: list[tuple[int, float]] = []
+    no_bids: list[tuple[int, float]] = []
+    explicit_yes_asks: list[tuple[int, float]] | None = None
+
+    fp = raw.get("orderbook_fp")
+    legacy = raw.get("orderbook")
+    if isinstance(fp, dict):
+        yes_bids = _levels(fp.get("yes_dollars"), dollars=True)
+        no_bids = _levels(fp.get("no_dollars"), dollars=True)
+    elif isinstance(legacy, dict):
+        yes_bids = _levels(legacy.get("yes"), dollars=False)
+        no_bids = _levels(legacy.get("no"), dollars=False)
+    elif "bids" in raw or "asks" in raw:
+        yes_bids = [
+            (int(l["price"]), float(l.get("count", 0)))
+            for l in raw.get("bids", []) if isinstance(l, dict) and "price" in l
+        ]
+        explicit_yes_asks = [
+            (int(l["price"]), float(l.get("count", 0)))
+            for l in raw.get("asks", []) if isinstance(l, dict) and "price" in l
+        ]
+        # A YES ask at p is a NO bid at 100 - p.
+        no_bids = [(100 - p, q) for p, q in explicit_yes_asks]
+    else:
+        return None
+
+    if side.lower() == "no":
+        bids = no_bids
+        asks = [(100 - p, q) for p, q in yes_bids]
+    else:
+        bids = yes_bids
+        asks = explicit_yes_asks if explicit_yes_asks is not None else [
+            (100 - p, q) for p, q in no_bids
+        ]
+
+    asks = sorted((lvl for lvl in asks if 0 < lvl[0] < 100), key=lambda l: l[0])
+    bids = [lvl for lvl in bids if 0 < lvl[0] < 100]
+
+    return {
+        "best_bid": max(p for p, _ in bids) if bids else None,
+        "best_ask": asks[0][0] if asks else None,
+        "ask_levels": asks,
+    }
+
+
 async def snipe_check(
     kalshi_client,
     ticker: str,
@@ -33,15 +126,12 @@ async def snipe_check(
     try:
         orderbook = await kalshi_client.get_orderbook(ticker)
 
-        # Find best bid/ask spread
-        raw_bid = orderbook.get("bids", [{}])[0].get("price", 45)
-        raw_ask = orderbook.get("asks", [{}])[0].get("price", 55)
-
-        if side.lower() == "no":
-            # Buying NO means crossing the YES bid, mirrored: 100 - bid.
-            best_bid, best_ask = 100 - raw_ask, 100 - raw_bid
-        else:
-            best_bid, best_ask = raw_bid, raw_ask
+        book = parse_orderbook(orderbook, side=side)
+        if book is None:
+            return {"valid": False, "reason": "orderbook unreadable"}
+        best_bid, best_ask = book["best_bid"], book["best_ask"]
+        if best_bid is None or best_ask is None:
+            return {"valid": False, "reason": "one side of the book is empty"}
 
         spread = best_ask - best_bid
 
@@ -52,19 +142,13 @@ async def snipe_check(
                 "entry_price": best_ask,
             }
 
-        # Liquidity Depth Validation
+        # Liquidity Depth Validation: contracts resting at the price we
+        # would cross, in the requested side's own price space.
         target_stake = max_stake_cents
         available_volume_cents = 0
-
-        # Aggregate volume within the actual spread
-        depth_levels = orderbook.get("bids" if side.lower() == "no" else "asks", [])
-        for level in depth_levels:
-            raw_price = level.get("price", 100)
-            price = 100 - raw_price if side.lower() == "no" else raw_price
-            count = level.get("count", 0)
-
+        for price, count in book["ask_levels"]:
             if price <= best_ask:
-                available_volume_cents += (price * count)
+                available_volume_cents += price * count
             else:
                 break
 

@@ -63,7 +63,9 @@ class TestFreshnessCheckSurvivesSyncContext:
     def test_stale_opportunity_returns_stale_not_crash(self):
         from datetime import datetime, timedelta
 
-        old = (datetime.now() - timedelta(seconds=120)).isoformat()
+        from core.constants import BRAIN_STALE_OPPORTUNITY_SECONDS as STALE_AFTER
+
+        old = (datetime.now() - timedelta(seconds=STALE_AFTER + 60)).isoformat()
         assert self._check({"ticker": "X", "timestamp": old}) == (False, "STALE")
 
     def test_missing_timestamp_returns_stale_not_crash(self):

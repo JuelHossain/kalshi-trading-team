@@ -5,6 +5,7 @@ Continuous monitoring and processing of opportunities from Synapse.
 import asyncio
 from datetime import datetime
 
+from core.constants import BRAIN_STALE_OPPORTUNITY_SECONDS
 from core.flow_control import check_execution_queue_limit, should_restock
 from core.shared_utils import fire_and_forget
 
@@ -213,7 +214,8 @@ def check_opportunity_freshness(opportunity: dict, log_callback) -> tuple[bool, 
     """
     ticker = opportunity.get("ticker", "UNKNOWN")
 
-    # Reject opportunities older than 60 seconds
+    # Reject opportunities that waited too long in the queue. See the
+    # constant for why this is minutes, not the 60s it used to be.
     now = datetime.now()
     ts = opportunity.get("timestamp")
 
@@ -226,7 +228,7 @@ def check_opportunity_freshness(opportunity: dict, log_callback) -> tuple[bool, 
 
     if ts:
         age = (now - ts).total_seconds()
-        if age >= 60:  # Use >= to handle boundary case of exactly 60 seconds
+        if age >= BRAIN_STALE_OPPORTUNITY_SECONDS:
             fire_and_forget(log_callback(f"[STALE] Opportunity expired: {ticker} (Age: {age:.0f}s) - skipping", level="WARN"))
             return (False, "STALE")
     else:
