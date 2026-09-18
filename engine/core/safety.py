@@ -115,11 +115,19 @@ async def _close_all_positions() -> tuple[int, int]:
     async def close_one(position: dict) -> bool:
         """Flatten a single position at the extreme tick; True on success."""
         ticker = position.get("ticker") or position.get("market_id")
-        count = abs(int(position.get("position", 0)))
+        quantity = int(position.get("position", 0))
+        count = abs(quantity)
         if not ticker or count <= 0:
             return False
+        # Kalshi signs the quantity: negative means a NO holding (same rule
+        # hand/agent.py's check_exits uses). Without this, every close went
+        # through close_position's side="yes" default, so a NO holding was
+        # never sold -- close_position built a "sell yes" order against a
+        # position that had no YES to sell, instead of flattening the NO
+        # actually held.
+        side = "no" if quantity < 0 else "yes"
         try:
-            result = await kalshi_client.close_position(ticker, count)
+            result = await kalshi_client.close_position(ticker, count, side=side)
         except Exception as e:
             log_error(f"Failed to close {ticker}: {e}", AgentType.HAND)
             return False

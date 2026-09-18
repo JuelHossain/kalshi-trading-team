@@ -62,6 +62,27 @@ class TestPositionsAreClosed:
         assert kalshi.close_position.await_args.args[1] == 12
 
     @pytest.mark.asyncio
+    async def test_each_position_is_closed_on_its_own_side(self, kalshi):
+        """A NO holding (negative quantity) must be sold as NO, a YES one as YES.
+
+        close_one used to call close_position(ticker, count) with no side, so
+        every close took the side="yes" default: a NO holding was answered
+        with a "sell yes" order against a position that held no YES, instead
+        of selling the NO actually held.
+        """
+        kalshi.get_positions = AsyncMock(
+            return_value=[
+                {"ticker": "KXNO", "position": -5},
+                {"ticker": "KXYES", "position": 7},
+            ]
+        )
+
+        await execute_ragnarok()
+
+        sides = {c.args[0]: c.kwargs.get("side") for c in kalshi.close_position.await_args_list}
+        assert sides == {"KXNO": "no", "KXYES": "yes"}
+
+    @pytest.mark.asyncio
     async def test_flat_markets_are_left_alone(self, kalshi):
         kalshi.get_positions = AsyncMock(
             return_value=[{"ticker": "KXA", "position": 0}, {"ticker": "KXB", "position": 5}]
