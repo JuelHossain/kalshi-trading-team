@@ -225,10 +225,12 @@ Respond in JSON format:
   "confidence": 85
 }}"""
 
+    # Outside the try so the fallback below can see whether this sample was
+    # meant to be grounded.
+    grounding = build_grounding_config()
     try:
         try:
             # Primary: Google Gemini API
-            grounding = build_grounding_config()
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: client.models.generate_content(
@@ -237,7 +239,25 @@ Respond in JSON format:
             )
             text = response.text
         except Exception as e:
-            # Fallback: OpenRouter
+            if grounding is not None:
+                # No substitute. The fallback is a free, ungrounded chat model
+                # answering a prompt that says "search for current
+                # information" -- it cannot -- and its estimate went into the
+                # same median, and sized the same Kelly stake, as grounded
+                # Gemini, with nothing on the decision saying so. A veto of
+                # this sample is the honest answer; the ensemble tolerates it.
+                await log_callback(
+                    f"[BRAIN] Grounded estimate failed for {ticker} ({str(e)[:80]}); "
+                    "not substituting an ungrounded model.",
+                    level="WARN",
+                )
+                return {
+                    "confidence": 0.0,
+                    "estimated_probability": None,
+                    "reasoning": "Grounded estimator unavailable",
+                }
+            # Grounding switched off by the operator: both paths are
+            # ungrounded, so the fallback is a like-for-like substitute.
             await log_callback(
                 f"[BRAIN] Primary AI failed ({str(e)[:50]})... Attempting OpenRouter Fallback.",
                 level="WARN",
