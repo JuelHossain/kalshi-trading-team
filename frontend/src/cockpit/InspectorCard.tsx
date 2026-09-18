@@ -10,6 +10,7 @@ import { PALETTES } from './palette';
 import { useCockpit, type Run } from './store';
 import { N, STATIONS } from './stations';
 import { useCockpitView } from './useCockpitView';
+import { useEngineHistory } from './useEngineHistory';
 
 export const cardWidth = (vw: number) => (vw < 620 ? Math.max(240, vw - 24) : 344);
 export const cardHeight = (vh: number) => Math.min(Math.max(320, vh - 150), 620);
@@ -156,7 +157,9 @@ export function InspectorCard({ vw, vh }: { vw: number; vh: number }) {
             {cCore ? 'Synapse' : station?.name}
           </span>
           <span style={{ display: 'block', fontSize: 10, color: T4, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {cCore ? 'The star · catches every throw' : `${station?.role} · ${station?.model}`}
+            {cCore
+              ? 'The star · the Synapse queues'
+              : `${station?.role} · ${cAgent === 2 && s.config?.brain.model ? `${s.config.brain.model}${s.config.brain.search_grounding ? ' · grounded' : ''}` : station?.model}`}
           </span>
         </span>
         <button onClick={s.toggleCollapse} title="collapse" style={iconBtn}>
@@ -263,12 +266,39 @@ export function InspectorCard({ vw, vh }: { vw: number; vh: number }) {
                     </div>
                   );
                 })}
-                {runsFor.length === 0 && <div style={{ fontSize: 12, color: T4, padding: '10px 2px' }}>No runs yet this session.</div>}
+                {runsFor.length === 0 && <div style={{ fontSize: 12, color: T4, padding: '10px 2px' }}>No runs measured yet this session.</div>}
+                <EngineHistory kind={cCore ? 'core' : 'agent'} agent={cAgent} refreshKey={s.runs.length} />
               </div>
             )}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Persistent history from the engine's ledger and journal; survives restarts. */
+function EngineHistory({ kind, agent, refreshKey }: { kind: 'agent' | 'core'; agent: number; refreshKey: number }) {
+  const { rows, loading, source } = useEngineHistory(kind, agent, refreshKey);
+  const title = source === 'ledger' ? 'From the ledger' : 'From the journal';
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '0 2px 8px', borderBottom: `1px solid ${mix(E, 50)}` }}>
+        <Label>{title}</Label>
+        <span style={{ fontSize: 10, color: F }}>{loading ? 'loading…' : `${rows.length} rows · persistent`}</span>
+      </div>
+      {rows.map((r) => (
+        <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '8px 2px', borderBottom: `1px solid ${mix(E, 40)}` }}>
+          <span className="num" style={{ flex: 'none', width: 56, fontSize: 10, color: F, paddingTop: 2 }}>
+            {r.ts ? new Date(r.ts).toLocaleTimeString('en-US', { hour12: false }) : '—'}
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 600, color: r.ok === false ? AC : T1, overflowWrap: 'anywhere' }}>{r.title}</span>
+            <span style={{ display: 'block', fontSize: 10, color: T4, marginTop: 2, overflowWrap: 'anywhere' }}>{r.detail}</span>
+          </span>
+        </div>
+      ))}
+      {!loading && rows.length === 0 && <div style={{ fontSize: 12, color: T4, padding: '10px 2px' }}>Nothing recorded yet.</div>}
     </div>
   );
 }
@@ -281,7 +311,14 @@ function CoreNow() {
   const s = useCockpit();
   const v = useCockpitView();
   const alarm = v.coreAlarm;
-  const holds = v.mode === 'choke' ? `${s.storeDepth} verdicts` : s.storeDepth && s.storeKind >= 0 ? STATIONS[s.storeKind].payload : s.storeDepth ? 'queued work' : 'nothing';
+  const holds =
+    s.execDepth && s.oppDepth
+      ? `${s.execDepth} verdict${s.execDepth === 1 ? '' : 's'} · ${s.oppDepth} opportunit${s.oppDepth === 1 ? 'y' : 'ies'}`
+      : s.execDepth
+        ? `${s.execDepth} verdict${s.execDepth === 1 ? '' : 's'}`
+        : s.oppDepth
+          ? `${s.oppDepth} opportunit${s.oppDepth === 1 ? 'y' : 'ies'}`
+          : 'nothing';
   const note =
     v.mode === 'choke'
       ? 'The Hand fills slower than the Brain decides, so the store hit its cap and the star stopped throwing back.'
@@ -301,7 +338,7 @@ function CoreNow() {
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 20, lineHeight: 1.15, marginTop: 3, color: T1 }}>{holds}</div>
           </div>
           <div className="num" style={{ fontFamily: 'var(--font-heading)', fontSize: 24, lineHeight: 1, color: alarm ? AC : SG }}>
-            {s.storeDepth}/10
+            {s.storeDepth}/{v.storeCap}
           </div>
         </div>
         <div style={{ fontSize: 12, lineHeight: 1.55, color: T3, marginTop: 9, textWrap: 'pretty' }}>{note}</div>
@@ -357,7 +394,9 @@ function SoulNow() {
         {sealed ? `Authorization sealed · cycle ${s.cycle} may proceed` : 'Awaiting pre-flight'}
       </div>
       <div style={{ fontSize: 11, color: T4, lineHeight: 1.5 }}>
-        Balance ${s.balance.toFixed(2)} · headroom above the $255 floor {s.balance ? `$${Math.max(0, s.balance - 255).toFixed(2)}` : '—'}
+        {s.config && s.balance
+          ? `Balance $${s.balance.toFixed(2)} · headroom above the $${(s.config.vault.hard_floor_cents / 100).toFixed(0)} floor $${Math.max(0, s.balance - s.config.vault.hard_floor_cents / 100).toFixed(2)}`
+          : 'Balance and floor headroom appear once the engine reports.'}
       </div>
     </div>
   );
@@ -397,7 +436,13 @@ function SensesNow() {
       })}
       {rows.length === 0 && <div style={{ fontSize: 12, color: T4, padding: '12px 2px' }}>No shortlist yet this cycle.</div>}
       <div style={{ fontSize: 11, color: T4, marginTop: 10, lineHeight: 1.5 }}>
-        {s.senses.swept ? `Swept ${s.senses.swept.toLocaleString()} markets · ${s.senses.selected} cleared the filters (volume ≥ 200, spread ≤ 8¢, closing within 10 days).` : 'Volume bars scale to the best market in the list.'}
+        {s.senses.swept
+          ? `Swept ${s.senses.swept.toLocaleString()} markets · ${s.senses.selected} cleared the filters${
+              s.config
+                ? ` (volume ≥ ${s.config.senses.min_volume}, spread ≤ ${s.config.senses.max_spread_cents}¢, closing within ${s.config.senses.max_days_to_close} days)`
+                : ''
+            }.`
+          : 'Volume bars scale to the best market in the list. Yes prices fill in from the Synapse queue.'}
       </div>
     </div>
   );
@@ -408,6 +453,8 @@ function BrainNow() {
   const b = s.brain;
   const conf = b.conf ?? 0;
   const decided = b.verdict !== null;
+  const minEdge = s.config?.brain.min_edge ?? null;
+  const samples = s.config?.brain.estimate_samples ?? null;
   const briefBox = (on: boolean, c: string): CSSProperties => ({ borderRadius: R, padding: '11px 13px', border: `1px solid ${on ? mix(c, 40, E) : E}`, background: on ? mix(c, 8, G) : mix(G, 60), transition: 'border-color 0.4s, background 0.4s' });
   const verdictLabel =
     b.verdict === 'approved'
@@ -429,13 +476,17 @@ function BrainNow() {
       <div style={briefBox(b.prob !== null, SGS)}>
         <Label ink={SG}>Estimate</Label>
         <div style={{ fontSize: 12, lineHeight: 1.5, marginTop: 4, color: T2, textWrap: 'pretty' }}>
-          {b.prob !== null ? `Three grounded samples, median probability ${(b.prob * 100).toFixed(0)}% that the event happens.` : 'Awaiting the grounded estimate.'}
+          {b.prob !== null
+            ? `${samples !== null ? `${samples} independent estimate${samples === 1 ? '' : 's'}, median` : 'Estimated'} probability ${(b.prob * 100).toFixed(0)}% that the event happens.`
+            : 'Awaiting the estimate.'}
         </div>
       </div>
       <div style={briefBox(b.ev !== null, ACS)}>
         <Label ink={AC}>Against the price</Label>
         <div style={{ fontSize: 12, lineHeight: 1.5, marginTop: 4, color: T2, textWrap: 'pretty' }}>
-          {b.ev !== null ? `Best side pays an expected ${b.ev >= 0 ? '+' : ''}${b.ev.toFixed(3)} per $1 contract before fees. The floor is +0.050.` : 'Awaiting the price comparison.'}
+          {b.ev !== null
+            ? `Best side pays an expected ${b.ev >= 0 ? '+' : ''}${b.ev.toFixed(3)} per $1 contract before fees.${minEdge !== null ? ` The floor is ${minEdge >= 0 ? '+' : ''}${minEdge.toFixed(3)}.` : ''}`
+            : 'Awaiting the price comparison.'}
         </div>
       </div>
       <div style={{ borderRadius: R, padding: '12px 13px', background: mix(G, 60) }}>
@@ -453,7 +504,7 @@ function BrainNow() {
             <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: F }}>confidence</div>
           </div>
           <div>
-            <div className="num" style={{ fontFamily: 'var(--font-heading)', fontSize: 21, lineHeight: 1, color: b.ev !== null && b.ev >= 0.05 ? SG : b.ev !== null ? AC : F }}>
+            <div className="num" style={{ fontFamily: 'var(--font-heading)', fontSize: 21, lineHeight: 1, color: b.ev !== null && minEdge !== null && b.ev >= minEdge ? SG : b.ev !== null ? AC : F }}>
               {b.ev !== null ? `${b.ev >= 0 ? '+' : ''}${b.ev.toFixed(3)}` : '—'}
             </div>
             <div style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: F }}>exp. value</div>

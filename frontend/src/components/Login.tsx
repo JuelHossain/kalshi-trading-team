@@ -119,7 +119,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, authError, isAuthenticating }) =
           >
             {isAuthenticating ? 'Connecting…' : isProduction ? 'Authorize' : 'Enter'}
           </button>
-          <div style={{ fontSize: 11, color: F, marginTop: 18 }}>RSA-SHA256 signed session</div>
+          <div style={{ fontSize: 11, color: F, marginTop: 18 }}>Password checked by the engine · orders signed RSA-PSS SHA-256</div>
         </form>
       </div>
     </div>

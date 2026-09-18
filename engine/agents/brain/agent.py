@@ -13,14 +13,9 @@ from typing import Any
 from agents.base import BaseAgent
 from core.ai_utils import get_default_models, initialize_gemini_client
 from core.bus import EventBus
-from core.constants import (
-    BRAIN_CONFIDENCE_THRESHOLD,
-    BRAIN_ESTIMATE_SAMPLES,
-    BRAIN_MAX_DISAGREEMENT,
-    BRAIN_MIN_EDGE,
-)
 from core.db import log_to_db
 from core.ledger import record_decision
+from core.settings import Live
 from core.shared_utils import fire_and_forget
 from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
 
@@ -37,10 +32,12 @@ from .simulation import run_simulation
 class BrainAgent(BaseAgent):
     """The Decision Maker - Intelligence & Mathematical Verification"""
 
-    CONFIDENCE_THRESHOLD = BRAIN_CONFIDENCE_THRESHOLD
-    MIN_EDGE = BRAIN_MIN_EDGE
-    ESTIMATE_SAMPLES = BRAIN_ESTIMATE_SAMPLES
-    MAX_DISAGREEMENT = BRAIN_MAX_DISAGREEMENT
+    # Live: read from core.constants at access time, so a dashboard edit
+    # applies to the next market. Tests may still assign an instance override.
+    CONFIDENCE_THRESHOLD = Live("BRAIN_CONFIDENCE_THRESHOLD")
+    MIN_EDGE = Live("BRAIN_MIN_EDGE")
+    ESTIMATE_SAMPLES = Live("BRAIN_ESTIMATE_SAMPLES")
+    MAX_DISAGREEMENT = Live("BRAIN_MAX_DISAGREEMENT")
 
     # Gemini model names to try (in order of preference)
     DEFAULT_MODELS = get_default_models()

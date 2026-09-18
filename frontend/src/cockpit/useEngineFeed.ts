@@ -8,11 +8,22 @@
  * orbit; that is CSS.
  */
 import { useCallback, useEffect, useRef } from 'react';
-import { interpretEvent, orderFromLedger, type FeedAction } from './engineEvents';
-import { STATIONS, STORE_CAP } from './stations';
-import { useCockpit, type StoreItem } from './store';
+import { interpretEvent, levelOf, orderFromLedger, type FeedAction } from './engineEvents';
+import { STATIONS } from './stations';
+import { clock, useCockpit, type EngineConfig, type SettingsGroup, type StoreItem, type UpdateReport } from './store';
 
 export const ENGINE_URL = '/api';
+
+/** GET /config and the POST /config reply share this shape. */
+export function applyConfigPayload(data: {
+  runtime?: EngineConfig;
+  groups?: SettingsGroup[];
+  env_file?: string | null;
+}): void {
+  const st = useCockpit.getState();
+  if (data.runtime && data.runtime.vault) st.setConfig(data.runtime);
+  if (Array.isArray(data.groups)) st.setSettingsGroups(data.groups, data.env_file ?? null);
+}
 
 const IDLE_AFTER_MS = 45000;
 
@@ -163,10 +174,52 @@ export function useEngineFeed(enabled: boolean, isPaperTrading: boolean) {
         const data = await res.json();
         if (!alive) return;
         const st = store.getState();
-        st.setEngine({ connected: true, cycle: Math.max(st.cycle, Number(data.cycle) || 0) });
+        st.setEngine({
+          connected: true,
+          cycle: Math.max(st.cycle, Number(data.cycle) || 0),
+          errorBox: Number(data.error_box) || 0,
+          halted: Array.isArray(data.halted) ? data.halted.map(String) : [],
+          ...(typeof data.processing === 'boolean' ? { processing: data.processing } : {}),
+        });
+        if (data.kill_switch === true && !st.kill) st.setLocked(true);
+        if (data.kill_switch === false && st.kill) st.setLocked(false);
         if (typeof data.balance === 'number') st.setBalance(data.balance);
       } catch {
         if (alive) store.getState().setEngine({ connected: false });
+      }
+    };
+
+    const pollConfig = async () => {
+      try {
+        const res = await fetch(`${ENGINE_URL}/config`);
+        const data = await res.json();
+        if (!alive || !data) return;
+        applyConfigPayload(data);
+      } catch {
+        /* the Config screen says it is waiting */
+      }
+    };
+
+    // Seed the trace with what the engine already logged, so an open
+    // dashboard never starts blank after the engine has been running.
+    const seedJournal = async () => {
+      try {
+        const res = await fetch(`${ENGINE_URL}/journal?topic=SYSTEM_LOG&limit=40`);
+        const data = await res.json();
+        if (!alive || !Array.isArray(data.events)) return;
+        const st = store.getState();
+        if (st.logs.length > 1) return;
+        for (const ev of [...data.events].reverse()) {
+          if (String(ev.level).toUpperCase() === 'DEBUG') continue;
+          st.pushLog({
+            agent: !ev.agent || ev.agent === 'GHOST' ? 'Engine' : ev.agent.charAt(0) + ev.agent.slice(1).toLowerCase(),
+            level: levelOf(String(ev.level)),
+            msg: String(ev.message || ''),
+            t: clock(Date.parse(ev.ts) || Date.now()),
+          });
+        }
+      } catch {
+        /* optional */
       }
     };
 
@@ -177,7 +230,9 @@ export function useEngineFeed(enabled: boolean, isPaperTrading: boolean) {
         if (!alive) return;
         const opp: QueueItem[] = data.opportunities?.items ?? [];
         const exe: QueueItem[] = data.executions?.items ?? [];
-        const depth = Number(data.opportunities?.size || 0) + Number(data.executions?.size || 0);
+        const oppDepth = Number(data.opportunities?.size || 0);
+        const execDepth = Number(data.executions?.size || 0);
+        const depth = oppDepth + execDepth;
         const atLimit = !!data.flow_control?.execution_queue_at_limit;
         const items: StoreItem[] = [
           ...exe.map((e, i) => ({
@@ -190,9 +245,9 @@ export function useEngineFeed(enabled: boolean, isPaperTrading: boolean) {
             title: o.title || 'Opportunity',
             state: 'stored' as StoreItem['state'],
           })),
-        ].slice(0, STORE_CAP);
+        ];
         const st = store.getState();
-        st.setQueues(depth, items, atLimit);
+        st.setQueues(oppDepth, execDepth, items, atLimit);
         if (opp.length) {
           const priced = st.senses.markets.map((m) => {
             const hit = opp.find((o) => o.ticker === m.ticker);
@@ -236,9 +291,11 @@ export function useEngineFeed(enabled: boolean, isPaperTrading: boolean) {
 
     if (!started.current) {
       started.current = true;
-      store.getState().pushLog({ agent: 'Engine', level: 'info', msg: 'Cockpit attached · listening to /api/stream' });
+      store.getState().pushLog({ agent: 'Cockpit', level: 'info', msg: 'Attached · listening to /api/stream' });
     }
     void syncStatus();
+    void pollConfig();
+    void seedJournal();
     void pollHealth();
     void pollQueues();
     void pollOrders();
@@ -259,18 +316,20 @@ export function useEngineFeed(enabled: boolean, isPaperTrading: boolean) {
     };
     es.onerror = () => store.getState().setEngine({ connected: false });
 
-    const clock = setInterval(() => store.getState().tick(Date.now()), 240);
+    const ticker = setInterval(() => store.getState().tick(Date.now()), 240);
     const qi = setInterval(() => void pollQueues(), 2500);
     const hi = setInterval(() => void pollHealth(), 5000);
     const oi = setInterval(() => void pollOrders(), 20000);
+    const ci = setInterval(() => void pollConfig(), 60000);
 
     return () => {
       alive = false;
       es.close();
-      clearInterval(clock);
+      clearInterval(ticker);
       clearInterval(qi);
       clearInterval(hi);
       clearInterval(oi);
+      clearInterval(ci);
     };
   }, [enabled]);
 
@@ -313,7 +372,54 @@ export function useEngineFeed(enabled: boolean, isPaperTrading: boolean) {
     }
   }, []);
 
-  return { runCycle, cancelCycle, setAutopilot, setKill };
+  /** POST /config. Returns the engine's report; the store is updated from the reply. */
+  const updateSettings = useCallback(async (changes: Record<string, unknown>): Promise<UpdateReport> => {
+    try {
+      const res = await post('/config', { changes });
+      const body = await res.json();
+      const report: UpdateReport = {
+        applied: body.applied ?? [],
+        restart_required: body.restart_required ?? [],
+        errors: body.errors ?? (res.ok ? {} : { _: body.message || `HTTP ${res.status}` }),
+      };
+      if (body.config) applyConfigPayload(body.config);
+      useCockpit.getState().setReport(report);
+      return report;
+    } catch (e) {
+      const report: UpdateReport = { applied: [], restart_required: [], errors: { _: String(e).slice(0, 80) } };
+      useCockpit.getState().setReport(report);
+      return report;
+    }
+  }, []);
+
+  /** POST /reset: drain the error box and lift a lockdown so cycles can run again. */
+  const resetEngine = useCallback(async () => {
+    try {
+      const res = await post('/reset');
+      const body = await res.json();
+      const st = useCockpit.getState();
+      st.setEngine({ errorBox: 0, halted: [] });
+      st.pushLog({ agent: 'Engine', level: 'ok', msg: `Reset · ${body.errors_cleared ?? 0} error(s) cleared from the box` });
+    } catch (e) {
+      useCockpit.getState().pushLog({ agent: 'Engine', level: 'err', msg: `Reset failed: ${String(e).slice(0, 60)}` });
+    }
+  }, []);
+
+  const restartEngine = useCallback(async () => {
+    try {
+      const res = await post('/engine/restart');
+      if (res.ok) {
+        const st = useCockpit.getState();
+        st.clearRestartPending();
+        st.pushLog({ agent: 'Engine', level: 'warn', msg: 'Restarting…' });
+        st.setEngine({ connected: false });
+      }
+    } catch (e) {
+      useCockpit.getState().pushLog({ agent: 'Engine', level: 'err', msg: `Restart failed: ${String(e).slice(0, 60)}` });
+    }
+  }, []);
+
+  return { runCycle, cancelCycle, setAutopilot, setKill, updateSettings, restartEngine, resetEngine };
 }
 
 export const stationLabel = (i: number) => STATIONS[i]?.name ?? '';

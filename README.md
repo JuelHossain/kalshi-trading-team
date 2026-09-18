@@ -48,6 +48,10 @@ real money. The dashboard is described under [Frontend](#frontend-the-cockpit).
 
 Agents communicate only through an in-process event bus. Opportunities,
 execution signals and errors persist in SQLite so a restart loses nothing.
+Every bus event of interest is also written to a journal
+(`ghost_journal.db`, `GET /journal`) and every Brain judgement to the
+decision ledger (`GET /decisions`), so how the bot behaved can be studied
+after the fact.
 
 ## Safety model
 
@@ -117,8 +121,13 @@ means, backtesting, stopping — is [RUNBOOK.md](RUNBOOK.md).
 
 ### Tuning
 
-Everything adjustable lives in `engine/core/constants.py`; the ones an
-operator is likely to touch are environment-overridable:
+Every adjustable value is a setting in `engine/core/settings.py`: its
+group, type, default, limits, whether it is a secret and whether a change
+needs a restart. Settings are read from the environment (`engine/.env`)
+and can be edited from the dashboard's Config view or with
+`POST /config`; the engine validates the batch, writes it back to `.env`,
+and applies it live wherever the reader can be patched. The most common
+ones:
 
 | Variable | Default | Meaning |
 |---|---|---|

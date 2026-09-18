@@ -17,11 +17,7 @@ All prices are in cents, 1-99, the scale Kalshi quotes.
 
 from dataclasses import dataclass
 
-from core.constants import (
-    HAND_EXIT_BEFORE_EXPIRY_HOURS,
-    HAND_STOP_LOSS_PCT,
-    HAND_TAKE_PROFIT_PCT,
-)
+from core import constants
 
 
 @dataclass(frozen=True)
@@ -39,9 +35,9 @@ def evaluate_exit(
     entry_price_cents: int,
     current_price_cents: int,
     hours_to_expiry: float | None = None,
-    stop_loss_pct: float = HAND_STOP_LOSS_PCT,
-    take_profit_pct: float = HAND_TAKE_PROFIT_PCT,
-    exit_before_expiry_hours: float = HAND_EXIT_BEFORE_EXPIRY_HOURS,
+    stop_loss_pct: float | None = None,
+    take_profit_pct: float | None = None,
+    exit_before_expiry_hours: float | None = None,
 ) -> ExitDecision:
     """Decide whether to close a YES position.
 
@@ -63,6 +59,15 @@ def evaluate_exit(
     Returns HOLD when no rule fires. Nonsensical inputs hold rather than guess:
     an exit decision made on bad data is worse than no decision.
     """
+    # Policy values are read at call time so a dashboard edit applies to the
+    # next review, not the next restart.
+    if stop_loss_pct is None:
+        stop_loss_pct = constants.HAND_STOP_LOSS_PCT
+    if take_profit_pct is None:
+        take_profit_pct = constants.HAND_TAKE_PROFIT_PCT
+    if exit_before_expiry_hours is None:
+        exit_before_expiry_hours = constants.HAND_EXIT_BEFORE_EXPIRY_HOURS
+
     if not _is_valid_price(entry_price_cents) or not _is_valid_price(current_price_cents):
         return HOLD
 

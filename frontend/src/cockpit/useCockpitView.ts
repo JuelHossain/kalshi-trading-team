@@ -4,8 +4,8 @@
  * what the star is doing. Computed once per render from the store.
  */
 import { PALETTES, type Palette } from './palette';
-import { deriveMode, useCockpit, type Beat, type Mode } from './store';
-import { FLARE_MS, N, RETRY_MS, SIGNAL_MS, STORE_CAP, THROW_MS } from './stations';
+import { deriveMode, storeCapacity, useCockpit, type Beat, type Mode } from './store';
+import { FLARE_MS, N, RETRY_MS, SIGNAL_MS, THROW_MS } from './stations';
 
 export type PlanetState =
   | 'active'
@@ -29,7 +29,9 @@ export interface CockpitView {
   working: boolean;
   transiting: boolean;
   states: PlanetState[];
+  /** Real items in the Synapse queues, and the engine's capacity for them. */
   storeN: number;
+  storeCap: number;
   storeKind: number;
   coreHot: boolean;
   coreAlarm: boolean;
@@ -59,8 +61,8 @@ export function useCockpitView(): CockpitView {
               : s.expected;
   const elRaw = Math.max(0, s.now - s.t0);
   const el = Math.min(dur, elRaw);
-  // A real work beat may outlast its budget; hold the arc just short of full
-  // rather than pretending the agent finished.
+  // A real work beat may outlast its typical time; hold the arc just short
+  // of full rather than pretending the agent finished.
   const bp = beat === 'work' ? Math.min(0.96, dur ? elRaw / dur : 0) : dur ? el / dur : 0;
   const working = beat === 'work';
   const transiting = beat === 'throw' || beat === 'flare' || beat === 'signal' || beat === 'retry';
@@ -77,9 +79,8 @@ export function useCockpitView(): CockpitView {
   };
   const states = Array.from({ length: N }, (_, i) => stateOf(i));
 
-  const storeN = mode === 'idle' || mode === 'locked' ? Math.min(STORE_CAP, s.storeDepth) : s.storeDepth;
   const coreHot = beat === 'throw' || beat === 'flare' || beat === 'signal';
-  const coreAlarm = mode === 'fault' || mode === 'choke' || storeN >= STORE_CAP;
+  const coreAlarm = mode === 'fault' || mode === 'choke';
 
   return {
     pal,
@@ -92,7 +93,8 @@ export function useCockpitView(): CockpitView {
     working,
     transiting,
     states,
-    storeN,
+    storeN: s.storeDepth,
+    storeCap: storeCapacity(s.config),
     storeKind: s.storeKind,
     coreHot,
     coreAlarm,

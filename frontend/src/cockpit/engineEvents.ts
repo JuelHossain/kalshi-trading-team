@@ -286,6 +286,14 @@ export function interpretEvent(ev: EngineEvent): FeedAction[] {
     if (Number.isFinite(total)) return [{ type: 'balance', balance: total, principal: Number.isFinite(principal) && principal > 0 ? principal : undefined }];
     return [];
   }
+  if (ev.type === 'SIMULATION' && ev.state) {
+    // The Brain's own maths for the market it just judged: EV per $1
+    // contract and whether the gates vetoed it.
+    const ticker = String(ev.state.ticker || '');
+    const ev_score = Number(ev.state.ev_score);
+    if (!ticker || !Number.isFinite(ev_score)) return [];
+    return [{ type: 'brain', patch: { ticker, ev: ev_score } }];
+  }
   if (ev.type === 'STATE' && ev.state) {
     const out: FeedAction[] = [];
     if (typeof ev.state.isProcessing === 'boolean') out.push({ type: 'processing', processing: ev.state.isProcessing });

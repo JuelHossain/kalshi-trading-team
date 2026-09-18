@@ -2,18 +2,27 @@
  * Plain-language narration of the current beat plus the cycle time axis.
  */
 import { ACS, E, glassStyle, mix, RL, SGS, T1, T4 } from './palette';
-import { FLARE_MS, N, SIGNAL_MS, STATIONS, STORE_CAP, THROW_MS, WORK_VERBS } from './stations';
+import { typicalMs, useCockpit } from './store';
+import { FLARE_MS, N, SIGNAL_MS, STATIONS, THROW_MS, WORK_VERBS } from './stations';
 import { doneish, useCockpitView } from './useCockpitView';
 
 export function BeatBar({ narrow, short }: { narrow: boolean; short: boolean }) {
   const v = useCockpitView();
-  const { pal, mode, beat, bi, bp, working, transiting, states, storeN, coreHot, coreAlarm, retries } = v;
+  const runs = useCockpit((s) => s.runs);
+  const errorBox = useCockpit((s) => s.errorBox);
+  const halted = useCockpit((s) => s.halted);
+  const execDepth = useCockpit((s) => s.execDepth);
+  const execCap = useCockpit((s) => s.config?.queues.max_execution ?? 10);
+  const { pal, mode, beat, bi, bp, working, transiting, states, coreHot, coreAlarm, retries } = v;
 
+  // Work segments are each agent's median measured time this session;
+  // transit segments are the fixed on-screen flight.
   const transitMs = THROW_MS + FLARE_MS + SIGNAL_MS;
+  const measured = (i: number) => runs.some((r) => r.kind === 'agent' && r.agent === i);
   const segs: { k: 'w' | 't'; i: number; ms: number; name: string }[] = [];
   STATIONS.forEach((st, i) => {
-    segs.push({ k: 'w', i, ms: st.dur, name: st.name });
-    segs.push({ k: 't', i, ms: transitMs, name: `Throw · ${st.name} → ${STATIONS[(i + 1) % N].name}` });
+    segs.push({ k: 'w', i, ms: typicalMs(runs, i), name: `${st.name} · ${measured(i) ? 'median this session' : 'no run yet'}` });
+    segs.push({ k: 't', i, ms: transitMs, name: `Flight · ${st.name} → ${STATIONS[(i + 1) % N].name}` });
   });
   const totalMs = segs.reduce((a, x) => a + x.ms, 0);
   const curKey = working ? `w${bi}` : transiting ? `t${bi}` : '';
@@ -25,7 +34,11 @@ export function BeatBar({ narrow, short }: { narrow: boolean; short: boolean }) 
       : mode === 'idle'
         ? 'The star is dark — nothing worth trading'
         : mode === 'fault'
-          ? 'The throw keeps bouncing off the Hand'
+          ? errorBox > 0
+            ? `The error box holds ${errorBox} error${errorBox === 1 ? '' : 's'} — reset to resume`
+            : halted.some((h) => h.includes('lockdown'))
+              ? 'The Soul locked the engine down — reset to resume'
+              : 'The throw keeps bouncing off the Hand'
           : mode === 'choke'
             ? 'The store is full — the star cannot throw back'
             : beat === 'work'
@@ -37,14 +50,16 @@ export function BeatBar({ narrow, short }: { narrow: boolean; short: boolean }) 
                   : `The star throws the signal out to the ${nextName}`;
   const meta =
     mode === 'fault'
-      ? `retry ${retries} of 5`
+      ? errorBox > 0 || halted.length
+        ? halted.join(' · ')
+        : `retry ${retries}`
       : mode === 'choke'
-        ? `${storeN}/${STORE_CAP} held`
+        ? `${execDepth}/${execCap} verdicts held`
         : working
-          ? `${(v.dur / 1000).toFixed(2)}s budget · ${Math.round(bp * 100)}%`
+          ? `${(v.dur / 1000).toFixed(1)}s ${measured(bi) ? 'typical' : 'expected'} · ${Math.round(bp * 100)}%`
           : transiting
             ? `in flight · ${(transitMs / 1000).toFixed(2)}s`
-            : `${(totalMs / 1000).toFixed(2)}s cycle`;
+            : `${(totalMs / 1000).toFixed(1)}s typical cycle`;
 
   return (
     <div

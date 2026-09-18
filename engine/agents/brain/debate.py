@@ -38,7 +38,11 @@ def build_grounding_config():
     Brain offline -- a degraded estimate still beats no estimate, and the
     confidence threshold is what stops a bad one reaching the Hand.
     """
-    if not GROUNDING_ENABLED:
+    # Read live so the dashboard toggle applies to the next estimate;
+    # GROUNDING_ENABLED above records what the process booted with.
+    from core.settings import settings
+
+    if not settings.get_bool("BRAIN_SEARCH_GROUNDING"):
         return None
     try:
         from google.genai import types

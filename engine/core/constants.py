@@ -7,7 +7,7 @@ Eliminates duplication across main.py, gateway.py, and other modules.
 # AGENT IDENTIFIERS
 # ==============================================================================
 
-from core.shared_utils import get_env_float
+from core.shared_utils import get_env_float, get_env_int
 
 AGENT_ID_SOUL = 1
 AGENT_ID_SENSES = 2
@@ -61,29 +61,33 @@ FULL_AGENT_TO_PHASE = {
 # ==============================================================================
 
 # Maximum queue sizes to prevent overload
-MAX_EXECUTION_QUEUE_SIZE = 10
-MAX_OPPORTUNITY_QUEUE_SIZE = 20
+MAX_EXECUTION_QUEUE_SIZE = get_env_int("MAX_EXECUTION_QUEUE_SIZE", 10)
+MAX_OPPORTUNITY_QUEUE_SIZE = get_env_int("MAX_OPPORTUNITY_QUEUE_SIZE", 20)
 
 # Restock triggers
-RESTOCK_THRESHOLD_VETO_COUNT = 5  # Request restock after 5 vetoes
-RESTOCK_COOLDOWN_SECONDS = 60  # Minimum time between restocks
+RESTOCK_THRESHOLD_VETO_COUNT = get_env_int("RESTOCK_THRESHOLD_VETO_COUNT", 5)
+RESTOCK_COOLDOWN_SECONDS = get_env_int("RESTOCK_COOLDOWN_SECONDS", 60)
 
 # ==============================================================================
 # CYCLE CONFIGURATION
 # ==============================================================================
 
-MIN_CYCLE_INTERVAL_SECONDS = 30
+MIN_CYCLE_INTERVAL_SECONDS = get_env_int("MIN_CYCLE_INTERVAL_SECONDS", 30)
 
 # ==============================================================================
 # AGENT-SPECIFIC CONSTANTS
 # ==============================================================================
 
 # Senses Agent
-SENSES_STOCK_BUFFER_SIZE = 30  # Total markets to pull from Kalshi
-SENSES_QUEUE_BATCH_SIZE = 10  # Markets to queue at once
+SENSES_STOCK_BUFFER_SIZE = get_env_int("SENSES_STOCK_BUFFER_SIZE", 30)
+SENSES_QUEUE_BATCH_SIZE = get_env_int("SENSES_QUEUE_BATCH_SIZE", 10)
+SENSES_REQUEUE_AFTER_SECONDS = get_env_float("SENSES_REQUEUE_AFTER_SECONDS", 21600.0)
+SENSES_MIN_VOLUME = get_env_int("SENSES_MIN_VOLUME", 200)
+SENSES_MAX_SPREAD_CENTS = get_env_int("SENSES_MAX_SPREAD_CENTS", 8)
+SENSES_MAX_DAYS_TO_CLOSE = get_env_int("SENSES_MAX_DAYS_TO_CLOSE", 10)
 
 # Brain Agent
-BRAIN_CONFIDENCE_THRESHOLD = 0.85  # 85% minimum AI confidence in its estimate
+BRAIN_CONFIDENCE_THRESHOLD = get_env_float("BRAIN_CONFIDENCE_THRESHOLD", 0.85)
 
 # Minimum edge (estimated probability minus contract price) required to trade.
 # Replaces BRAIN_MAX_VARIANCE, which could never bind: the variance of a binary
@@ -111,18 +115,18 @@ BRAIN_STALE_OPPORTUNITY_SECONDS = get_env_float("BRAIN_STALE_OPPORTUNITY_SECONDS
 # How many independent estimates to draw per market. One opinion has no
 # uncertainty attached to it; several do. Set to 1 to disable sampling and pay
 # a single API call per market.
-BRAIN_ESTIMATE_SAMPLES = 3
+BRAIN_ESTIMATE_SAMPLES = get_env_int("BRAIN_ESTIMATE_SAMPLES", 3)
 
 # Reject when independent estimates disagree by more than this. This is the
 # risk signal the variance veto was reaching for and could never provide:
 # unlike p(1-p), disagreement varies independently of the probability, so it
 # can actually bind. Wide disagreement means the model does not know, which is
 # different from -- and more dangerous than -- believing the odds are even.
-BRAIN_MAX_DISAGREEMENT = 0.20
+BRAIN_MAX_DISAGREEMENT = get_env_float("BRAIN_MAX_DISAGREEMENT", 0.20)
 
 
 # Hand Agent
-HAND_MAX_STAKE_CENTS = 7500  # $75 max per trade
+HAND_MAX_STAKE_CENTS = get_env_int("HAND_MAX_STAKE_CENTS", 7500)
 
 # --- Exit policy -------------------------------------------------------------
 # The engine can close a position; these decide when it should.
@@ -133,20 +137,20 @@ HAND_MAX_STAKE_CENTS = 7500  # $75 max per trade
 # converts "near-certainly" into "certainly" while the capital sits idle.
 
 # Close when the price has fallen this far below what was paid.
-HAND_STOP_LOSS_PCT = 0.50
+HAND_STOP_LOSS_PCT = get_env_float("HAND_STOP_LOSS_PCT", 0.50)
 
 # Close when the price has captured this much of the distance from entry to
 # 100 -- trading the last of the upside for certainty.
-HAND_TAKE_PROFIT_PCT = 0.80
+HAND_TAKE_PROFIT_PCT = get_env_float("HAND_TAKE_PROFIT_PCT", 0.80)
 
 # Close a losing position this many hours before expiry. A winning one is left
 # to settle, since settlement pays 100 and a thin pre-expiry book does not.
-HAND_EXIT_BEFORE_EXPIRY_HOURS = 2.0
+HAND_EXIT_BEFORE_EXPIRY_HOURS = get_env_float("HAND_EXIT_BEFORE_EXPIRY_HOURS", 2.0)
 
 # Fraction of full Kelly to stake. Full Kelly maximises long-run growth but is
 # famously violent; a quarter is the usual conservative choice and costs little
 # expected growth for a large reduction in drawdown.
-HAND_KELLY_FRACTION = 0.25
+HAND_KELLY_FRACTION = get_env_float("HAND_KELLY_FRACTION", 0.25)
 
 # ==============================================================================
 # VAULT SAFETY
@@ -156,5 +160,8 @@ HAND_KELLY_FRACTION = 0.25
 # Single source of truth: RecursiveVault and engine/config.py both read this.
 # It was previously written out separately in each, so changing one silently
 # left the others disagreeing about a safety limit.
-HARD_FLOOR_CENTS = 25500  # $255.00
-HAND_PROFIT_LOCK_THRESHOLD = 5000  # $50 profit triggers principal lock
+HARD_FLOOR_CENTS = get_env_int("HARD_FLOOR_CENTS", 25500)
+VAULT_PRINCIPAL_CENTS = get_env_int("VAULT_PRINCIPAL_CENTS", 30000)
+VAULT_KILL_SWITCH_PCT = get_env_float("VAULT_KILL_SWITCH_PCT", 0.85)
+VAULT_PROFIT_THRESHOLD_CENTS = get_env_int("VAULT_PROFIT_THRESHOLD_CENTS", 5000)
+HAND_PROFIT_LOCK_THRESHOLD = VAULT_PROFIT_THRESHOLD_CENTS

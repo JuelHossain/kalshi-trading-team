@@ -112,6 +112,12 @@ describe('interpretEvent', () => {
     expect(a).toEqual([{ type: 'balance', balance: 328.13, principal: 300 }]);
   });
 
+  it('reads the EV from the Brain SIMULATION frame', () => {
+    const a = interpretEvent({ type: 'SIMULATION', state: { ticker: 'T', win_rate: 0.7, ev_score: 0.083, variance: 0.21, veto: false } });
+    expect(a).toEqual([{ type: 'brain', patch: { ticker: 'T', ev: 0.083 } }]);
+    expect(interpretEvent({ type: 'SIMULATION', state: { ticker: '', ev_score: 1 } })).toEqual([]);
+  });
+
   it('reads processing from a STATE frame', () => {
     expect(interpretEvent({ type: 'STATE', state: { isProcessing: false, activeAgentId: null } })).toEqual([
       { type: 'processing', processing: false },

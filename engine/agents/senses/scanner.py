@@ -5,6 +5,7 @@ Handles Kalshi market fetching, filtering, and stock management.
 
 from datetime import UTC, datetime, timedelta
 
+from core import constants
 from core.error_dispatcher import ErrorSeverity
 from core.flow_control import check_execution_queue_limit
 
@@ -15,9 +16,11 @@ from core.flow_control import check_execution_queue_limit
 # page of results.
 MVE_PREFIX = "KXMVE"
 
-MIN_VOLUME = 200
-MAX_SPREAD_CENTS = 8
-MAX_DAYS_TO_CLOSE = 10
+# Boot-time values; the settings applier rewrites these module globals in
+# place, and is_tradeable reads them at call time.
+MIN_VOLUME = constants.SENSES_MIN_VOLUME
+MAX_SPREAD_CENTS = constants.SENSES_MAX_SPREAD_CENTS
+MAX_DAYS_TO_CLOSE = constants.SENSES_MAX_DAYS_TO_CLOSE
 
 # Markets requested per page, and the ceiling on pages walked before giving
 # up. Paging exists only because combo shards crowd out real markets; the

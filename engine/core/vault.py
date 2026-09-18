@@ -9,7 +9,7 @@ engine trades only house money from then on.
 import asyncio
 import os
 
-from core.constants import HARD_FLOOR_CENTS
+from core import constants
 from core.logger import get_logger
 from core.shared_utils import (
     format_cents_to_dollars,
@@ -28,10 +28,12 @@ class RecursiveVault:
 
     def __init__(self, test_mode: bool = False, db_path: str | None = None):
         # Configuration from Env
-        self.PRINCIPAL_CAPITAL_CENTS = int(os.getenv("VAULT_PRINCIPAL_CENTS", "30000"))
-        self.DAILY_PROFIT_THRESHOLD_CENTS = int(os.getenv("VAULT_PROFIT_THRESHOLD_CENTS", "5000"))
-        self.HARD_FLOOR_CENTS = HARD_FLOOR_CENTS
-        self.KILL_SWITCH_THRESHOLD_PCT = 0.85
+        # Boot-time values from the settings registry; main.py registers
+        # appliers that rewrite these on a live edit.
+        self.PRINCIPAL_CAPITAL_CENTS = int(constants.VAULT_PRINCIPAL_CENTS)
+        self.DAILY_PROFIT_THRESHOLD_CENTS = int(constants.VAULT_PROFIT_THRESHOLD_CENTS)
+        self.HARD_FLOOR_CENTS = int(constants.HARD_FLOOR_CENTS)
+        self.KILL_SWITCH_THRESHOLD_PCT = float(constants.VAULT_KILL_SWITCH_PCT)
         # Explicit arg wins, then GHOST_VAULT_DB, then the production default.
         # Without this the path is unredirectable, so tests persist reservations
         # into the real database and leak them into each other.

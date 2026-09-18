@@ -11,8 +11,8 @@ from typing import Any
 from agents.base import BaseAgent
 from core import trading_mode
 from core.bus import EventBus
-from core.constants import HAND_MAX_STAKE_CENTS, HAND_PROFIT_LOCK_THRESHOLD
 from core.ledger import record_decision, record_fill
+from core.settings import Live
 from core.synapse import Synapse
 from core.vault import RecursiveVault
 from core.vault_utils import check_profit_lock_threshold, publish_vault_state
@@ -28,8 +28,10 @@ from .exits import average_entry_price_cents, evaluate_exit
 class HandAgent(BaseAgent):
     """The Tactical Executioner - Precision Strike & Budget Sentinel"""
 
-    MAX_STAKE_CENTS = HAND_MAX_STAKE_CENTS
-    PROFIT_LOCK_THRESHOLD = HAND_PROFIT_LOCK_THRESHOLD
+    # Live: read from core.constants at access time, so a dashboard edit
+    # applies to the next order. Tests may still assign an instance override.
+    MAX_STAKE_CENTS = Live("HAND_MAX_STAKE_CENTS")
+    PROFIT_LOCK_THRESHOLD = Live("VAULT_PROFIT_THRESHOLD_CENTS")
 
     def __init__(
         self,

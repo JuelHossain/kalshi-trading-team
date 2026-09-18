@@ -35,7 +35,7 @@ export function Cockpit({ isPaperTrading, onSignOut }: { isPaperTrading: boolean
   const s = useCockpit();
   const v = useCockpitView();
   const vp = useViewport();
-  const { runCycle, cancelCycle, setAutopilot, setKill } = useEngineFeed(true, isPaperTrading);
+  const { runCycle, cancelCycle, setAutopilot, setKill, updateSettings, restartEngine, resetEngine } = useEngineFeed(true, isPaperTrading);
   const pal = PALETTES[s.palette];
   const W = vp.w;
   const H = vp.h;
@@ -166,8 +166,21 @@ export function Cockpit({ isPaperTrading, onSignOut }: { isPaperTrading: boolean
                 {(v.working ? STATIONS[v.bi].name : 'Star') + ' · ' + (secs < 1 ? '0' : secs) + 's'}
               </span>
               <span style={{ width: 1, height: 12, background: E }} />
-              <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: isPaperTrading ? SG : AC }}>
-                {isPaperTrading ? 'Paper' : 'Live funds'}
+              <span
+                style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: s.config?.live_armed ? AC : SG }}
+                title={s.config ? `Kalshi ${s.config.kalshi_env}${s.config.paper_pinned ? ' · IS_PAPER_TRADING pinned on the server' : ''}` : undefined}
+              >
+                {s.config
+                  ? s.config.live_armed
+                    ? 'Live funds'
+                    : s.config.paper_pinned
+                      ? 'Paper · pinned'
+                      : isPaperTrading
+                        ? 'Paper'
+                        : 'Live on next cycle'
+                  : isPaperTrading
+                    ? 'Paper'
+                    : 'Live requested'}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -195,6 +208,15 @@ export function Cockpit({ isPaperTrading, onSignOut }: { isPaperTrading: boolean
                   </span>
                 ))}
               </div>
+              {s.halted.length > 0 && !s.kill && (
+                <button
+                  onClick={() => void resetEngine()}
+                  title={s.halted.join(' · ')}
+                  style={{ ...pill(true), background: AC, color: ACI }}
+                >
+                  Reset · {s.errorBox > 0 ? `${s.errorBox} error${s.errorBox === 1 ? '' : 's'}` : 'locked down'}
+                </button>
+              )}
               <div style={segWrap}>
                 <button
                   onClick={() => (s.processing ? cancelCycle() : runCycle())}
@@ -245,7 +267,17 @@ export function Cockpit({ isPaperTrading, onSignOut }: { isPaperTrading: boolean
               <OrdersPanel narrow={narrow} wide={wide} />
             </div>
           ) : (
-            <Guardrails narrow={narrow} onAutopilot={setAutopilot} onKill={setKill} />
+            <div
+              style={{
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                marginLeft: docked ? cw + 14 : 0,
+                transition: 'margin-left 0.28s cubic-bezier(0.2,0.8,0.2,1)',
+              }}
+            >
+              <Guardrails narrow={narrow} onAutopilot={setAutopilot} onKill={setKill} onSave={updateSettings} onRestart={restartEngine} />
+            </div>
           )}
         </main>
 

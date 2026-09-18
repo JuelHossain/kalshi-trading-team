@@ -126,6 +126,7 @@ def isolate_databases(tmp_path, monkeypatch):
     monkeypatch.setenv("GHOST_VAULT_DB", str(tmp_path / "vault.db"))
     monkeypatch.setenv("GHOST_SYNAPSE_DB", str(tmp_path / "synapse.db"))
     monkeypatch.setenv("GHOST_LEDGER_DB", str(tmp_path / "ledger.db"))
+    monkeypatch.setenv("GHOST_JOURNAL_DB", str(tmp_path / "journal.db"))
 
 
 @pytest.fixture(scope="session")

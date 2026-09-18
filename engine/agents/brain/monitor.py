@@ -6,7 +6,7 @@ Continuous monitoring and processing of opportunities from Synapse.
 import asyncio
 from datetime import datetime
 
-from core.constants import BRAIN_STALE_OPPORTUNITY_SECONDS
+from core import constants
 from core.flow_control import check_execution_queue_limit, should_restock
 from core.shared_utils import fire_and_forget
 
@@ -43,7 +43,7 @@ async def monitor_queue(brain_agent, stop_requested, synapse, log_callback, proc
             is_at_limit, exec_size = await check_execution_queue_limit(synapse)
             if is_at_limit:
                 await log_callback(
-                    f"Flow Control: Execution queue at limit ({exec_size}/10). Pausing analysis.",
+                    f"Flow Control: Execution queue at limit ({exec_size}/{constants.MAX_EXECUTION_QUEUE_SIZE}). Pausing analysis.",
                     level="WARN",
                 )
                 await asyncio.sleep(2)
@@ -67,7 +67,7 @@ async def monitor_queue(brain_agent, stop_requested, synapse, log_callback, proc
                 is_at_limit, exec_size = await check_execution_queue_limit(synapse)
                 if is_at_limit:
                     await log_callback(
-                        f"Flow Control: Execution queue at limit ({exec_size}/10). Stopping batch.",
+                        f"Flow Control: Execution queue at limit ({exec_size}/{constants.MAX_EXECUTION_QUEUE_SIZE}). Stopping batch.",
                         level="WARN",
                     )
                     break
@@ -161,7 +161,7 @@ async def handle_restock_trigger(
     """
     if result in ("VETOED", "STALE", "SKIPPED"):
         # When 5 opportunities dumped, request restock from Senses
-        if dumped_count >= 5:
+        if dumped_count >= constants.RESTOCK_THRESHOLD_VETO_COUNT:
             import time
 
             now = time.time()
@@ -186,13 +186,13 @@ async def handle_restock_trigger(
                 # its result.
                 fire_and_forget(bus.publish("REQUEST_RESTOCK", {}, "BRAIN"))
                 return (True, now)  # Reset counter and update time
-            if exec_size >= 10:
+            if exec_size >= constants.MAX_EXECUTION_QUEUE_SIZE:
                 await log_callback(
-                    f"Flow Control: Execution queue at limit ({exec_size}/10). NOT requesting restock.",
+                    f"Flow Control: Execution queue at limit ({exec_size}/{constants.MAX_EXECUTION_QUEUE_SIZE}). NOT requesting restock.",
                     level="WARN",
                 )
             else:
-                cooldown = 60  # 60 seconds cooldown
+                cooldown = constants.RESTOCK_COOLDOWN_SECONDS
                 await log_callback(
                     f"Flow Control: Restock cooldown active ({cooldown - (now - last_restock_time):.0f}s remaining).",
                     level="DEBUG",
@@ -232,7 +232,7 @@ def check_opportunity_freshness(opportunity: dict, log_callback) -> tuple[bool, 
 
     if ts:
         age = (now - ts).total_seconds()
-        if age >= BRAIN_STALE_OPPORTUNITY_SECONDS:
+        if age >= constants.BRAIN_STALE_OPPORTUNITY_SECONDS:
             fire_and_forget(
                 log_callback(
                     f"[STALE] Opportunity expired: {ticker} (Age: {age:.0f}s) - skipping",

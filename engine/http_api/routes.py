@@ -68,9 +68,19 @@ def register_all_routes(app, engine):
     app.router.add_get("/synapse/queues", get_synapse_queues(engine))
     app.router.add_get("/api/synapse/queues", get_synapse_queues(engine))
 
-    # Ledger routes
+    # Ledger and configuration routes
     app.router.add_get("/orders", get_orders(engine))
     app.router.add_get("/api/orders", get_orders(engine))
+    app.router.add_get("/config", get_config(engine))
+    app.router.add_get("/api/config", get_config(engine))
+    app.router.add_post("/config", update_config(engine))
+    app.router.add_post("/api/config", update_config(engine))
+    app.router.add_post("/engine/restart", restart_engine(engine))
+    app.router.add_post("/api/engine/restart", restart_engine(engine))
+    app.router.add_get("/journal", get_journal(engine))
+    app.router.add_get("/api/journal", get_journal(engine))
+    app.router.add_get("/decisions", get_decisions(engine))
+    app.router.add_get("/api/decisions", get_decisions(engine))
 
     # Environment routes
     app.router.add_get("/env-health", get_env_health(engine))
@@ -253,13 +263,36 @@ def health_check(engine):
     """GET /health: process liveness, agent count, cycle number, balance."""
 
     async def handler(request):
-        """Answer from in-memory state; never touches Kalshi."""
+        """Answer from in-memory state; never touches Kalshi.
+
+        Also says whether a cycle *could* run right now and why not: the
+        error box, the kill switches and a Soul lockdown each halt
+        authorisation silently otherwise, and the dashboard would show a
+        healthy engine that never trades.
+        """
+        synapse = getattr(engine, "synapse", None)
+        error_count = await synapse.errors.size() if synapse else 0
+        soul = getattr(engine, "soul", None)
+        halted: list[str] = []
+        if engine.manual_kill_switch:
+            halted.append("manual kill switch")
+        if engine.vault.kill_switch_active:
+            halted.append("vault kill switch")
+        if soul is not None and soul.is_locked_down:
+            halted.append("soul lockdown")
+        if error_count:
+            halted.append(f"error box holds {error_count}")
         return web.json_response(
             {
                 "status": "healthy",
-                "agents": 4,
+                "agents": len(engine.agents) or 4,
                 "cycle": engine.cycle_count,
                 "balance": engine.vault.current_balance / 100,
+                "processing": engine.is_processing,
+                "error_box": error_count,
+                "kill_switch": engine.manual_kill_switch or engine.vault.kill_switch_active,
+                "locked_down": bool(soul is not None and soul.is_locked_down),
+                "halted": halted,
             }
         )
 
@@ -525,6 +558,235 @@ def get_synapse_queues(engine):
                     "limit": MAX_EXECUTION_QUEUE_SIZE,
                 },
             }
+        )
+
+    return handler
+
+
+def engine_config(engine) -> dict:
+    """The engine's effective limits and settings, for the dashboard.
+
+    Read at request time so environment overrides (BRAIN_MIN_EDGE and the
+    like) are reported as they actually apply, not as the defaults.
+    """
+    import os
+
+    from agents.senses import scanner
+    from core import constants, trading_mode
+    from core.shared_utils import get_env_bool
+
+    vault = engine.vault
+    brain = getattr(engine, "brain", None)
+    return {
+        "paper_pinned": get_env_bool("IS_PAPER_TRADING", default=False),
+        "live_armed": trading_mode.is_live(),
+        "kalshi_env": os.getenv("KALSHI_ENV", "demo"),
+        "brain": {
+            "model": getattr(brain, "gemini_model", None) or os.getenv("GEMINI_MODEL"),
+            "min_edge": constants.BRAIN_MIN_EDGE,
+            "confidence_threshold": constants.BRAIN_CONFIDENCE_THRESHOLD,
+            "estimate_samples": constants.BRAIN_ESTIMATE_SAMPLES,
+            "max_disagreement": constants.BRAIN_MAX_DISAGREEMENT,
+            "stale_opportunity_seconds": constants.BRAIN_STALE_OPPORTUNITY_SECONDS,
+            "search_grounding": os.getenv("BRAIN_SEARCH_GROUNDING", "true").strip().lower()
+            not in ("false", "0", "no"),
+        },
+        "senses": {
+            "min_volume": scanner.MIN_VOLUME,
+            "max_spread_cents": scanner.MAX_SPREAD_CENTS,
+            "max_days_to_close": scanner.MAX_DAYS_TO_CLOSE,
+            "stock_buffer_size": constants.SENSES_STOCK_BUFFER_SIZE,
+            "queue_batch_size": constants.SENSES_QUEUE_BATCH_SIZE,
+        },
+        "hand": {
+            "max_stake_cents": constants.HAND_MAX_STAKE_CENTS,
+            "kelly_fraction": constants.HAND_KELLY_FRACTION,
+            "stop_loss_pct": constants.HAND_STOP_LOSS_PCT,
+            "take_profit_pct": constants.HAND_TAKE_PROFIT_PCT,
+            "exit_before_expiry_hours": constants.HAND_EXIT_BEFORE_EXPIRY_HOURS,
+        },
+        "vault": {
+            "principal_cents": vault.PRINCIPAL_CAPITAL_CENTS,
+            "hard_floor_cents": vault.HARD_FLOOR_CENTS,
+            "kill_switch_pct": vault.KILL_SWITCH_THRESHOLD_PCT,
+            "profit_lock_cents": vault.DAILY_PROFIT_THRESHOLD_CENTS,
+            "is_locked": vault.is_locked,
+            "kill_switch_active": vault.kill_switch_active,
+        },
+        "queues": {
+            "max_execution": constants.MAX_EXECUTION_QUEUE_SIZE,
+            "max_opportunity": constants.MAX_OPPORTUNITY_QUEUE_SIZE,
+        },
+        "min_cycle_interval_seconds": constants.MIN_CYCLE_INTERVAL_SECONDS,
+    }
+
+
+def _session_required(request) -> web.Response | None:
+    """Writes to the engine need a signed-in dashboard session or the API key.
+
+    Returns a 401 response to send, or None when the caller may proceed.
+    """
+    from core.auth import auth_manager
+
+    bearer = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+    if bearer and secrets_equal(bearer, auth_manager.api_key or ""):
+        return None
+    if auth_manager.authenticated:
+        return None
+    return web.json_response(
+        {"error": "Unauthorized", "message": "Sign in to the dashboard or send the API key."},
+        status=401,
+    )
+
+
+def secrets_equal(a: str, b: str) -> bool:
+    import secrets as _secrets
+
+    return bool(a) and bool(b) and _secrets.compare_digest(a, b)
+
+
+def get_config(engine):
+    """GET /config: the settings registry (secrets masked) plus the runtime summary."""
+
+    async def handler(request):
+        """Answer from the registry, constants and the vault; never touches Kalshi."""
+        from core.settings import settings
+
+        body = settings.describe()
+        body["runtime"] = engine_config(engine)
+        return web.json_response(body)
+
+    return handler
+
+
+def update_config(engine):
+    """POST /config: change settings. Body `{"changes": {"KEY": value, ...}}`.
+
+    Values are validated as a batch, persisted to the engine's .env, applied
+    live where the reader can be patched, and reported back with any keys
+    that need a restart to take effect. Requires a signed-in session.
+    """
+
+    async def handler(request):
+        """Validate, persist, apply; answer with the update report and the new state."""
+        denied = _session_required(request)
+        if denied is not None:
+            return denied
+        from core.settings import settings
+
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response(
+                {"error": "Bad request", "message": "JSON body required"}, status=400
+            )
+        changes = data.get("changes") if isinstance(data, dict) else None
+        if not isinstance(changes, dict) or not changes:
+            return web.json_response(
+                {"error": "Bad request", "message": 'Body must be {"changes": {KEY: value}}'},
+                status=400,
+            )
+        report = settings.update(changes)
+        status = (
+            400 if report.errors and not report.applied and not report.restart_required else 200
+        )
+        await engine.bus.publish(
+            "SYSTEM_LOG",
+            {
+                "level": "WARN" if report.errors else "INFO",
+                "message": (
+                    f"[GHOST] Settings changed: {', '.join(sorted(changes))}"
+                    + (
+                        f" · restart needed for {', '.join(report.restart_required)}"
+                        if report.restart_required
+                        else ""
+                    )
+                    + (f" · rejected {', '.join(report.errors)}" if report.errors else "")
+                ),
+                "agent_id": 1,
+                "timestamp": datetime.now().isoformat(),
+            },
+            "GHOST",
+        )
+        body = report.as_dict()
+        body["config"] = settings.describe()
+        body["config"]["runtime"] = engine_config(engine)
+        return web.json_response(body, status=status)
+
+    return handler
+
+
+def restart_engine(engine):
+    """POST /engine/restart: re-exec the process so restart-only settings take effect."""
+
+    async def handler(request):
+        """Answer first, then replace the process a moment later."""
+        denied = _session_required(request)
+        if denied is not None:
+            return denied
+        import os
+        import sys
+
+        async def _restart():
+            await asyncio.sleep(0.8)
+            try:
+                await engine.shutdown("Restart requested from the dashboard")
+            finally:
+                os.execv(sys.executable, [sys.executable, *sys.argv])
+
+        fire_and_forget(_restart())
+        return web.json_response(
+            {
+                "status": "restarting",
+                "message": "The engine is restarting; reconnect in a few seconds.",
+            }
+        )
+
+    return handler
+
+
+def get_journal(engine):
+    """GET /journal: the durable event log. Filters: agent, topic, cycle, level, since_id, limit."""
+
+    async def handler(request):
+        """Read from the journal; `since_id` pages forward, otherwise newest first."""
+        journal = getattr(engine, "journal", None)
+        if journal is None:
+            return web.json_response({"events": [], "count": 0})
+        q = request.query
+
+        def _int(name):
+            try:
+                return int(q[name]) if name in q else None
+            except ValueError:
+                return None
+
+        events = journal.query(
+            limit=_int("limit") or 200,
+            agent=q.get("agent"),
+            topic=q.get("topic"),
+            cycle=_int("cycle"),
+            since_id=_int("since_id"),
+            level=q.get("level"),
+        )
+        return web.json_response({"events": events, "count": journal.count()})
+
+    return handler
+
+
+def get_decisions(engine):
+    """GET /decisions: every Brain judgement from the ledger, newest first."""
+
+    async def handler(request):
+        """Read the ledger; `limit` and `ticker` filter."""
+        from core.ledger import recent_decisions
+
+        try:
+            limit = max(1, min(2000, int(request.query.get("limit", "200"))))
+        except ValueError:
+            limit = 200
+        return web.json_response(
+            {"decisions": recent_decisions(limit, request.query.get("ticker"))}
         )
 
     return handler

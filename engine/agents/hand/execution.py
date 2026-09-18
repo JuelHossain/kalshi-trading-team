@@ -7,11 +7,7 @@ import os
 
 import aiohttp
 from agents.brain.simulation import kelly_fraction
-from core import trading_mode
-from core.constants import (
-    HAND_KELLY_FRACTION,
-    HAND_MAX_STAKE_CENTS,
-)
+from core import constants, trading_mode
 
 
 def parse_orderbook(raw, side: str = "yes") -> dict | None:
@@ -115,7 +111,7 @@ async def snipe_check(
     kalshi_client,
     ticker: str,
     log_callback,
-    max_stake_cents: int = HAND_MAX_STAKE_CENTS,
+    max_stake_cents: int | None = None,
     side: str = "yes",
 ) -> dict:
     """Analyze order book for best entry with zero slippage.
@@ -124,6 +120,8 @@ async def snipe_check(
     is a YES bid at (100 - x). Prices are mirrored rather than fetching a
     second book.
     """
+    if max_stake_cents is None:
+        max_stake_cents = constants.HAND_MAX_STAKE_CENTS
     if not kalshi_client:
         await log_callback("Kalshi client unavailable. Cannot perform snipe check.", level="ERROR")
         return {"valid": False, "reason": "Kalshi client unavailable"}
@@ -173,10 +171,10 @@ def calculate_kelly_stake(
     confidence: float,
     ev: float,
     vault,
-    max_stake_cents: int = HAND_MAX_STAKE_CENTS,
+    max_stake_cents: int | None = None,
     probability: float | None = None,
     price_cents: int | None = None,
-    kelly_factor: float = HAND_KELLY_FRACTION,
+    kelly_factor: float | None = None,
 ) -> int:
     """Stake a fraction of Kelly, sized on the edge.
 
@@ -195,6 +193,10 @@ def calculate_kelly_stake(
     Returns 0 rather than guessing when the probability or price is missing,
     so a wiring mistake cannot silently produce a mis-sized live order.
     """
+    if max_stake_cents is None:
+        max_stake_cents = constants.HAND_MAX_STAKE_CENTS
+    if kelly_factor is None:
+        kelly_factor = constants.HAND_KELLY_FRACTION
     if ev <= 0 or probability is None or price_cents is None:
         return 0
 
@@ -212,7 +214,7 @@ async def execute_order(
     ticker: str,
     price: int,
     stake: int,
-    max_stake_cents: int = HAND_MAX_STAKE_CENTS,
+    max_stake_cents: int | None = None,
     log_callback=None,
     side: str = "yes",
 ) -> dict:
@@ -221,6 +223,9 @@ async def execute_order(
     `side` is "yes" or "no". `price` is the price of that side, so the
     validation below is unchanged: both sides quote 1-99c.
     """
+
+    if max_stake_cents is None:
+        max_stake_cents = constants.HAND_MAX_STAKE_CENTS
 
     # === PRE-TRADE VALIDATION ===
 

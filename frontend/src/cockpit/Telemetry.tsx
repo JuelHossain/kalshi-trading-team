@@ -56,7 +56,7 @@ export function Telemetry({ narrow, short }: { narrow: boolean; short: boolean }
                 ${s.balance.toFixed(2)}
               </span>
               <span className="num" style={{ fontSize: 13, fontWeight: 600, color: up ? SG : AC }}>
-                {s.balance ? `${up ? '+' : ''}${((pnl / s.principal) * 100).toFixed(2)}%` : '—'}
+                {s.balance && s.principal ? `${up ? '+' : ''}${((pnl / s.principal) * 100).toFixed(2)}%` : '—'}
               </span>
             </div>
             <svg viewBox="0 0 300 48" preserveAspectRatio="none" style={{ width: '100%', height: 38, display: 'block', marginTop: 10, overflow: 'visible' }}>
@@ -72,7 +72,9 @@ export function Telemetry({ narrow, short }: { narrow: boolean; short: boolean }
             </svg>
             {!short && (
               <div style={{ fontSize: 10, color: F, marginTop: 6 }}>
-                {s.spark.length < 2 ? 'Sparkline fills as the vault reports' : `${s.spark.length} readings · principal $${s.principal.toFixed(0)}`}
+                {s.spark.length < 2
+                  ? 'Sparkline fills as the vault reports'
+                  : `${s.spark.length} readings this session${s.principal ? ` · principal $${s.principal.toFixed(0)}` : ''}`}
               </div>
             )}
           </div>

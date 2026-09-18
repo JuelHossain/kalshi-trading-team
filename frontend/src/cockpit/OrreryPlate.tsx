@@ -27,7 +27,10 @@ export function OrreryPlate() {
   const { box, ref } = useBoxSize();
   const v = useCockpitView();
   const openCard = useCockpit((s) => s.openCard);
-  const { pal, mode, beat, bi, dur, el, bp, states, storeN, coreHot, coreAlarm } = v;
+  const { pal, mode, beat, bi, dur, el, bp, states, storeN, storeCap, coreHot, coreAlarm } = v;
+  // Ten gauge ticks stand for the whole capacity, so a tick lights per
+  // tenth of the store in use.
+  const litTicks = storeN <= 0 ? 0 : Math.max(1, Math.min(STORE_CAP, Math.round((storeN / storeCap) * STORE_CAP)));
 
   const BW = box.w;
   const BH = box.h;
@@ -515,7 +518,7 @@ export function OrreryPlate() {
           {/* store gauge around the star */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3 }}>
             {Array.from({ length: STORE_CAP }, (_, k) => {
-              const on = k < storeN;
+              const on = k < litTicks;
               const a = -90 + (360 / STORE_CAP) * k;
               const rr = coreD / 2 + Math.max(11, Math.round(coreD * 0.2));
               return (
@@ -553,7 +556,7 @@ export function OrreryPlate() {
           {/* the star */}
           <button
             onClick={() => openCard({ kind: 'core' })}
-            aria-label={`Synapse · ${storeN} of ${STORE_CAP} held`}
+            aria-label={`Synapse · ${storeN} of ${storeCap} held`}
             style={{
               position: 'absolute',
               left: '50%',
@@ -629,7 +632,7 @@ export function OrreryPlate() {
                   color: PB,
                 }}
               >
-                {storeN}/{STORE_CAP}
+                {storeN}/{storeCap}
               </span>
               {coreD > 78 && (
                 <span

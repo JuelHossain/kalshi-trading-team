@@ -27,7 +27,7 @@ from agents.gateway import GatewayAgent
 from agents.hand import HandAgent
 from agents.senses import SensesAgent
 from agents.soul import SoulAgent
-from core import trading_mode
+from core import constants, trading_mode
 
 # Core imports
 from core.auth import auth_manager
@@ -38,7 +38,6 @@ from core.constants import (
     AGENT_ID_HAND,
     AGENT_ID_SENSES,
     AGENT_ID_SOUL,
-    MIN_CYCLE_INTERVAL_SECONDS,
 )
 from core.display import (
     AgentType,
@@ -110,6 +109,9 @@ class GhostEngine:
 
         log_info("Initializing Ghost Engine v3.0 system components...")
 
+        # The journal listens before any agent speaks, so boot lines are kept.
+        self._wire_journal()
+
         # Autopilot / Request Cycle Support
         await self.bus.subscribe("REQUEST_CYCLE", self._handle_cycle_request)
 
@@ -151,6 +153,9 @@ class GhostEngine:
                 agent = agent_class(agent_id, self.bus, **kwargs)
                 await agent.start()
                 self.agents.append(agent)
+                # Named handles for the HTTP layer: authorize_cycle and the
+                # routes probe engine.soul, and /config reads the Brain's model.
+                setattr(self, agent_type.name.lower(), agent)
                 log_success(f"{agent_type.name} initialized successfully", agent_type)
                 update_agent_status(agent_type, "IDLE")
 
@@ -194,11 +199,75 @@ class GhostEngine:
             )
             await self.vault.initialize(0)
 
+        self._wire_settings()
+
         # Show system online message
         self.display.show_system_online()
 
         # Update display with final agent status
         show_agent_status()
+
+    def _wire_settings(self) -> None:
+        """Point the settings registry at engine/.env and register live appliers.
+
+        Anything that copied a value at construction is patched here when
+        that value changes from the dashboard. Everything else reads
+        core.constants at call time and needs nothing.
+        """
+        from agents.senses import scanner
+        from core.settings import settings
+
+        settings.env_path = os.path.join(os.path.dirname(__file__), ".env")
+
+        vault = self.vault
+        settings.register_applier(
+            "VAULT_PRINCIPAL_CENTS", lambda v: setattr(vault, "PRINCIPAL_CAPITAL_CENTS", int(v))
+        )
+        settings.register_applier(
+            "HARD_FLOOR_CENTS", lambda v: setattr(vault, "HARD_FLOOR_CENTS", int(v))
+        )
+        settings.register_applier(
+            "VAULT_KILL_SWITCH_PCT", lambda v: setattr(vault, "KILL_SWITCH_THRESHOLD_PCT", float(v))
+        )
+        settings.register_applier(
+            "VAULT_PROFIT_THRESHOLD_CENTS",
+            lambda v: setattr(vault, "DAILY_PROFIT_THRESHOLD_CENTS", int(v)),
+        )
+        settings.register_applier(
+            "SENSES_MIN_VOLUME", lambda v: setattr(scanner, "MIN_VOLUME", int(v))
+        )
+        settings.register_applier(
+            "SENSES_MAX_SPREAD_CENTS", lambda v: setattr(scanner, "MAX_SPREAD_CENTS", int(v))
+        )
+        settings.register_applier(
+            "SENSES_MAX_DAYS_TO_CLOSE", lambda v: setattr(scanner, "MAX_DAYS_TO_CLOSE", int(v))
+        )
+        settings.register_applier(
+            "AUTH_PASSWORD", lambda v: setattr(auth_manager, "auth_password", str(v))
+        )
+        settings.register_applier(
+            "GHOST_API_KEY", lambda v: setattr(auth_manager, "api_key", str(v))
+        )
+        brain = getattr(self, "brain", None)
+        if brain is not None:
+            settings.register_applier(
+                "GEMINI_MODEL", lambda v: setattr(brain, "gemini_model", str(v))
+            )
+
+    def _wire_journal(self) -> None:
+        """Record every bus topic the journal cares about."""
+        from core.journal import TOPICS, Journal
+
+        self.journal = Journal()
+
+        def _recorder(topic: str):
+            async def _record(message):
+                self.journal.record(topic, message.payload, message.sender, self.cycle_count)
+
+            return _record
+
+        for topic in TOPICS:
+            fire_and_forget(self.bus.subscribe(topic, _recorder(topic)))
 
     def _halt(self, reason: str) -> bool:
         """Print halt message and return False (helper for kill switch checks)."""
@@ -213,9 +282,9 @@ class GhostEngine:
         # Temporarily disabled for manual testing
         if self.last_cycle_time:
             elapsed = (datetime.now() - self.last_cycle_time).total_seconds()
-            if elapsed < MIN_CYCLE_INTERVAL_SECONDS:
+            if elapsed < constants.MIN_CYCLE_INTERVAL_SECONDS:
                 logger.warning(
-                    f"Rate limit: Wait {MIN_CYCLE_INTERVAL_SECONDS - elapsed:.0f}s before next cycle."
+                    f"Rate limit: Wait {constants.MIN_CYCLE_INTERVAL_SECONDS - elapsed:.0f}s before next cycle."
                 )
                 return False
 
@@ -462,6 +531,8 @@ class GhostEngine:
         await kalshi_client.close()
         if getattr(self, "synapse", None) is not None:
             self.synapse.close()
+        if getattr(self, "journal", None) is not None:
+            self.journal.close()
 
         # Show shutdown message
         self.display.show_shutdown_message()

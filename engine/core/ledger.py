@@ -182,6 +182,45 @@ def calibration(buckets: int = 5) -> list[dict]:
     return report
 
 
+def recent_decisions(limit: int = 200, ticker: str | None = None) -> list[dict]:
+    """Every judgement the Brain recorded, newest first: approvals and vetoes alike.
+
+    This is the persistent answer to "what did the bot think, and why", so
+    the dashboard's Brain history survives a restart.
+    """
+    try:
+        with _connect() as conn:
+            where = "WHERE ticker = ?" if ticker else ""
+            args: tuple = (ticker, int(limit)) if ticker else (int(limit),)
+            rows = conn.execute(
+                f"""SELECT id, decided_at, ticker, market_price, estimated_probability,
+                           confidence, edge, outcome, veto_reason, stake_cents, order_id,
+                           settled_yes, settled_at
+                      FROM decisions {where}
+                     ORDER BY id DESC
+                     LIMIT ?""",
+                args,
+            ).fetchall()
+    except Exception:
+        return []
+    keys = (
+        "id",
+        "decided_at",
+        "ticker",
+        "market_price",
+        "estimated_probability",
+        "confidence",
+        "edge",
+        "outcome",
+        "veto_reason",
+        "stake_cents",
+        "order_id",
+        "settled_yes",
+        "settled_at",
+    )
+    return [dict(zip(keys, row, strict=True)) for row in rows]
+
+
 def recent_fills(limit: int = 200) -> list[dict]:
     """Executed orders, newest first, for the dashboard's Orders panel.
 

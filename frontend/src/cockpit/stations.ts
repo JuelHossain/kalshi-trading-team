@@ -10,12 +10,10 @@ export interface StationDef {
   role: string;
   icon: LucideIcon;
   model: string;
-  /** Expected working time in ms. Drives the progress arc until the real
-   *  completion event arrives; the engine's own timing is what History shows. */
+  /** Fallback working time in ms, used only until the agent has completed
+   *  a run this session; after that the median measured time takes over. */
   dur: number;
   payload: string;
-  /** How many items a completed throw leaves in the store. */
-  depth: number;
   lane: number;
   art: number;
   /** The engine's agent_id in SYSTEM_LOG events. */
@@ -27,10 +25,9 @@ export const STATIONS: StationDef[] = [
     name: 'Soul',
     role: 'Authorization',
     icon: Shield,
-    model: 'vault rails · pre-flight',
+    model: 'pre-flight · vault rails',
     dur: 4000,
     payload: 'authorization',
-    depth: 1,
     lane: 0,
     art: 0,
     agentId: 1,
@@ -39,10 +36,9 @@ export const STATIONS: StationDef[] = [
     name: 'Senses',
     role: 'Surveillance',
     icon: Eye,
-    model: 'kalshi-rest · close window',
+    model: 'Kalshi markets · close window',
     dur: 20000,
     payload: 'shortlist',
-    depth: 10,
     lane: 1,
     art: 1,
     agentId: 2,
@@ -51,10 +47,9 @@ export const STATIONS: StationDef[] = [
     name: 'Brain',
     role: 'Deliberation',
     icon: Cpu,
-    model: 'gemini-3.8-flash · grounded',
+    model: 'Gemini · search grounded',
     dur: 15000,
     payload: 'verdict',
-    depth: 1,
     lane: 0,
     art: 2,
     agentId: 3,
@@ -63,10 +58,9 @@ export const STATIONS: StationDef[] = [
     name: 'Hand',
     role: 'Execution',
     icon: Send,
-    model: 'kalshi-rest · paper fills',
+    model: 'Kalshi orders',
     dur: 5000,
     payload: 'fill receipt',
-    depth: 0,
     lane: 1,
     art: 3,
     agentId: 4,

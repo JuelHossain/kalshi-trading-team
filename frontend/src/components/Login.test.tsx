@@ -16,7 +16,7 @@ describe('Login', () => {
     expect(screen.getByRole('radio', { name: 'Demo' })).toBeChecked();
     expect(screen.getByRole('radio', { name: 'Production' })).not.toBeChecked();
     expect(screen.getByText('Paper fills · nothing at risk')).toBeInTheDocument();
-    expect(screen.getByText('RSA-SHA256 signed session')).toBeInTheDocument();
+    expect(screen.getByText(/Password checked by the engine/)).toBeInTheDocument();
     expect(screen.getByLabelText('Authorization password')).toBeInTheDocument();
   });
 

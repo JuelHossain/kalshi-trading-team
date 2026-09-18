@@ -5,17 +5,14 @@ Role: 24/7 Passive Observer
 Core SensesAgent class with market scanning capabilities.
 """
 
-import os
 import time
 from typing import Any
 
 from agents.base import BaseAgent
+from core import constants
 from core.bus import EventBus
-from core.constants import (
-    SENSES_QUEUE_BATCH_SIZE,
-    SENSES_STOCK_BUFFER_SIZE,
-)
 from core.flow_control import check_execution_queue_limit, check_opportunity_queue_limit
+from core.settings import Live
 from core.synapse import MarketData, Opportunity, Synapse
 
 from .scanner import fetch_kalshi_markets, queue_from_stock, surveillance_loop
@@ -24,8 +21,11 @@ from .scanner import fetch_kalshi_markets, queue_from_stock, surveillance_loop
 class SensesAgent(BaseAgent):
     """The 24/7 Observer - Surveillance & Signal Detection"""
 
-    STOCK_BUFFER_SIZE = SENSES_STOCK_BUFFER_SIZE
-    QUEUE_BATCH_SIZE = SENSES_QUEUE_BATCH_SIZE
+    # Live: read from core.constants at access time, so a dashboard edit
+    # applies to the next scan. Tests may still assign an instance override.
+    STOCK_BUFFER_SIZE = Live("SENSES_STOCK_BUFFER_SIZE")
+    QUEUE_BATCH_SIZE = Live("SENSES_QUEUE_BATCH_SIZE")
+    REQUEUE_AFTER_SECONDS = Live("SENSES_REQUEUE_AFTER_SECONDS")
 
     def __init__(
         self,
@@ -73,11 +73,9 @@ class SensesAgent(BaseAgent):
         """Stop scanning at cycle end"""
         await self.log("Surveillance paused. Cycle complete.")
 
-    # How long a ticker stays excluded from re-queueing after it was queued.
-    # Session-scoped and time-bounded: a market vetoed at 09:00 may deserve a
-    # fresh look hours later, but not on the very next restock. Restart
-    # forgets this; the Hand's position guard is what survives a restart.
-    REQUEUE_AFTER_SECONDS = float(os.getenv("SENSES_REQUEUE_AFTER_SECONDS", "21600"))
+    # Requeue exclusion is session-scoped and time-bounded: a market vetoed at
+    # 09:00 may deserve a fresh look hours later, but not on the very next
+    # restock. Restart forgets this; the Hand's position guard survives one.
 
     def _queued_at(self) -> dict[str, float]:
         if not hasattr(self, "_queued_at_map"):
@@ -153,7 +151,7 @@ class SensesAgent(BaseAgent):
             is_at_limit, exec_size = await check_execution_queue_limit(self.synapse)
             if is_at_limit:
                 await self.log(
-                    f"Flow Control: Execution queue at limit ({exec_size}/10). Skipping restock.",
+                    f"Flow Control: Execution queue at limit ({exec_size}/{constants.MAX_EXECUTION_QUEUE_SIZE}). Skipping restock.",
                     level="WARN",
                 )
                 return

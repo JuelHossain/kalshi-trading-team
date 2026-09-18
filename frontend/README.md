@@ -39,8 +39,10 @@ npm run build
 | `GET /api/stream` (SSE) | The beat machine. Agent log lines start and finish work beats, verdicts and fills become History runs and Orders rows, the vault frame moves the bankroll. See `src/cockpit/engineEvents.ts` for every line it understands. |
 | `GET /api/synapse/queues` | The star's depth gauge and the Synapse inspector's list of held items. Polled every 2.5 s. |
 | `GET /api/orders` | The Orders panel, from the decision ledger. Polled every 20 s and after each fill. |
-| `GET /api/health`, `GET /api/autopilot/status` | Cycle number, balance, autopilot and lockdown state. |
-| `POST /api/trigger`, `/cancel`, `/autopilot/*`, `/kill-switch` | The Run cycle, Cancel, Autopilot and Kill switch controls. |
+| `GET /api/health`, `GET /api/autopilot/status` | Cycle number, balance, autopilot state, and why the engine is refusing cycles (error box, kill switch, lockdown). The top bar shows a Reset control while it is. |
+| `GET /api/config`, `POST /api/config`, `POST /api/engine/restart` | The Config view. Every setting the engine's registry describes is rendered from the reply and saved per group; the engine validates, persists to its `.env`, applies live where it can, and lists keys that need a restart. |
+| `GET /api/journal`, `GET /api/decisions` | Persistent history in the inspector (journal lines per agent, ledger decisions for the Brain) and the trace's seed on open. |
+| `POST /api/trigger`, `/cancel`, `/autopilot/*`, `/kill-switch`, `/reset` | The Run cycle, Cancel, Autopilot, Kill switch and Reset controls. |
 
 Transit beats (throw, catch, signal) are visual and run on fixed timers.
 Work beats last until the engine reports the agent finished; the progress
@@ -57,7 +59,13 @@ arc holds just short of full if an agent runs over its expected budget.
 | `engineEvents.ts` | Pure mapping from engine events to store actions. |
 | `useEngineFeed.ts` | SSE subscription, polls, the 240 ms clock, and the control calls. |
 | `OrreryPlate.tsx` | The glass plate, star, planets, throws. |
+| `useEngineHistory.ts` | Persistent history for the inspector from `/decisions` and `/journal`. |
+| `SettingsEditor.tsx` | The settings editor: one card per registry group, controls by kind, secrets write-only. |
 | `BeatBar.tsx`, `OrdersPanel.tsx`, `Telemetry.tsx`, `InspectorCard.tsx`, `Guardrails.tsx`, `Cockpit.tsx` | The screens. |
+
+Nothing on screen is a constant written into the page: limits come from
+`/config`, durations are medians of measured runs, the star's depth is the
+real queue count, and history is what the engine persisted.
 
 Motion is pure CSS animation with negative `animation-delay` (keyframes in
 `src/index.css`). Do not reimplement the orbit in JavaScript.

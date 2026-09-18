@@ -91,6 +91,77 @@ export interface CardRef {
   i?: number;
 }
 
+/** GET /config: the limits the engine actually runs with. */
+export interface EngineConfig {
+  paper_pinned: boolean;
+  live_armed: boolean;
+  kalshi_env: string;
+  brain: {
+    model: string | null;
+    min_edge: number;
+    confidence_threshold: number;
+    estimate_samples: number;
+    max_disagreement: number;
+    stale_opportunity_seconds: number;
+    search_grounding: boolean;
+  };
+  senses: {
+    min_volume: number;
+    max_spread_cents: number;
+    max_days_to_close: number;
+    stock_buffer_size: number;
+    queue_batch_size: number;
+  };
+  hand: {
+    max_stake_cents: number;
+    kelly_fraction: number;
+    stop_loss_pct: number;
+    take_profit_pct: number;
+    exit_before_expiry_hours: number;
+  };
+  vault: {
+    principal_cents: number;
+    hard_floor_cents: number;
+    kill_switch_pct: number;
+    profit_lock_cents: number;
+    is_locked: boolean;
+    kill_switch_active: boolean;
+  };
+  queues: { max_execution: number; max_opportunity: number };
+  min_cycle_interval_seconds: number;
+}
+
+/** One editable setting as GET /config describes it. Secrets carry no value. */
+export interface SettingSpec {
+  key: string;
+  kind: 'int' | 'float' | 'bool' | 'text' | 'choice' | 'secret' | 'multiline_secret';
+  label: string;
+  help: string;
+  restart: boolean;
+  default: unknown;
+  value?: unknown;
+  set?: boolean;
+  hint?: string;
+  choices?: string[];
+  minimum?: number;
+  maximum?: number;
+  step?: number;
+  unit?: string;
+}
+
+export interface SettingsGroup {
+  id: string;
+  title: string;
+  help: string;
+  settings: SettingSpec[];
+}
+
+export interface UpdateReport {
+  applied: string[];
+  restart_required: string[];
+  errors: Record<string, string>;
+}
+
 export interface CockpitState {
   view: 'pipeline' | 'config';
   palette: PaletteKey;
@@ -99,6 +170,10 @@ export interface CockpitState {
   autopilot: boolean;
   processing: boolean;
   paused: boolean;
+  /** Errors latched in the Synapse error box; any means no cycle is authorised. */
+  errorBox: number;
+  /** Why the engine refuses cycles right now, in its own words, from /health. */
+  halted: string[];
 
   beat: Beat;
   bi: number;
@@ -107,14 +182,26 @@ export interface CockpitState {
   expected: number;
   retries: number;
   workStart: number | null;
+  /** A completed hand-off whose next agent has not started yet: the real
+   *  hold time at the star is measured when it does. */
+  pendingHop: { from: number; at: number } | null;
   brainDone: boolean;
   lastActivity: number;
   faultUntil: number;
 
+  config: EngineConfig | null;
+  settingsGroups: SettingsGroup[];
+  envFile: string | null;
+  /** Keys changed since boot that only take effect after a restart. */
+  restartPending: string[];
+  lastReport: UpdateReport | null;
   cycle: number;
   balance: number;
   principal: number;
   spark: number[];
+  /** Real queue counts from /synapse/queues. */
+  oppDepth: number;
+  execDepth: number;
   storeDepth: number;
   storeKind: number;
   storeItems: StoreItem[];
@@ -142,9 +229,15 @@ export interface CockpitState {
 
   setView: (view: 'pipeline' | 'config') => void;
   setPalette: (palette: PaletteKey) => void;
-  setEngine: (patch: Partial<Pick<CockpitState, 'connected' | 'kill' | 'autopilot' | 'processing' | 'cycle'>>) => void;
+  setEngine: (
+    patch: Partial<Pick<CockpitState, 'connected' | 'kill' | 'autopilot' | 'processing' | 'cycle' | 'errorBox' | 'halted'>>
+  ) => void;
   setBalance: (balance: number, principal?: number) => void;
-  setQueues: (depth: number, items: StoreItem[], execAtLimit: boolean) => void;
+  setConfig: (config: EngineConfig) => void;
+  setSettingsGroups: (groups: SettingsGroup[], envFile: string | null) => void;
+  setReport: (report: UpdateReport | null) => void;
+  clearRestartPending: () => void;
+  setQueues: (oppDepth: number, execDepth: number, items: StoreItem[], execAtLimit: boolean) => void;
   setOrders: (orders: Order[]) => void;
   addOrder: (order: Order) => void;
   pushLog: (row: Omit<LogRow, 'id' | 't'> & { t?: string }) => void;
@@ -248,6 +341,8 @@ const initial = (): Omit<CockpitState, keyof Actions> => ({
   autopilot: false,
   processing: false,
   paused: false,
+  errorBox: 0,
+  halted: [],
 
   beat: 'idle',
   bi: 0,
@@ -256,14 +351,22 @@ const initial = (): Omit<CockpitState, keyof Actions> => ({
   expected: STATIONS[0].dur,
   retries: 0,
   workStart: null,
+  pendingHop: null,
   brainDone: true,
   lastActivity: 0,
   faultUntil: 0,
 
+  config: null,
+  settingsGroups: [],
+  envFile: null,
+  restartPending: [],
+  lastReport: null,
   cycle: 0,
   balance: 0,
-  principal: 300,
+  principal: 0,
   spark: [],
+  oppDepth: 0,
+  execDepth: 0,
   storeDepth: 0,
   storeKind: -1,
   storeItems: [],
@@ -296,6 +399,10 @@ type Actions = Pick<
   | 'setPalette'
   | 'setEngine'
   | 'setBalance'
+  | 'setConfig'
+  | 'setSettingsGroups'
+  | 'setReport'
+  | 'clearRestartPending'
   | 'setQueues'
   | 'setOrders'
   | 'addOrder'
@@ -350,16 +457,33 @@ export const useCockpit = create<CockpitState>()((set, get) => ({
           ? s.spark
           : [...s.spark, balance].slice(-52),
     })),
-  setQueues: (depth, items, execAtLimit) =>
+  setConfig: (config) =>
+    set((s) => ({
+      config,
+      principal: config.vault.principal_cents / 100 || s.principal,
+    })),
+  setSettingsGroups: (settingsGroups, envFile) => set({ settingsGroups, envFile }),
+  setReport: (lastReport) =>
+    set((s) => ({
+      lastReport,
+      restartPending: lastReport
+        ? Array.from(new Set([...s.restartPending, ...lastReport.restart_required]))
+        : s.restartPending,
+    })),
+  clearRestartPending: () => set({ restartPending: [], lastReport: null }),
+  setQueues: (oppDepth, execDepth, items, execAtLimit) =>
     set((s) => {
+      const depth = oppDepth + execDepth;
       const idle = s.beat === 'idle' || s.beat === 'locked';
       return {
-        storeDepth: Math.min(STORE_CAP, depth),
+        oppDepth,
+        execDepth,
+        storeDepth: depth,
         storeItems: items,
         execAtLimit,
-        // A depth reading while idle means the queues still hold work from a
-        // previous session; show it without pretending an agent is active.
-        storeKind: depth === 0 ? -1 : idle && s.storeKind < 0 ? 1 : s.storeKind,
+        // What the star holds is whichever queue is non-empty: verdicts
+        // waiting for the Hand outrank opportunities waiting for the Brain.
+        storeKind: depth === 0 ? -1 : execDepth > 0 ? 2 : idle || s.storeKind < 0 ? 1 : s.storeKind,
       };
     }),
   setOrders: (orders) => set({ orders: orders.slice(-200) }),
@@ -374,10 +498,35 @@ export const useCockpit = create<CockpitState>()((set, get) => ({
   beginWork: (i, expected) => {
     const s = get();
     const now = Date.now();
+    // The hop at the star is real: measured from the previous agent's
+    // completion to this agent's first log line.
+    const hop = s.pendingHop;
+    const hopRun: Run[] =
+      hop && (hop.from + 1) % N === i
+        ? [
+            {
+              id: uid('h'),
+              kind: 'core',
+              hop: hop.from,
+              cycle: s.cycle,
+              ok: true,
+              ms: now - hop.at,
+              ts: now,
+              summary: `Caught the ${STATIONS[hop.from].payload} · woke the ${STATIONS[i].name}`,
+              detail: [
+                ['Caught', STATIONS[hop.from].payload],
+                ['Held', `${((now - hop.at) / 1000).toFixed(2)}s`],
+                ['Woke', STATIONS[i].name],
+              ],
+            },
+          ]
+        : [];
+    const hopPatch = hopRun.length ? { pendingHop: null, runs: [...s.runs, ...hopRun].slice(-120) } : {};
+
     // A provisional work beat (set by the transit timer) is confirmed, not
     // restarted, when the real event arrives a moment later.
     if (s.beat === 'work' && s.bi === i && now - s.t0 < 2500) {
-      set({ expected: expected ?? s.expected, lastActivity: now });
+      set({ expected: expected ?? s.expected, lastActivity: now, ...hopPatch });
       return;
     }
     // The engine hands off instantly, but the throw takes ~3.4 s on screen.
@@ -385,7 +534,7 @@ export const useCockpit = create<CockpitState>()((set, get) => ({
     // (tick() then starts the work beat) rather than cutting it short.
     const inTransit = s.beat === 'throw' || s.beat === 'flare' || s.beat === 'signal';
     if (inTransit && (s.bi + 1) % N === i && now - s.t0 < THROW_MS + FLARE_MS + SIGNAL_MS) {
-      set({ lastActivity: now, brainDone: i === 2 ? false : s.brainDone });
+      set({ lastActivity: now, brainDone: i === 2 ? false : s.brainDone, ...hopPatch });
       return;
     }
     set({
@@ -393,10 +542,11 @@ export const useCockpit = create<CockpitState>()((set, get) => ({
       bi: i,
       t0: now,
       now,
-      expected: expected ?? STATIONS[i].dur,
+      expected: expected ?? typicalMs(s.runs, i),
       workStart: now,
       lastActivity: now,
       brainDone: i === 2 ? false : s.brainDone,
+      ...hopPatch,
     });
   },
 
@@ -425,14 +575,15 @@ export const useCockpit = create<CockpitState>()((set, get) => ({
       bi: i,
       t0: now,
       now,
-      expected: advance ? THROW_MS : STATIONS[i].dur,
+      expected: advance ? THROW_MS : typicalMs(s.runs, i),
       workStart: advance ? null : now,
+      pendingHop: advance ? { from: i, at: now } : s.pendingHop,
       lastActivity: now,
       runs: [...s.runs, run].slice(-120),
     });
   },
 
-  setIdle: () => set({ beat: 'idle', t0: Date.now(), now: Date.now(), workStart: null }),
+  setIdle: () => set({ beat: 'idle', t0: Date.now(), now: Date.now(), workStart: null, pendingHop: null }),
   setLocked: (locked) =>
     set((s) => ({
       kill: locked,
@@ -456,31 +607,8 @@ export const useCockpit = create<CockpitState>()((set, get) => ({
     const s = get();
     const el = now - s.t0;
     if (s.beat === 'throw' && el >= THROW_MS) {
-      const st = STATIONS[s.bi];
-      const hop: Run = {
-        id: uid('h'),
-        kind: 'core',
-        hop: s.bi,
-        cycle: s.cycle,
-        ok: true,
-        ms: THROW_MS + FLARE_MS + SIGNAL_MS,
-        ts: now,
-        summary: `Caught the ${st.payload} · woke the ${STATIONS[(s.bi + 1) % N].name}`,
-        detail: [
-          ['Caught', `${st.payload} · ${Math.max(1, st.depth)} item${st.depth > 1 ? 's' : ''}`],
-          ['Held', `${(FLARE_MS / 1000).toFixed(2)}s`],
-          ['Woke', STATIONS[(s.bi + 1) % N].name],
-        ],
-      };
-      set({
-        beat: 'flare',
-        t0: now,
-        now,
-        expected: FLARE_MS,
-        storeKind: s.bi,
-        storeDepth: Math.max(s.storeDepth, Math.min(STORE_CAP, st.depth)),
-        runs: [...s.runs, hop].slice(-120),
-      });
+      // The catch is visual only. Depth stays whatever the queues report.
+      set({ beat: 'flare', t0: now, now, expected: FLARE_MS, storeKind: s.bi });
       return;
     }
     if (s.beat === 'flare' && el >= FLARE_MS) {
@@ -495,7 +623,7 @@ export const useCockpit = create<CockpitState>()((set, get) => ({
         set({ beat: 'idle', t0: now, now, workStart: null });
         return;
       }
-      set({ beat: 'work', bi: ni, t0: now, now, expected: STATIONS[ni].dur, workStart: now });
+      set({ beat: 'work', bi: ni, t0: now, now, expected: typicalMs(s.runs, ni), workStart: now });
       return;
     }
     if (s.beat === 'retry' && el >= RETRY_MS) {
@@ -546,12 +674,38 @@ export const useCockpit = create<CockpitState>()((set, get) => ({
   setOutcome: (outcome) => set({ outcome }),
   toggleFilters: () => set((s) => ({ filtersOpen: !s.filtersOpen })),
   togglePause: () => set((s) => ({ paused: !s.paused })),
-  reset: () => set({ ...initial(), palette: get().palette }),
+  reset: () =>
+    set({ ...initial(), palette: get().palette, config: get().config, settingsGroups: get().settingsGroups }),
 }));
 
+/**
+ * Typical working time for an agent: the median of its measured runs this
+ * session, falling back to the station's default before any run exists.
+ * Drives the progress arc and the time axis, so both track the real engine.
+ */
+export function typicalMs(runs: Run[], i: number): number {
+  const ms = runs
+    .filter((r) => r.kind === 'agent' && r.agent === i)
+    .map((r) => r.ms)
+    .sort((a, b) => a - b);
+  if (!ms.length) return STATIONS[i].dur;
+  return Math.max(1000, ms[Math.floor(ms.length / 2)]);
+}
+
+/** Capacity of the Synapse store as the engine defines it. */
+export function storeCapacity(config: EngineConfig | null): number {
+  return config ? config.queues.max_execution + config.queues.max_opportunity : STORE_CAP;
+}
+
 /** What the top bar and the star report. Derived, never stored. */
-export function deriveMode(s: Pick<CockpitState, 'kill' | 'faultUntil' | 'execAtLimit' | 'beat' | 'now'>): Mode {
+export function deriveMode(
+  s: Pick<CockpitState, 'kill' | 'faultUntil' | 'execAtLimit' | 'beat' | 'now'> & Partial<Pick<CockpitState, 'errorBox' | 'halted'>>
+): Mode {
   if (s.kill) return 'locked';
+  // The engine refuses to authorise cycles while its error box holds
+  // anything or the Soul has locked down; that is a fault the operator
+  // must clear, not a quiet standby.
+  if ((s.errorBox ?? 0) > 0 || (s.halted ?? []).some((h) => h.includes('lockdown'))) return 'fault';
   if (s.faultUntil > s.now) return 'fault';
   if (s.execAtLimit) return 'choke';
   if (s.beat === 'idle' || s.beat === 'locked') return 'idle';

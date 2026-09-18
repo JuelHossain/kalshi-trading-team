@@ -1,32 +1,79 @@
 /**
  * The Config view: the limits the Soul enforces, the autopilot switch and
- * the kill switch. Limits are the engine's v1 constants
- * (engine/core/constants.py); the switches call the engine.
+ * the kill switch. Every number comes from GET /config, so the page shows
+ * what the engine is running with, environment overrides included. Each
+ * bar is a real ratio: how close the current state sits to that limit.
  */
 import type { CSSProperties } from 'react';
 import { AC, ACI, ACS, E, G, glassStyle, mix, RL, SG, T1, T3, T4 } from './palette';
 import { PALETTES } from './palette';
-import { useCockpit } from './store';
+import { SettingsEditor } from './SettingsEditor';
+import { useCockpit, type UpdateReport } from './store';
 
-const LIMITS = [
-  { label: 'Max stake / trade', value: '$75', pct: 25, c: AC, note: 'HAND_MAX_STAKE_CENTS. Kelly sizing is capped here whatever the edge.' },
-  { label: 'Minimum edge to trade', value: '+0.05', pct: 55, c: SG, note: 'BRAIN_MIN_EDGE. Thinner than this is logged as a veto and dropped.' },
-  { label: 'Execution queue cap', value: '10', pct: 30, c: AC, note: 'MAX_EXECUTION_QUEUE_SIZE. The star stops emitting when the store is full.' },
-  { label: 'Hard floor', value: '$255', pct: 94, c: SG, note: 'HARD_FLOOR_CENTS. No cycle is authorised below it; kill switch at 85% of principal.' },
-];
+const clamp = (x: number) => Math.max(0, Math.min(100, Math.round(x)));
 
 export function Guardrails({
   narrow,
   onAutopilot,
   onKill,
+  onSave,
+  onRestart,
 }: {
   narrow: boolean;
   onAutopilot: (enabled: boolean) => void;
   onKill: (engaged: boolean) => void;
+  onSave: (changes: Record<string, unknown>) => Promise<UpdateReport>;
+  onRestart: () => Promise<void>;
 }) {
   const s = useCockpit();
   const pal = PALETTES[s.palette];
   const glassCard: CSSProperties = { borderRadius: RL, padding: 20, ...glassStyle(pal) };
+  const c = s.config;
+
+  const lastOrder = s.orders.length ? s.orders[s.orders.length - 1] : null;
+  const lastStake = lastOrder ? (lastOrder.px * lastOrder.qty) / 100 : null;
+  const latestEv = s.brain.ev;
+
+  const limits = c
+    ? [
+        {
+          label: 'Max stake / trade',
+          value: `$${(c.hand.max_stake_cents / 100).toFixed(0)}`,
+          pct: lastStake !== null ? clamp((lastStake / (c.hand.max_stake_cents / 100)) * 100) : 0,
+          c: AC,
+          note:
+            lastStake !== null
+              ? `Last fill staked $${lastStake.toFixed(2)}. Kelly sizing at ${c.hand.kelly_fraction} of full Kelly, capped here.`
+              : `No fill yet this session. Kelly sizing at ${c.hand.kelly_fraction} of full Kelly, capped here.`,
+        },
+        {
+          label: 'Minimum edge to trade',
+          value: `${c.brain.min_edge >= 0 ? '+' : ''}${c.brain.min_edge.toFixed(3)}`,
+          pct: latestEv !== null ? clamp((latestEv / c.brain.min_edge) * 100) : 0,
+          c: SG,
+          note:
+            latestEv !== null
+              ? `Latest verdict found ${latestEv >= 0 ? '+' : ''}${latestEv.toFixed(3)} per $1 contract. Confidence floor ${Math.round(c.brain.confidence_threshold * 100)}%.`
+              : `Thinner than this is logged as a veto. Confidence floor ${Math.round(c.brain.confidence_threshold * 100)}%.`,
+        },
+        {
+          label: 'Execution queue cap',
+          value: String(c.queues.max_execution),
+          pct: clamp((s.execDepth / c.queues.max_execution) * 100),
+          c: AC,
+          note: `${s.execDepth} verdict${s.execDepth === 1 ? '' : 's'} waiting for the Hand now. The star stops emitting when this is full.`,
+        },
+        {
+          label: 'Hard floor',
+          value: `$${(c.vault.hard_floor_cents / 100).toFixed(0)}`,
+          pct: s.balance ? clamp((c.vault.hard_floor_cents / 100 / s.balance) * 100) : 0,
+          c: SG,
+          note: s.balance
+            ? `Balance $${s.balance.toFixed(2)}; headroom $${Math.max(0, s.balance - c.vault.hard_floor_cents / 100).toFixed(2)}. Kill switch at ${Math.round(c.vault.kill_switch_pct * 100)}% of the $${(c.vault.principal_cents / 100).toFixed(0)} principal.`
+            : `No cycle is authorised below it. Kill switch at ${Math.round(c.vault.kill_switch_pct * 100)}% of principal.`,
+        },
+      ]
+    : [];
 
   return (
     <div
@@ -45,19 +92,25 @@ export function Guardrails({
       <div style={{ flex: 'none' }}>
         <h1 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: 30, margin: 0, color: T1 }}>Guardrails</h1>
         <div style={{ fontSize: 13, color: T3, marginTop: 6, maxWidth: '62ch', textWrap: 'pretty' }}>
-          The constitution the Soul enforces. Every line here is a hard limit, not a preference.
+          The constitution the Soul enforces. Every line here is a hard limit, not a preference, and every value below is what the engine is running with right now.
+          {c ? ` Kalshi ${c.kalshi_env}${c.paper_pinned ? ' · paper pinned on the server' : ''}.` : ''}
         </div>
       </div>
       <div className="sc" style={{ flex: 1, minHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, margin: '0 -4px', padding: '0 4px 4px' }}>
+        {!c && (
+          <div style={{ ...glassCard, fontSize: 12, color: T4 }}>
+            {s.connected ? 'Reading the engine configuration…' : 'Engine unreachable; limits unknown until it answers.'}
+          </div>
+        )}
         <div style={{ display: 'grid', gap: 14, gridTemplateColumns: `repeat(auto-fit,minmax(${narrow ? 220 : 250}px,1fr))` }}>
-          {LIMITS.map((l) => (
+          {limits.map((l) => (
             <div key={l.label} style={glassCard}>
               <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.09em', textTransform: 'uppercase', color: T4 }}>{l.label}</div>
               <div className="num" style={{ fontFamily: 'var(--font-heading)', fontSize: 28, color: T1, marginTop: 6 }}>
                 {l.value}
               </div>
               <div style={{ height: 4, borderRadius: 999, background: E, marginTop: 12, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${l.pct}%`, borderRadius: 999, background: l.c }} />
+                <div style={{ height: '100%', width: `${l.pct}%`, borderRadius: 999, background: l.c, transition: 'width 0.4s' }} />
               </div>
               <div style={{ fontSize: 12, color: T3, marginTop: 10, textWrap: 'pretty' }}>{l.note}</div>
             </div>
@@ -136,6 +189,13 @@ export function Guardrails({
             </div>
           </div>
         </div>
+        <div style={{ flex: 'none' }}>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 400, fontSize: 22, margin: '10px 0 0', color: T1 }}>Settings</h2>
+          <div style={{ fontSize: 13, color: T3, marginTop: 6, maxWidth: '62ch', textWrap: 'pretty' }}>
+            Everything the engine can be told, grouped as it uses it. Live settings apply to the next market, order or cycle; the rest apply after a restart.
+          </div>
+        </div>
+        <SettingsEditor onSave={onSave} onRestart={onRestart} />
       </div>
     </div>
   );

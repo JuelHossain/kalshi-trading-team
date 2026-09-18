@@ -80,7 +80,7 @@ export function OrdersPanel({ narrow, wide, style }: { narrow: boolean; wide: bo
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 19, lineHeight: 1.1, color: T1 }}>Orders</div>
             <div style={{ fontSize: 11, color: T4, marginTop: 3 }}>
-              {stats.settled} settled · {stats.open} open · {visible.length - stats.settled - stats.open} rejected
+              {stats.settled} settled · {stats.open} open · from the ledger
             </div>
           </div>
           <button
