@@ -19,6 +19,10 @@ from core.safety import execute_ragnarok
 def kalshi(monkeypatch):
     import core.safety
 
+    # These cover the live flatten; paper-pinned Ragnarok leaves Kalshi alone
+    # (see TestPaperRagnarok below).
+    monkeypatch.setenv("IS_PAPER_TRADING", "false")
+
     client = AsyncMock()
     client.request = AsyncMock(return_value={"orders": []})
     client.get_positions = AsyncMock(return_value=[])
@@ -125,7 +129,9 @@ class TestTheEmergencyPathNeverRaises:
 
         result = await execute_ragnarok()
 
-        assert result["status"] == "success"
+        # Still reports the cancels, but "cannot read" is not "nothing to
+        # close": it must not claim to be complete.
+        assert result["status"] == "partial"
         assert result["positions_closed"] == 0
 
     @pytest.mark.asyncio
@@ -178,3 +184,30 @@ class TestTheClientCanExpressASell:
         assert sent["reduce_only"] is True
         assert sent["count"] == "10.00"
         assert sent["ticker"] == "KXA"
+
+
+class TestPaperRagnarok:
+    """Pinned to paper, Ragnarok flattens the paper book and never touches
+    Kalshi -- it used to cancel real orders while paper-filling the closes,
+    leaving real positions open behind a "closed N/N" report."""
+
+    @pytest.mark.asyncio
+    async def test_the_paper_book_is_flattened_and_kalshi_is_not_written(self, monkeypatch):
+        import core.safety
+        from core import trading_mode
+
+        monkeypatch.setenv("IS_PAPER_TRADING", "true")
+        trading_mode.reset_paper_positions()
+        trading_mode.paper_fill("KXP", "no", 40, 5, "buy")
+        client = AsyncMock()
+        client.get_positions = AsyncMock(return_value=[{"ticker": "KXREAL", "position": 3}])
+        client.close_position = AsyncMock(return_value={"order_id": "p"})
+        monkeypatch.setattr(core.safety, "kalshi_client", client)
+
+        result = await execute_ragnarok()
+
+        client.request.assert_not_awaited()  # no real cancels
+        client.close_position.assert_awaited_once_with("KXP", 5, side="no")
+        assert result["mode"] == "paper"
+        assert result["real_positions_untouched"] == 1
+        trading_mode.reset_paper_positions()

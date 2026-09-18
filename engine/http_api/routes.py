@@ -989,11 +989,19 @@ def trigger_ragnarok(engine):
         dropped = await engine.synapse.executions.clear() if engine.synapse else 0
 
         summary = (
+            f"{'Paper book: ' if result.get('mode') == 'paper' else ''}"
             f"Cancelled {result.get('orders_cancelled', 0)}/{result.get('orders_found', 0)} "
             f"orders, closed {result.get('positions_closed', 0)}/"
             f"{result.get('positions_found', 0)} positions, dropped {dropped} pending "
             "approvals. New positions halted until the kill switch is deactivated."
         )
+        if result.get("real_positions_untouched"):
+            summary += (
+                f" {result['real_positions_untouched']} real Kalshi position(s) untouched: "
+                "IS_PAPER_TRADING is pinned."
+            )
+        if result.get("status") == "partial":
+            summary = "INCOMPLETE -- " + summary
         await engine.bus.publish(
             "SYSTEM_LOG",
             {
