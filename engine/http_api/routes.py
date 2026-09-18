@@ -622,7 +622,9 @@ def engine_config(engine) -> dict:
     return {
         "paper_pinned": get_env_bool("IS_PAPER_TRADING", default=True),
         "live_armed": trading_mode.is_live(),
-        "kalshi_env": os.getenv("KALSHI_ENV", "demo"),
+        # The exchange the client was built for at boot. An edit to KALSHI_ENV
+        # waits for a restart; showing the edited value read as if it applied.
+        "kalshi_env": (_boot_value("KALSHI_ENV") or os.getenv("KALSHI_ENV") or "demo"),
         "brain": {
             "model": getattr(brain, "gemini_model", None) or os.getenv("GEMINI_MODEL"),
             "min_edge": constants.BRAIN_MIN_EDGE,
@@ -679,6 +681,12 @@ def _session_required(request) -> web.Response | None:
         {"error": "Unauthorized", "message": "Sign in to the dashboard or send the API key."},
         status=401,
     )
+
+
+def _boot_value(key: str) -> str | None:
+    from core.settings import settings
+
+    return settings.boot_values.get(key)
 
 
 def secrets_equal(a: str, b: str) -> bool:
@@ -842,14 +850,15 @@ def restart_engine(engine):
         denied = _session_required(request)
         if denied is not None:
             return denied
-        import sys
 
         async def _restart():
             await asyncio.sleep(0.8)
-            try:
-                await engine.shutdown("Restart requested from the dashboard")
-            finally:
-                os.execv(sys.executable, [sys.executable, *sys.argv])
+            # GhostEngine.start re-executes once the loop has closed, with the
+            # environment the process was started with -- so engine/.env is
+            # read afresh. exec-ing from inside the loop kept this process's
+            # edited environment, so hand edits to .env never applied.
+            engine.restart_requested = True
+            await engine.shutdown("Restart requested from the dashboard")
 
         fire_and_forget(_restart())
         return web.json_response(

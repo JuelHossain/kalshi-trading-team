@@ -234,7 +234,7 @@ export interface CockpitState {
   ) => void;
   setBalance: (balance: number, principal?: number) => void;
   setConfig: (config: EngineConfig) => void;
-  setSettingsGroups: (groups: SettingsGroup[], envFile: string | null) => void;
+  setSettingsGroups: (groups: SettingsGroup[], envFile: string | null, restartPending?: string[]) => void;
   setReport: (report: UpdateReport | null) => void;
   clearRestartPending: () => void;
   setQueues: (oppDepth: number, execDepth: number, items: StoreItem[], execAtLimit: boolean) => void;
@@ -462,7 +462,10 @@ export const useCockpit = create<CockpitState>()((set, get) => ({
       config,
       principal: config.vault.principal_cents / 100 || s.principal,
     })),
-  setSettingsGroups: (settingsGroups, envFile) => set({ settingsGroups, envFile }),
+  // The engine reports which restart-only edits are pending; that list is
+  // authoritative, so the banner survives a reload and shows on every device.
+  setSettingsGroups: (settingsGroups, envFile, restartPending) =>
+    set(restartPending ? { settingsGroups, envFile, restartPending } : { settingsGroups, envFile }),
   setReport: (lastReport) =>
     set((s) => ({
       lastReport,

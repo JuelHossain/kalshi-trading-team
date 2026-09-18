@@ -17,6 +17,12 @@ from datetime import datetime
 from aiohttp import web
 from dotenv import load_dotenv
 
+# The environment this process inherited, before .env is layered on. A
+# dashboard restart re-executes with exactly this, so engine/.env is read
+# afresh -- hand edits included -- the way a systemd start would, and
+# systemd/pm2 Environment= pins still win.
+BOOT_PARENT_ENV = dict(os.environ)
+
 # Load Env BEFORE imports
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
@@ -218,6 +224,11 @@ class GhostEngine:
         from core.settings import settings
 
         settings.env_path = os.path.join(os.path.dirname(__file__), ".env")
+        # What restart-only settings are actually in effect: compared against
+        # later edits to report a pending restart.
+        from core.settings import REGISTRY
+
+        settings.boot_values = {s.key: os.environ.get(s.key) for s in REGISTRY if s.restart}
 
         vault = self.vault
         settings.register_applier(
@@ -619,6 +630,10 @@ class GhostEngine:
         finally:
             loop.run_until_complete(self.shutdown())
             loop.close()
+            if getattr(self, "restart_requested", False):
+                import sys
+
+                os.execve(sys.executable, [sys.executable, *sys.argv], BOOT_PARENT_ENV)
 
 
 if __name__ == "__main__":

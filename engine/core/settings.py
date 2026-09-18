@@ -602,6 +602,9 @@ class Settings:
 
     def __init__(self, env_path: str | os.PathLike | None = None):
         self._env_path: Path | None = Path(env_path) if env_path else None
+        # Restart-only values as the process booted with them; main.py fills
+        # this in. A pending restart is any difference from these.
+        self.boot_values: dict[str, str | None] = {}
         self._appliers: dict[str, list[Callable[[Any], None]]] = {}
 
     @property
@@ -641,6 +644,7 @@ class Settings:
 
     def describe(self) -> dict:
         """Everything the dashboard needs to render an editor. Secrets are masked."""
+        pending = self.restart_pending()
         groups: dict[str, dict] = {}
         for setting in REGISTRY:
             title, blurb = GROUPS.get(setting.group, (setting.group, ""))
@@ -668,11 +672,31 @@ class Settings:
                 entry["hint"] = raw.strip()[-4:] if len(raw.strip()) >= 8 else ""
             else:
                 entry["value"] = self.get(setting.key)
+            if setting.restart:
+                entry["pending"] = setting.key in pending
             group["settings"].append(entry)
         return {
             "groups": list(groups.values()),
             "env_file": str(self.env_path) if self.env_path else None,
+            # From the server, so it survives a reload and shows on every
+            # device; it used to live only in one browser tab's memory.
+            "restart_pending": pending,
         }
+
+    def restart_pending(self) -> list[str]:
+        """Restart-only keys whose value differs from what the process booted with.
+
+        Secrets are compared, never returned.
+        """
+        if not self.boot_values:
+            return []
+        return [
+            s.key
+            for s in REGISTRY
+            if s.restart
+            and s.key in self.boot_values
+            and os.environ.get(s.key) != self.boot_values[s.key]
+        ]
 
     # ── writes ─────────────────────────────────────────────────────────
     def register_applier(self, key: str, fn: Callable[[Any], None]) -> None:

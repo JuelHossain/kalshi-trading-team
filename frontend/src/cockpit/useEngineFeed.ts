@@ -19,10 +19,16 @@ export function applyConfigPayload(data: {
   runtime?: EngineConfig;
   groups?: SettingsGroup[];
   env_file?: string | null;
+  restart_pending?: string[];
 }): void {
   const st = useCockpit.getState();
   if (data.runtime && data.runtime.vault) st.setConfig(data.runtime);
-  if (Array.isArray(data.groups)) st.setSettingsGroups(data.groups, data.env_file ?? null);
+  if (Array.isArray(data.groups))
+    st.setSettingsGroups(
+      data.groups,
+      data.env_file ?? null,
+      Array.isArray(data.restart_pending) ? data.restart_pending : undefined
+    );
 }
 
 const IDLE_AFTER_MS = 45000;
