@@ -101,23 +101,46 @@ async def fetch_kalshi_markets(
     tradeable: list[dict] = []
     seen = 0
     cursor: str | None = None
+    hit_page_ceiling = False
 
     try:
-        for _ in range(MAX_MARKET_PAGES):
-            page, cursor = await kalshi_client.get_markets_page(
-                limit=MARKET_PAGE_SIZE,
-                min_close_ts=min_close,
-                max_close_ts=max_close,
-                cursor=cursor,
-            )
+        for page_num in range(MAX_MARKET_PAGES):
+            try:
+                page, cursor = await kalshi_client.get_markets_page(
+                    limit=MARKET_PAGE_SIZE,
+                    min_close_ts=min_close,
+                    max_close_ts=max_close,
+                    cursor=cursor,
+                    mve_filter="exclude",
+                )
+            except Exception as e:
+                # A page failing partway through used to discard every
+                # market already collected, on the same walk that server-
+                # side mve_filter was added to make short. Whatever was
+                # found before the failure is still real and worth keeping.
+                await log_callback(
+                    f"Kalshi fetch error on page {page_num + 1}: {str(e)[:100]}"
+                    + (f"; keeping {len(tradeable)} already found" if tradeable else ""),
+                    level="ERROR",
+                )
+                break
+
             if not page:
                 break
 
             seen += len(page)
             tradeable.extend(m for m in page if is_tradeable(m) and m.get("ticker") not in exclude)
 
-            if len(tradeable) >= needed or not cursor:
+            if len(tradeable) >= needed:
                 break
+            if not cursor:
+                break
+        else:
+            # The for/else `else` runs only when the loop completed all
+            # MAX_MARKET_PAGES iterations without an internal `break`, i.e.
+            # `needed` was never met and the cursor never ran out -- there
+            # was more to see and the ceiling, not the market, ended it.
+            hit_page_ceiling = True
 
         tradeable.sort(key=lambda m: _money(m.get("volume_fp")), reverse=True)
         selected = tradeable[:needed]
@@ -128,11 +151,18 @@ async def fetch_kalshi_markets(
             f"closing within {MAX_DAYS_TO_CLOSE}d)",
             level="INFO",
         )
+        if hit_page_ceiling:
+            await log_callback(
+                f"Hit the {MAX_MARKET_PAGES}-page scan ceiling with more markets still "
+                "available (cursor not exhausted). Real markets past this point were not "
+                "seen this scan.",
+                level="WARN",
+            )
         return selected
 
     except Exception as e:
         await log_callback(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
-        return []
+        return tradeable[:needed] if tradeable else []
 
 
 async def queue_from_stock(

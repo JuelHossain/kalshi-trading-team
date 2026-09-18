@@ -31,7 +31,13 @@ class _PagedClient:
         self.calls = 0
 
     async def get_markets_page(
-        self, limit, status="open", min_close_ts=None, max_close_ts=None, cursor=None
+        self,
+        limit,
+        status="open",
+        min_close_ts=None,
+        max_close_ts=None,
+        cursor=None,
+        mve_filter=None,
     ):
         idx = int(cursor) if cursor else 0
         self.calls += 1

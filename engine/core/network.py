@@ -186,13 +186,22 @@ class KalshiClient:
         min_close_ts: int | None = None,
         max_close_ts: int | None = None,
         cursor: str | None = None,
+        mve_filter: str | None = None,
     ) -> tuple[list[dict], str | None]:
         """Fetch one page of markets and the cursor for the next.
 
         Exposed per-page so a caller filtering for tradeable markets can
         stop as soon as it has enough, rather than pulling thousands it will
-        discard. The listing is dominated by KXMVE combo shards, so the
-        first page inside a close window can contain nothing usable.
+        discard.
+
+        mve_filter: Kalshi's own filter for multivariate-event (combo)
+        markets -- "exclude" or "only". Before this was added, the listing
+        inside a close window was dominated by KXMVE combo shards and every
+        one of them still had to be downloaded and discarded client-side;
+        four consecutive live scans hit the page ceiling (8 pages, 4000
+        markets) and returned 3, 2, 1 and then 0 tradeable markets, each
+        time "from 4000 scanned" -- the real markets past page 8 were never
+        reached at all.
         """
         params: dict = {"limit": limit, "status": status}
         if min_close_ts is not None:
@@ -201,6 +210,8 @@ class KalshiClient:
             params["max_close_ts"] = max_close_ts
         if cursor:
             params["cursor"] = cursor
+        if mve_filter:
+            params["mve_filter"] = mve_filter
 
         res = await self.request("GET", "/markets", params=params)
         if not res or "markets" not in res:
