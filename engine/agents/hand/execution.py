@@ -292,15 +292,38 @@ async def execute_order(
             price=price,
             count=contract_count,
         )
-
-        # Order placed successfully - confirm the reservation
-        vault.confirm_reservation(stake)
-        return {"success": True, "order_id": result.get("order_id")}
-
     except Exception as e:
         # Order failed - release the reserved funds
         vault.release_reservation(stake)
         return {"success": False, "error": str(e)[:100]}
+
+    result = result or {}
+    order_id = (
+        result.get("order_id")
+        or (result.get("order") or {}).get("order_id")
+        or result.get("client_order_id")
+    )
+
+    # Kalshi V2 says how much filled. Orders are immediate-or-cancel, so the
+    # rest was cancelled: confirm only what filled and release the remainder.
+    # A paper fill carries no fill_count and is always complete.
+    filled = result.get("fill_count")
+    if filled is not None:
+        try:
+            filled_contracts = int(float(filled))
+        except (TypeError, ValueError):
+            filled_contracts = contract_count
+        if filled_contracts <= 0:
+            vault.release_reservation(stake)
+            return {"success": False, "error": "Order did not fill (immediate-or-cancel)"}
+        filled_stake = min(stake, filled_contracts * price)
+        vault.confirm_reservation(filled_stake)
+        if stake > filled_stake:
+            vault.release_reservation(stake - filled_stake)
+        return {"success": True, "order_id": order_id, "stake": filled_stake}
+
+    vault.confirm_reservation(stake)
+    return {"success": True, "order_id": order_id, "stake": stake}
 
 
 async def send_notification(ticker: str, stake: int, result: dict, log_callback=None):

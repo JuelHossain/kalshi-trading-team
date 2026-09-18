@@ -88,8 +88,10 @@ async def test_live_mode_reaches_the_transport(client):
     )
 
     assert result == {"order_id": "REAL-1"}
-    assert sent["path"] == "/portfolio/orders"
-    assert sent["json"]["price"] == 40
+    # Kalshi V2 create-order: YES bid at the YES price in dollars.
+    assert sent["path"] == "/portfolio/events/orders"
+    assert sent["json"]["side"] == "bid"
+    assert sent["json"]["price"] == "0.4000"
 
 
 @pytest.mark.asyncio

@@ -270,6 +270,9 @@ class HandAgent(BaseAgent):
         )
 
         if order_result.get("success"):
+            # What filled, not what was asked for: an immediate-or-cancel
+            # order can fill partly.
+            stake = order_result.get("stake", stake)
             await self.log(
                 f"ORDER EXECUTED: {side.upper()} {ticker} @ {entry_price}¢ for ${stake/100:.2f}"
             )

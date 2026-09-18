@@ -173,6 +173,8 @@ class TestTheClientCanExpressASell:
         client.request = capture
         await client.close_position("KXA", 10)
 
-        assert sent["action"] == "sell"
-        assert sent["count"] == 10
-        assert sent["market_id"] == "KXA"
+        # Kalshi V2: selling YES is an "ask", capped at the position held.
+        assert sent["side"] == "ask"
+        assert sent["reduce_only"] is True
+        assert sent["count"] == "10.00"
+        assert sent["ticker"] == "KXA"

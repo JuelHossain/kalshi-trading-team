@@ -50,7 +50,8 @@ def test_production_requires_asking_for_it_by_name(monkeypatch):
         KALSHI_PROD_PRIVATE_KEY="not-a-key",
     )
 
-    assert client.base_url == "https://api.kalshi.co/trade-api/v2"
+    # Kalshi's documented production host; api.kalshi.co does not resolve.
+    assert client.base_url == "https://external-api.kalshi.com/trade-api/v2"
 
 
 def test_demo_will_not_fall_back_to_production_credentials(monkeypatch):

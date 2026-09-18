@@ -5,7 +5,7 @@ actually need to happen.
 
 ## Before you start
 
-You need a machine with outbound access to `api.kalshi.co`, Python 3.12, and
+You need a machine with outbound access to `external-api.kalshi.com` (prod) or `demo-api.kalshi.co` (demo), Python 3.12, and
 Node 20+. The engine must run continuously, so a laptop that sleeps is fine for
 testing and wrong for a soak test.
 
