@@ -109,18 +109,25 @@ tailscale serve status
 ```
 
 The status shows the address, of the form `https://minipc.<tailnet>.ts.net`.
-Because `tailscale serve` connects to port 3002 locally, the firewall stays
-closed to everything else; you do not need to open 3002.
+`tailscale serve` connects to port 3002 on loopback, which is all the engine
+listens on by default.
 
 On the phone: install the Tailscale app, sign in with the same account,
 turn it on. The cockpit is at that `https://…ts.net` address from anywhere.
 On the laptop: same.
 
-If you would rather keep a plain LAN address as well:
+**What the engine listens on.** Loopback only, unless `GHOST_BIND` in
+`engine/.env` adds more (comma-separated). The firewall is *not* what keeps
+it private: Fedora Workstation's default zone opens ports 1025-65535, and
+Docker's zone accepts everything. So:
 
-```bash
-sudo firewall-cmd --permanent --add-port=3002/tcp && sudo firewall-cmd --reload
-```
+- Without `tailscale serve`, plain tailnet HTTP to `http://minipc:3002`
+  needs the Tailscale address added:
+  `GHOST_BIND=127.0.0.1,100.x.y.z` (`tailscale ip -4` prints it). If
+  Tailscale is not up yet when the engine starts, it keeps retrying that
+  address in the background instead of failing.
+- `GHOST_BIND=0.0.0.0` opens the whole LAN and every Docker container to
+  the engine, including the control routes that need no login. Do not.
 
 ## 6. Claude Code on the mini PC, driven from your phone
 
