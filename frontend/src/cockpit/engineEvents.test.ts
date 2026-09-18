@@ -26,6 +26,42 @@ describe('interpretLog', () => {
     expect(a[2]).toMatchObject({ i: 0, ok: true, summary: 'Authorized the cycle' });
   });
 
+  // Lines the engine emits since the 2026-09-18 Senses and pre-flight fixes.
+  it('names only what passed pre-flight', () => {
+    const a = interpretLog(log(1, 'SUCCESS: PRE-FLIGHT API CHECK PASSED (Kalshi, Gemini)'));
+    expect(a[1]).toEqual({ type: 'soul', patch: { check: 0, value: 'Kalshi · Gemini reachable' } });
+    const b = interpretLog(log(1, 'PRE-FLIGHT API CHECK PASSED (Kalshi)', 'WARN'));
+    expect(b[1]).toEqual({ type: 'soul', patch: { check: 0, value: 'Kalshi reachable' } });
+  });
+
+  it('completes the Senses sweep only when markets were queued', () => {
+    const ok = interpretLog(log(2, 'Signaled Brain: OPPORTUNITIES_READY event published'));
+    expect(ok[1]).toMatchObject({ type: 'completeWork', i: 1, ok: true });
+    const empty = interpretLog(log(2, 'No markets found to scan.', 'WARN'));
+    expect(empty[1]).toMatchObject({ type: 'completeWork', i: 1, ok: false });
+    // Logged after an empty scan too, so it must not read as success.
+    expect(types(interpretLog(log(2, 'Scan complete. Senses entering STANDBY mode.', 'SUCCESS')))).toEqual(['log']);
+  });
+
+  it('starts Senses work on a rescan or an idle-Brain batch', () => {
+    for (const line of [
+      'Scan left nothing queued and the cooldown has passed; rescanning.',
+      'Brain idle; queueing the next batch from stock.',
+    ]) {
+      expect(interpretLog(log(2, line))[1]).toEqual({ type: 'beginWork', i: 1 });
+    }
+  });
+
+  it('shows standby as a quiet step, not a failure or a hand-off', () => {
+    const a = interpretLog(log(2, 'Initial scan already complete. Senses in STANDBY mode.'));
+    expect(a[1]).toMatchObject({ type: 'completeWork', i: 1, ok: true, advance: false });
+  });
+
+  it('does not fault on one failed page when the scan keeps what it found', () => {
+    const a = interpretLog(log(2, 'Kalshi fetch error on page 12: timeout; keeping 40 already found', 'ERROR'));
+    expect(types(a)).not.toContain('fault');
+  });
+
   it('reads the Senses selection line', () => {
     const a = interpretLog(
       log(2, 'Selected 7 tradeable markets from 4000 scanned (volume >= 200, spread <= 8c, closing within 10d)')

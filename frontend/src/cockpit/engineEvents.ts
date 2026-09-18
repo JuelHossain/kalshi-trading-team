@@ -124,7 +124,12 @@ export function interpretLog(log: EngineLog): FeedAction[] {
   // ── Soul
   if (i === 0) {
     if (/Initiating pre-flight sequence/.test(msg)) push({ type: 'beginWork', i: 0 });
-    else if (/PRE-FLIGHT API CHECK PASSED/.test(msg)) push({ type: 'soul', patch: { check: 0, value: 'Kalshi · Gemini reachable' } });
+    else if ((m = msg.match(/PRE-FLIGHT API CHECK PASSED \(([^)]*)\)/))) {
+      // The engine names only what actually passed; Gemini is left out when
+      // it did not answer, so the tile must not claim it.
+      const passed = m[1].split(',').map((x) => x.trim()).filter(Boolean);
+      push({ type: 'soul', patch: { check: 0, value: `${passed.join(' · ')} reachable` } });
+    }
     else if (/OPENING PRE-FLIGHT CHECK FAILED/.test(msg)) {
       push({ type: 'soul', patch: { check: 0, value: 'failed' } });
       push({ type: 'fault' });
@@ -147,12 +152,15 @@ export function interpretLog(log: EngineLog): FeedAction[] {
 
   // ── Senses
   if (i === 1) {
-    if (/Initiating passive market scan|Restock request received|Stock buffer low/.test(msg)) push({ type: 'beginWork', i: 1 });
+    if (/Initiating passive market scan|Restock request received|Stock buffer low|rescanning|Brain idle; queueing/.test(msg))
+      push({ type: 'beginWork', i: 1 });
     else if ((m = msg.match(/Selected (\d+) tradeable markets from (\d+) scanned/))) {
       push({ type: 'senses', patch: { selected: Number(m[1]), swept: Number(m[2]) } });
     } else if ((m = msg.match(/Queued to Synapse: (\S+) \(Queue Size: (\d+)\)(?: \| Volume: ([\d.]+))?/))) {
       push({ type: 'senses', patch: { market: { ticker: m[1], volume: Number(m[3] || 0) } } });
-    } else if ((m = msg.match(/Initial scan complete|Restocked: (\d+) opportunities/))) {
+    } else if ((m = msg.match(/Signaled Brain: OPPORTUNITIES_READY|Restocked: (\d+) opportunities/))) {
+      // Logged only when markets were actually queued. "Scan complete" is
+      // logged after an empty scan too, so it cannot mean success.
       const n = m[1] ? Number(m[1]) : undefined;
       push({
         type: 'completeWork',
@@ -161,8 +169,13 @@ export function interpretLog(log: EngineLog): FeedAction[] {
         summary: n !== undefined ? `Restocked ${n} markets` : 'Swept the board and shortlisted',
         detail: n !== undefined ? [['Queued', `${n} markets`]] : [],
       });
-    } else if (/No new tradeable markets to queue|Nothing cleared|No tradeable/.test(msg)) {
+    } else if (/No markets found to scan|No new tradeable markets to queue|Stock buffer empty|Nothing cleared|No tradeable/.test(msg)) {
       push({ type: 'completeWork', i: 1, ok: false, summary: 'Nothing new cleared the filters', detail: [['Queued', '0 markets']], advance: false });
+    } else if (/already complete\. Senses in STANDBY/.test(msg)) {
+      // Nothing to fetch this cycle: stock on hand or the Brain still busy.
+      push({ type: 'completeWork', i: 1, ok: true, summary: 'Standby — markets already queued', detail: [], advance: false });
+    } else if (/Kalshi fetch error on page \d+/.test(msg)) {
+      // One page failed; the scan keeps what it had and still reports.
     } else if (/Kalshi fetch error|Kalshi client not initialized/.test(msg)) {
       push({ type: 'fault' });
       push({ type: 'completeWork', i: 1, ok: false, summary: 'Kalshi fetch failed', detail: [['Error', msg.slice(0, 90)]], advance: false });

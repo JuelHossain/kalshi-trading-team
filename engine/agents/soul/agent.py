@@ -85,7 +85,10 @@ class SoulAgent(BaseAgent):
         # 2. Health Check
         await self.log("Health check: All systems nominal.")
 
-        # 3. Publish pre-flight complete
+        # 3. Publish pre-flight complete. Logged first: publish awaits Senses'
+        # whole scan, so logging after it put the hand-off after Senses had
+        # finished, and the cockpit threw the star back to Senses.
+        await self.log("Pre-flight complete. Handing off to SENSES.")
         await self.bus.publish(
             "PREFLIGHT_COMPLETE",
             {
@@ -97,8 +100,6 @@ class SoulAgent(BaseAgent):
             },
             self.name,
         )
-
-        await self.log("Pre-flight complete. Handing off to SENSES.")
 
     async def on_trade_result(self, message):
         """Learn from trade outcomes for self-evolution"""
