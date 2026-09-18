@@ -19,7 +19,7 @@ from core.synapse import Synapse
 from core.vault import RecursiveVault
 from core.vault_utils import check_hard_floor_breach, publish_vault_state
 
-from .evolution import evolve_instructions, generate_with_fallback
+from .evolution import evolve_instructions
 
 
 class SoulAgent(BaseAgent):
@@ -237,22 +237,15 @@ class SoulAgent(BaseAgent):
         # fatal meant a dead or paused project locked the engine down at
         # pre-flight and no cycle could run, which is a strictly worse outcome
         # than trading without a metrics sink.
-        if not await check_supabase_connection():
+        supabase_ok = await check_supabase_connection()
+        if not supabase_ok:
             await self.log(
                 "Supabase unreachable - continuing without the analytics sink.",
                 level="WARN",
             )
 
         # 3. Gemini Check
-        if self._gemini_available and self.client:
-            try:
-                resp = await generate_with_fallback(self.client, self.ai_client, "ping", self.log)
-                if not resp:
-                    errors.append("Gemini API (All models) failed.")
-            except Exception as e:
-                errors.append(f"Gemini API Error: {e}")
-        elif self._gemini_available and not self.client:
-            errors.append("Gemini library found but API Key missing.")
+        gemini_ok = await self._probe_gemini()
 
         if errors:
             error_msg = " | ".join(errors)
@@ -273,6 +266,64 @@ class SoulAgent(BaseAgent):
                 "SYSTEM_FATAL", {"message": f"Pre-flight Check Failed: {error_msg}"}, self.name
             )
         else:
-            await self.log(
-                "PRE-FLIGHT API CHECK PASSED (Kalshi, Supabase, Gemini)", level="SUCCESS"
+            passed = (
+                ["Kalshi"]
+                + (["Supabase"] if supabase_ok else [])
+                + (["Gemini"] if gemini_ok else [])
             )
+            await self.log(
+                f"PRE-FLIGHT API CHECK PASSED ({', '.join(passed)})",
+                level="SUCCESS" if gemini_ok else "WARN",
+            )
+
+    async def _probe_gemini(self) -> bool:
+        """Ask the model the Brain will use, the way it will ask, with no fallback.
+
+        This used to go through generate_with_fallback, which tries five models
+        and then OpenRouter, so any OpenRouter reply reported "Gemini PASSED".
+        Seen live on 2026-09-18: five "API key not valid" failures, then
+        PRE-FLIGHT API CHECK PASSED -- with a stale shell key overriding the
+        real one, and every Brain estimate failing after it.
+
+        A failure is logged, not added to the pre-flight errors: those publish
+        SYSTEM_FATAL, which ends the process, and under systemd a Gemini outage
+        at boot would become a restart loop. The Brain vetoes every market
+        while grounded Gemini is unavailable, so continuing costs nothing.
+        """
+        import os
+
+        from agents.brain.debate import build_grounding_config
+
+        if not self.client:
+            if self._gemini_available:
+                await self.log(
+                    "Gemini API key missing: the Brain will veto every market.", level="ERROR"
+                )
+            return False
+
+        model = os.environ.get("GEMINI_MODEL") or self.gemini_model
+        grounding = build_grounding_config()
+        detail = "empty reply"
+        try:
+            response = await asyncio.get_running_loop().run_in_executor(
+                None,
+                lambda: self.client.models.generate_content(
+                    model=model, contents="ping", config=grounding
+                ),
+            )
+            if response is not None and response.text:
+                return True
+        except Exception as e:
+            detail = str(e)[:160]
+
+        consequence = (
+            "the Brain will veto every market until it answers"
+            if grounding is not None
+            else "Brain estimates will come from the ungrounded OpenRouter fallback"
+        )
+        await self.log(
+            f"Gemini ({model}{', grounded' if grounding is not None else ''}) unavailable: "
+            f"{detail} -- {consequence}.",
+            level="ERROR",
+        )
+        return False
