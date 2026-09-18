@@ -113,6 +113,37 @@ def block_network(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def isolate_settings_file(tmp_path, monkeypatch):
+    """Never let a test write the checkout's real engine/.env.
+
+    GhostEngine.initialize_system points the process-wide settings at
+    engine/.env, and it stays pointed there for the rest of the session: any
+    later test that calls settings.update then rewrote the live file. Seen on
+    2026-09-18, when a test run set the running bot's BRAIN_MIN_EDGE to 0.02
+    and BRAIN_ESTIMATE_SAMPLES to 2. Every test now gets a throwaway file,
+    and anything a test does to it -- or to boot_values -- is undone.
+    """
+    from pathlib import Path
+
+    from core.settings import Settings, settings
+
+    real = (Path(__file__).resolve().parents[2] / "engine" / ".env").resolve()
+    throwaway = tmp_path / "test.env"
+    original = Settings.env_path
+
+    def _set(self, value):
+        # Tests may point settings at their own temp files; only the real
+        # engine/.env is redirected.
+        path = Path(value).resolve() if value else None
+        original.fset(self, throwaway if path == real else value)
+
+    monkeypatch.setattr(Settings, "env_path", property(original.fget, _set))
+    monkeypatch.setattr(settings, "_env_path", None)
+    monkeypatch.setattr(settings, "boot_values", {})
+    yield
+
+
+@pytest.fixture(autouse=True)
 def reset_trading_mode():
     """trading_mode is process-global: a halt or live arm set by one test
     (the kill switch routes set both) must not refuse or arm orders in the
