@@ -59,6 +59,12 @@ def prediction_market_sources(response) -> list[str]:
     return found
 
 
+# A backstop above the SDK's own bound (3 attempts x 45 s plus backoff).
+# Samples run in parallel, so a market still finishes well inside
+# BRAIN_STALE_OPPORTUNITY_SECONDS.
+SAMPLE_DEADLINE_SECONDS = 150
+
+
 def build_grounding_config():
     """Return a generate_content config enabling Google Search, or None.
 
@@ -476,13 +482,25 @@ async def run_debate_ensemble(samples: int = 1, **kwargs) -> dict:
     unsure, the ensemble is unsure.
     """
     if samples <= 1:
-        result = await run_debate(**kwargs)
+        try:
+            result = await asyncio.wait_for(run_debate(**kwargs), SAMPLE_DEADLINE_SECONDS)
+        except TimeoutError:
+            return {
+                "confidence": 0.0,
+                "reasoning": "Estimate timed out - trade rejected",
+                "estimated_probability": None,
+                "disagreement": 1.0,
+                "samples": 0,
+            }
         result.setdefault("disagreement", 0.0)
         result.setdefault("samples", 1)
         return result
 
+    # Each sample on its own deadline, so one late sample is dropped rather
+    # than holding the others -- and the Brain's queue loop -- hostage.
     results = await asyncio.gather(
-        *[run_debate(**kwargs) for _ in range(samples)], return_exceptions=True
+        *[asyncio.wait_for(run_debate(**kwargs), SAMPLE_DEADLINE_SECONDS) for _ in range(samples)],
+        return_exceptions=True,
     )
 
     usable = [

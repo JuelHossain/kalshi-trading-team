@@ -86,7 +86,9 @@ class AIClient:
         }
 
         errors = []
-        async with aiohttp.ClientSession() as session:
+        # Bounded: aiohttp's default is five minutes per request, per model.
+        timeout = aiohttp.ClientTimeout(total=60, sock_connect=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             for model in self.OPENROUTER_MODELS:
                 data = {"model": model, "messages": [{"role": "user", "content": prompt}]}
                 try:
