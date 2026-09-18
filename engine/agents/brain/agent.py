@@ -236,6 +236,28 @@ class BrainAgent(BaseAgent):
             )
             return "VETOED"
 
+        # A spread needs at least two draws. With one survivor the ensemble
+        # reports disagreement 0.0, so the check below passed by default and a
+        # lone outlier was traded on: reproduced in the audit as an APPROVED
+        # 0.90 against a 50c market after two of three samples failed. Failed
+        # samples are commoner now that ungrounded and market-sourced ones are
+        # discarded, so the quorum matters more than it did.
+        wanted = int(self.ESTIMATE_SAMPLES)
+        usable = int(debate_result.get("samples", wanted))
+        quorum = 1 if wanted <= 1 else max(2, (wanted + 1) // 2)
+        if usable < quorum:
+            reason = f"Only {usable} of {wanted} estimates usable (need {quorum})"
+            await self.log(f"[VETO] VETOED: {ticker} | {reason}", level="WARN")
+            record_decision(
+                ticker,
+                opportunity.get("kalshi_price", 0.5),
+                outcome="VETOED",
+                estimated_probability=estimated_prob,
+                confidence=confidence,
+                veto_reason=reason,
+            )
+            return "VETOED"
+
         # Independent estimates that disagree widely mean the model does not
         # know. That is a different condition from believing the odds are even,
         # and a more dangerous one to trade into.

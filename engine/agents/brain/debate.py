@@ -508,7 +508,11 @@ async def run_debate_ensemble(samples: int = 1, **kwargs) -> dict:
 
     return {
         "confidence": min(r.get("confidence", 0.0) for r in usable),
-        "reasoning": usable[0].get("reasoning", ""),
+        # From the sample nearest the median, which is the estimate used --
+        # not whichever sample happened to finish first.
+        "reasoning": min(usable, key=lambda r: abs(r["estimated_probability"] - median)).get(
+            "reasoning", ""
+        ),
         "estimated_probability": median,
         "disagreement": probabilities[-1] - probabilities[0],
         "samples": len(usable),
