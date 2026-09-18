@@ -11,10 +11,7 @@ pydantic==2.13.5  # Synapse queue schemas
 python-dotenv==1.2.3  # loads engine/.env
 colorama==0.4.6  # terminal colour on Windows
 cryptography==50.0.1  # RSA-PSS request signing for Kalshi
-groq==1.7.0
 google-genai==2.23.0  # Gemini client for the Brain
 supabase==2.31.0  # optional analytics sink
-psutil==7.2.2  # process health metrics
-ddgs==9.16.0  # DuckDuckGo search for market context
 numpy==2.5.3  # Monte Carlo simulation
 rich==15.0.0  # CLI display system
