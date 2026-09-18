@@ -174,7 +174,12 @@ class SensesAgent(BaseAgent):
                 self.market_stock = markets
                 await self.log(f"Stock buffer refilled with {len(self.market_stock)} markets")
             else:
-                await self.log("Failed to fetch fresh markets. No restock.", level="ERROR")
+                # An empty result is usually "nothing new": every tradeable
+                # market in the close window was queued recently. A real
+                # fetch failure is already logged at ERROR by the scanner.
+                await self.log(
+                    "No new tradeable markets to queue; buffer stays empty.", level="WARN"
+                )
                 return
 
         # Queue from stock
