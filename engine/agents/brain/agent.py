@@ -54,24 +54,24 @@ class BrainAgent(BaseAgent):
 
         # Initialize Gemini
         self.gemini_model = None
-        self._model_downgrade_warning = None  # Store for logging in async context
         self.client, self.ai_client, default_model, self._gemini_available = (
             initialize_gemini_client(log_callback=self.log, bus=self.bus)
         )
 
-        # Try user-specified model first, then default list
+        # Try user-specified model first, then default list.
+        #
+        # This used to rewrite any GEMINI_MODEL containing "gemini-2.5" to
+        # gemini-2.0-flash-exp as a "defensive fix". get_default_models's own
+        # comment, eleven lines below in ai_utils.py, is what that "fix" was
+        # actually defending against: gemini-2.0-flash-exp 404'd and was
+        # removed from the list for being unreachable. gemini-2.5-flash and
+        # gemini-2.5-pro are both still in that same list as valid choices --
+        # so setting either one, or anything else containing "2.5", silently
+        # sent the Brain to the one model already known to be dead. The
+        # Brain's own OpenRouter fallback is what actually needs to handle a
+        # model going stale; nothing here should guess at that ahead of time.
         user_model = os.environ.get("GEMINI_MODEL")
-        if user_model:
-            # Defensive fix: 2.5 is deprecated/missing, downgrade to 2.0
-            if "gemini-2.5" in user_model:
-                self._model_downgrade_warning = (
-                    f"Downgrading requested model {user_model} to gemini-2.0-flash-exp"
-                )
-                self.gemini_model = "gemini-2.0-flash-exp"
-            else:
-                self.gemini_model = user_model
-        else:
-            self.gemini_model = default_model or self.DEFAULT_MODELS[0]
+        self.gemini_model = user_model or default_model or self.DEFAULT_MODELS[0]
 
         # Load personas
         self.personas = load_personas()
@@ -82,10 +82,6 @@ class BrainAgent(BaseAgent):
             f"AI Model: {self.gemini_model}" if self.client else "AI: UNAVAILABLE (No API key)"
         )
         await self.log(f"Brain online. Intelligence & Decision engine ready. {ai_status}")
-
-        # Log any model downgrade warnings
-        if self._model_downgrade_warning:
-            await self.log(f"WARN: {self._model_downgrade_warning}", level="WARN")
 
         # Subscribe to control events only
         await self.bus.subscribe("INSTRUCTIONS_UPDATE", self.update_instructions)

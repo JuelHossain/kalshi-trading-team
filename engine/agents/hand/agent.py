@@ -20,7 +20,7 @@ from core.vault_utils import check_profit_lock_threshold, publish_vault_state
 from .execution import calculate_kelly_stake as exec_calculate_kelly_stake
 from .execution import execute_order as exec_execute_order
 from .execution import has_open_position as exec_has_open_position
-from .execution import send_notification
+from .execution import parse_orderbook, send_notification
 from .execution import snipe_check as exec_snipe_check
 from .exits import average_entry_price_cents, evaluate_exit
 
@@ -136,24 +136,23 @@ class HandAgent(BaseAgent):
         return closed
 
     async def _current_price_cents(self, ticker: str, side: str = "yes") -> int | None:
-        """What the held side is worth now, in cents.
+        """What closing the held side would fetch right now, in cents.
 
-        Both sides are valued off the same YES ask, so they stay consistent:
-        the NO price is its mirror, (100 - yes_ask).
+        Closing a position is a sell, and a seller receives the best resting
+        bid on their own side, not an ask -- Kalshi quotes one book and no
+        explicit asks at all (CLAUDE.md: "the orderbook has no asks").
+        parse_orderbook is the one place that knows the book's real shapes;
+        reading a literal "asks" key here read every real response as empty
+        and made check_exits a no-op for every position, in paper and live,
+        even once CYCLE_END was wired to call it.
         """
         try:
-            book = await self.kalshi_client.get_orderbook(ticker)
+            raw = await self.kalshi_client.get_orderbook(ticker)
         except Exception:
             return None
 
-        asks = (book or {}).get("asks") or []
-        if not asks:
-            return None
-        price = asks[0].get("price")
-        if price is None:
-            return None
-
-        return 100 - int(price) if side == "no" else int(price)
+        book = parse_orderbook(raw, side=side)
+        return book["best_bid"] if book else None
 
     @staticmethod
     def _hours_to_expiry(position: dict) -> float | None:

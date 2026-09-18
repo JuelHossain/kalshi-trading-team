@@ -15,6 +15,27 @@ from agents.hand.exits import HOLD, average_entry_price_cents, evaluate_exit
 # Fixtures shared with the trade-cycle tests.
 
 
+def _book(yes_price_cents: int) -> dict:
+    """A real Kalshi orderbook_fp quoting the market at `yes_price_cents`.
+
+    _current_price_cents reads the resting bid on the position's own side --
+    what closing it would actually fetch -- via parse_orderbook. These tests
+    describe scenarios in terms of a single "the market is trading at X"
+    price, so a self-consistent two-sided book (a YES bid at X and its
+    mirror, a NO bid at 100 - X) reproduces exactly that for either side.
+    Building this by hand rather than {"asks": [...]} because a literal
+    "asks" key is not a shape any real Kalshi response has.
+    """
+    yes = max(1, min(99, yes_price_cents))
+    no = 100 - yes
+    return {
+        "orderbook_fp": {
+            "yes_dollars": [[f"{yes / 100:.2f}", "100"]],
+            "no_dollars": [[f"{no / 100:.2f}", "100"]],
+        }
+    }
+
+
 class TestStopLoss:
     def test_a_decisive_loss_is_cut(self):
         assert evaluate_exit(60, 20).should_exit
@@ -98,7 +119,7 @@ class TestTheHandActsOnIt:
         kalshi.get_positions = AsyncMock(
             return_value=[{"ticker": "KXA", "position": 10, "market_exposure": 600}]
         )
-        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 20, "count": 100}]})
+        kalshi.get_orderbook = AsyncMock(return_value=_book(20))
 
         closed = await hand.check_exits()
 
@@ -111,7 +132,7 @@ class TestTheHandActsOnIt:
         kalshi.get_positions = AsyncMock(
             return_value=[{"ticker": "KXA", "position": 10, "market_exposure": 600}]
         )
-        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 62, "count": 100}]})
+        kalshi.get_orderbook = AsyncMock(return_value=_book(62))
 
         assert await hand.check_exits() == 0
         kalshi.close_position.assert_not_awaited()
@@ -120,7 +141,7 @@ class TestTheHandActsOnIt:
     async def test_an_unknown_entry_price_holds_rather_than_guesses(self, cycle):
         hand, kalshi = cycle["hand"], cycle["kalshi"]
         kalshi.get_positions = AsyncMock(return_value=[{"ticker": "KXA", "position": 10}])
-        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 5, "count": 100}]})
+        kalshi.get_orderbook = AsyncMock(return_value=_book(5))
 
         assert await hand.check_exits() == 0
         kalshi.close_position.assert_not_awaited()
@@ -141,7 +162,7 @@ class TestTheHandActsOnIt:
                 {"ticker": "KXB", "position": 10, "market_exposure": 600},
             ]
         )
-        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 20, "count": 100}]})
+        kalshi.get_orderbook = AsyncMock(return_value=_book(20))
 
         async def flaky(ticker, count, side="yes"):
             if ticker == "KXA":
@@ -170,7 +191,7 @@ class TestNoPositionsAreValuedCorrectly:
         )
         # YES has fallen to 10c, so NO is worth 90c. Entry was 40c, leaving 60c
         # of upside, so the 80% take-profit target is 88c -- 90c clears it.
-        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 10, "count": 100}]})
+        kalshi.get_orderbook = AsyncMock(return_value=_book(10))
 
         closed = await hand.check_exits()
 
@@ -184,7 +205,7 @@ class TestNoPositionsAreValuedCorrectly:
         kalshi.get_positions = AsyncMock(
             return_value=[{"ticker": "KXA", "position": -10, "market_exposure": 400}]
         )
-        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 20, "count": 100}]})
+        kalshi.get_orderbook = AsyncMock(return_value=_book(20))
 
         assert await hand.check_exits() == 0
 
@@ -195,7 +216,7 @@ class TestNoPositionsAreValuedCorrectly:
         kalshi.get_positions = AsyncMock(
             return_value=[{"ticker": "KXA", "position": -10, "market_exposure": 600}]
         )
-        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 85, "count": 100}]})
+        kalshi.get_orderbook = AsyncMock(return_value=_book(85))
 
         assert await hand.check_exits() == 1
         assert kalshi.close_position.await_args.kwargs["side"] == "no"
@@ -207,7 +228,7 @@ class TestNoPositionsAreValuedCorrectly:
         kalshi.get_positions = AsyncMock(
             return_value=[{"ticker": "KXA", "position": -10, "market_exposure": 600}]
         )
-        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 45, "count": 100}]})
+        kalshi.get_orderbook = AsyncMock(return_value=_book(45))
 
         assert await hand.check_exits() == 0
         kalshi.close_position.assert_not_awaited()
@@ -219,6 +240,6 @@ class TestNoPositionsAreValuedCorrectly:
         kalshi.get_positions = AsyncMock(
             return_value=[{"ticker": "KXA", "position": 10, "market_exposure": 600}]
         )
-        kalshi.get_orderbook = AsyncMock(return_value={"asks": [{"price": 62, "count": 100}]})
+        kalshi.get_orderbook = AsyncMock(return_value=_book(62))
 
         assert await hand.check_exits() == 0
