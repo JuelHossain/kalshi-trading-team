@@ -6,7 +6,6 @@ Core SoulAgent class with evolution and lifecycle management.
 """
 
 import asyncio
-import contextvars
 from typing import Any
 
 from agents.base import BaseAgent
@@ -15,6 +14,7 @@ from core.bus import EventBus
 from core.db import check_connection as check_supabase_connection
 from core.error_dispatcher import ErrorSeverity
 from core.network import kalshi_client
+from core.shared_utils import fire_and_forget
 from core.synapse import Synapse
 from core.vault import RecursiveVault
 from core.vault_utils import check_hard_floor_breach, publish_vault_state
@@ -147,6 +147,7 @@ class SoulAgent(BaseAgent):
                 "REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name
             )
         elif action == "STOP_AUTOPILOT":
+            self._cancel_pulse()
             if self.autopilot_enabled:
                 self.autopilot_enabled = False
                 await self.log("AUTOPILOT DISABLED. (System will pause after current cycle)")
@@ -154,22 +155,17 @@ class SoulAgent(BaseAgent):
     async def on_cycle_complete(self, message):
         """Schedule the next cycle if in Autopilot mode.
 
-        The pulse runs as its own task in a fresh context rather than inline.
-        This handler executes inside the dispatch of the REQUEST_CYCLE that
-        started the cycle -- publish awaits every subscriber, and the whole
-        cycle is nested awaits below that -- so publishing REQUEST_CYCLE from
-        here is re-entrant and the bus drops it. Observed live on 2026-09-18:
-        autopilot ran exactly one cycle, logged "Waiting 30s", and then sat
-        idle for good while /health reported healthy and autopilot enabled.
-
-        A task inherits its creator's contextvars, which is how the bus's
-        guard travels, so the task has to be created with an empty Context to
-        escape it. It also takes the 30s wait off the CYCLE_COMPLETE
-        publisher's stack, which was blocking for the whole delay.
+        The pulse is detached (fire_and_forget) rather than slept inline, so
+        the 30s wait does not hold up the CYCLE_COMPLETE publisher. There is
+        only ever one pending pulse: a cycle that completes while one is
+        waiting -- a manual /trigger, or STOP then START inside the delay --
+        replaces it instead of starting a second chain that would run the
+        engine at twice the configured cadence from then on.
         """
         if self.autopilot_enabled and not self.is_locked_down:
             await self.log(f"Cycle complete. Waiting {self.autopilot_delay}s for next pulse...")
-            self._pulse_task = asyncio.create_task(self._pulse(), context=contextvars.Context())
+            self._cancel_pulse()
+            self._pulse_task = fire_and_forget(self._pulse())
 
     async def _pulse(self):
         """Wait out the autopilot delay, then request the next cycle if still enabled."""
@@ -179,11 +175,21 @@ class SoulAgent(BaseAgent):
                 "REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name
             )
 
-    async def teardown(self):
-        """Cancel a pending pulse so a stopped engine cannot request one more cycle."""
-        if self._pulse_task is not None and not self._pulse_task.done():
+    def _cancel_pulse(self) -> None:
+        """Drop the pending pulse, if any (never the task we are running in)."""
+        if self._pulse_task is not None and self._pulse_task is not asyncio.current_task():
             self._pulse_task.cancel()
         self._pulse_task = None
+
+    async def teardown(self):
+        """Stop autopilot so a stopped Soul cannot request another cycle.
+
+        Disabling as well as cancelling matters: a cycle still in flight will
+        publish CYCLE_COMPLETE after this returns, and with autopilot still on
+        that would arm a fresh pulse.
+        """
+        self.autopilot_enabled = False
+        self._cancel_pulse()
 
     async def on_system_lockdown(self, message):
         """Handle system lockdown by disabling autopilot immediately"""

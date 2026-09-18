@@ -285,7 +285,7 @@ __all__ = [
 _background_tasks: set[asyncio.Task] = set()
 
 
-def fire_and_forget(coro) -> None:
+def fire_and_forget(coro) -> asyncio.Task | None:
     """Run a fire-and-forget coroutine from sync or async context.
 
     `asyncio.create_task` needs a running loop and raises RuntimeError without
@@ -297,13 +297,27 @@ def fire_and_forget(coro) -> None:
     Schedules the coroutine when a loop is running, otherwise runs it to
     completion on a temporary one. Logging must never take down its caller, so
     a failure here is swallowed after closing the coroutine.
+
+    The task starts outside any bus dispatch (see core.bus.detached_context);
+    otherwise it would inherit the spawning subscriber's topics and have its
+    own publishes of them dropped. Returns the task so a caller can cancel it,
+    or None when the coroutine was run synchronously.
     """
+    from core.bus import detached_context
+
     try:
-        task = asyncio.get_running_loop().create_task(coro)
-        _background_tasks.add(task)
-        task.add_done_callback(_background_tasks.discard)
+        loop = asyncio.get_running_loop()
     except RuntimeError:
         try:
             asyncio.run(coro)
         except Exception:
             coro.close()
+        return None
+    try:
+        task = loop.create_task(coro, context=detached_context())
+    except RuntimeError:  # loop closing during shutdown
+        coro.close()
+        return None
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
