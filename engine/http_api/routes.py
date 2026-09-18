@@ -318,7 +318,7 @@ def health_check(engine):
             halted.append("soul lockdown")
         if error_count:
             halted.append(f"error box holds {error_count}")
-        if os.getenv("KILL_SWITCH") == "true":
+        if trading_mode.env_kill_switch():
             halted.append("env kill switch")
         # A refused cycle's own reason, when none of the above explains it
         # (a hard-floor breach, for one).
@@ -612,7 +612,6 @@ def engine_config(engine) -> dict:
     Read at request time so environment overrides (BRAIN_MIN_EDGE and the
     like) are reported as they actually apply, not as the defaults.
     """
-    import os
 
     from agents.senses import scanner
     from core import constants, trading_mode
@@ -843,7 +842,6 @@ def restart_engine(engine):
         denied = _session_required(request)
         if denied is not None:
             return denied
-        import os
         import sys
 
         async def _restart():
@@ -932,7 +930,6 @@ def get_env_health(engine):
 
     async def handler(request):
         """Verify 'Stay Alive' environment integrity."""
-        import os
 
         # 1. Symlink Integrity
         opencode_skills_ok = os.path.islink(".opencode/skills")

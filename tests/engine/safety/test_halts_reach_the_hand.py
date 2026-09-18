@@ -229,3 +229,26 @@ class TestTheCycleGate:
 
         brain.stop_requested = True
         brain._monitoring_task.cancel()
+
+
+class TestTheEnvKillSwitchReadsLikeTheConfigView:
+    """The Config view accepted 1/true/yes/on in any case; the engine only an
+    exact "true". KILL_SWITCH=1 showed ON and halted nothing."""
+
+    @pytest.mark.parametrize("value", ["1", "TRUE", "on", "Yes"])
+    def test_any_spelling_the_view_accepts_halts(self, monkeypatch, value):
+        monkeypatch.setenv("KILL_SWITCH", value)
+        assert trading_mode.is_halted()
+
+    @pytest.mark.parametrize("value", ["false", "0", "off", ""])
+    def test_off_is_off(self, monkeypatch, value):
+        monkeypatch.setenv("KILL_SWITCH", value)
+        assert not trading_mode.is_halted()
+
+
+def test_an_unrecognised_bool_falls_back_to_the_default(monkeypatch):
+    """A typo must fail safe: IS_PAPER_TRADING's default is pinned."""
+    from core.settings import settings
+
+    monkeypatch.setenv("IS_PAPER_TRADING", "ture")
+    assert settings.get_bool("IS_PAPER_TRADING") is True

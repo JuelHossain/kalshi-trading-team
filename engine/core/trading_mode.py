@@ -72,12 +72,22 @@ def halted_by(key: str) -> str | None:
 
 def halt_reasons() -> list[str]:
     """Every reason new exposure is refused, including the env KILL_SWITCH."""
-    import os
-
     reasons = list(_halts.values())
-    if os.getenv("KILL_SWITCH") == "true":
+    if env_kill_switch():
         reasons.append("env KILL_SWITCH")
     return reasons
+
+
+def env_kill_switch() -> bool:
+    """KILL_SWITCH as the Config view reads it (1/true/yes/on, any case).
+
+    Three places compared the raw value to the exact string "true", so a
+    hand-edited KILL_SWITCH=1 or TRUE showed ON in the cockpit and halted
+    nothing.
+    """
+    from core.settings import settings
+
+    return settings.get_bool("KILL_SWITCH")
 
 
 def is_halted() -> bool:

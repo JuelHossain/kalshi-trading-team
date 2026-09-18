@@ -540,9 +540,17 @@ SECRET_KINDS = {"secret", "multiline_secret"}
 
 
 def _parse_bool(raw: Any) -> bool:
+    """Strict: an unrecognised value is an error, so callers fall back to the
+    setting's default rather than to False. "ture" in IS_PAPER_TRADING must
+    stay pinned to paper, not quietly unpin it."""
     if isinstance(raw, bool):
         return raw
-    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+    value = str(raw).strip().lower()
+    if value in ("1", "true", "yes", "on"):
+        return True
+    if value in ("0", "false", "no", "off"):
+        return False
+    raise ValueError(f"not a boolean: {raw!r}")
 
 
 def coerce(setting: Setting, raw: Any) -> Any:

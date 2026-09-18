@@ -299,7 +299,7 @@ class GhostEngine:
         if self.manual_kill_switch:
             return self._halt("MANUAL KILL SWITCH ACTIVE. HALTING.")
 
-        if os.getenv("KILL_SWITCH") == "true":
+        if trading_mode.env_kill_switch():
             return self._halt("ENV KILL SWITCH ACTIVE. HALTING.")
 
         # Soul Lockdown Check (API Failure / Hard Floor)
