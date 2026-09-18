@@ -133,13 +133,22 @@ def activate_kill_switch(engine):
     """POST /kill-switch: halt authorisation of every cycle until deactivated."""
 
     async def handler(request):
-        """Set the manual kill switch and log it at ERROR so it is impossible to miss."""
+        """Set the manual kill switch and log it at ERROR so it is impossible to miss.
+
+        Does not touch engine.running. That flag is the process's own main
+        loop (main.run: `while self.running: sleep(1)`) -- clearing it here
+        did not halt trading, it exited the whole process. manual_kill_switch
+        is in-memory only, so systemd's Restart=always then brought the
+        process back up with the kill switch cleared, and the autopilot
+        drop-in re-armed autopilot within seconds: pressing Kill Switch
+        deactivated itself. authorize_cycle already refuses every cycle
+        while manual_kill_switch is set, which is the actual halt.
+        """
         engine.manual_kill_switch = True
         # FIX: Immediate Halt (Atomicity)
         engine.is_processing = False
         engine.cycle_count = 0
         engine.last_cycle_time = None  # Rate limit tracking
-        engine.running = False
 
         await engine.bus.publish(
             "SYSTEM_LOG",
@@ -187,7 +196,9 @@ def reset_system(engine):
 
         This used to set engine.running = False, which is the condition of
         the main loop -- so the endpoint named "reset" terminated the engine
-        instead of resetting it. Shutting down is what /kill-switch is for.
+        instead of resetting it. /kill-switch and /cancel had the identical
+        bug for the identical reason and are fixed the same way: halting
+        cycles is authorize_cycle refusing them, not the process exiting.
 
         It also has to drain the error box: authorize_cycle halts while that
         box is non-empty and nothing else empties it, so one recoverable
@@ -222,13 +233,19 @@ def cancel_cycle(engine):
     """POST /cancel: stop the running cycle, stop autopilot, release vault reservations."""
 
     async def handler(request):
-        """Gracefully cancel the current cycle and disable autopilot."""
+        """Gracefully cancel the current cycle and disable autopilot.
+
+        Does not touch engine.running: that flag is the process's own main
+        loop, and clearing it exited the whole process rather than just the
+        cycle. systemd's Restart=always then brought it back up and the
+        autopilot drop-in re-armed autopilot within seconds -- pressing
+        Cancel undid itself. STOP_AUTOPILOT below is the actual stop.
+        """
         # Always allow cancellation to ensure we can stop runaway loops
         engine.is_processing = False
 
         # 1. Stop Autopilot (Critical fix for "runaway train")
         await engine.bus.publish("SYSTEM_CONTROL", {"action": "STOP_AUTOPILOT"}, "HTTP")
-        engine.running = False
 
         # --- HARDENING: Emergency Rollback on Cancellation ---
         engine.vault.release_all_reservations()

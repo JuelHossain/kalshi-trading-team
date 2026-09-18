@@ -326,6 +326,17 @@ REGISTRY: list[Setting] = [
         maximum=100,
     ),
     _s(
+        "SENSES_RESCAN_COOLDOWN_SECONDS",
+        "senses",
+        "int",
+        60,
+        "Rescan cooldown",
+        "When a scan leaves nothing queued, wait this long before scanning again.",
+        minimum=0,
+        maximum=3600,
+        unit="s",
+    ),
+    _s(
         "SENSES_REQUEUE_AFTER_SECONDS",
         "senses",
         "float",

@@ -466,6 +466,13 @@ class GhostEngine:
                     {"isProcessing": False, "activeAgentId": None},
                     "GHOST",
                 )
+                # Review open positions against the exit policy (stop-loss,
+                # take-profit, pre-expiry exit). CYCLE_END had two
+                # subscribers -- Hand.check_exits and Senses.stop_scan -- and
+                # no publisher anywhere, so the exit policy never ran in
+                # either paper or live mode. Published from `finally` so a
+                # cycle that raised still gets its positions reviewed.
+                await self.bus.publish("CYCLE_END", {"cycle": self.cycle_count}, "GHOST")
                 # Notify Soul that cycle is finished
                 await self.bus.publish("CYCLE_COMPLETE", {"cycle": self.cycle_count}, "GHOST")
 

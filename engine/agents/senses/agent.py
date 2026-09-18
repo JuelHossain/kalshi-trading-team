@@ -26,6 +26,7 @@ class SensesAgent(BaseAgent):
     STOCK_BUFFER_SIZE = Live("SENSES_STOCK_BUFFER_SIZE")
     QUEUE_BATCH_SIZE = Live("SENSES_QUEUE_BATCH_SIZE")
     REQUEUE_AFTER_SECONDS = Live("SENSES_REQUEUE_AFTER_SECONDS")
+    RESCAN_COOLDOWN_SECONDS = Live("SENSES_RESCAN_COOLDOWN_SECONDS")
 
     def __init__(
         self,
@@ -42,6 +43,7 @@ class SensesAgent(BaseAgent):
         self.market_stock: list[dict] = []
         self._initial_scan_done = False
         self._dumped_count = 0
+        self._last_scan_attempt_time = 0.0
 
     async def setup(self):
         """Subscribe to pre-flight completion and restock requests."""
@@ -51,14 +53,49 @@ class SensesAgent(BaseAgent):
         await self.bus.subscribe("REQUEST_RESTOCK", self.on_restock_request)
 
     async def start_scan(self, message):
-        """Begin passive market surveillance (runs only once per startup)"""
-        if self._initial_scan_done:
-            await self.log("Initial scan already complete. Senses in STANDBY mode.", level="INFO")
+        """Begin passive market surveillance, or rescan a Senses stuck empty.
+
+        The first PREFLIGHT_COMPLETE (published every cycle) runs the full
+        scan; every one after that is normally a no-op, which is what keeps
+        a healthy stock buffer from being re-fetched every 30s.
+
+        But if a scan -- the first one, or a later restock -- ever leaves
+        both the stock buffer and the opportunity queue empty, standing pat
+        is a deadlock, not patience: REQUEST_RESTOCK is the only other route
+        into a scan, and the Brain only sends it after enough vetoes, which
+        needs an opportunity queue that will now never have anything in it.
+        Confirmed live 2026-09-18: the first scan found 0 markets and the
+        engine ran ~500 cycles analysing nothing, reporting healthy the
+        whole time. A cooldown keeps this from re-walking Kalshi's listing
+        every cycle while it stays empty.
+        """
+        if not self._initial_scan_done:
+            self._initial_scan_done = True
+            await self.log("Initiating passive market scan (zero token cost)...")
+            await self._scan()
             return
 
-        self._initial_scan_done = True
-        await self.log("Initiating passive market scan (zero token cost)...")
+        if await self._should_rescan():
+            await self.log(
+                "Scan left nothing queued and the cooldown has passed; rescanning.",
+                level="INFO",
+            )
+            await self._scan()
+            return
 
+        await self.log("Initial scan already complete. Senses in STANDBY mode.", level="INFO")
+
+    async def _should_rescan(self) -> bool:
+        """Whether a Senses that has already scanned should scan again now."""
+        if self.market_stock:
+            return False  # unqueued stock on hand; no need to hit Kalshi
+        if self.synapse and await self.synapse.opportunities.size() > 0:
+            return False  # Brain still has work; scanning now would just pile on
+        return (time.time() - self._last_scan_attempt_time) >= self.RESCAN_COOLDOWN_SECONDS
+
+    async def _scan(self):
+        """Run one surveillance pass and record when it was attempted."""
+        self._last_scan_attempt_time = time.time()
         await surveillance_loop(
             senses_agent=self,
             stock_buffer_size=self.STOCK_BUFFER_SIZE,
@@ -67,7 +104,7 @@ class SensesAgent(BaseAgent):
             log_error_callback=self.log_error,
             bus=self.bus,
         )
-        await self.log("Initial scan complete. Senses entering STANDBY mode.", level="SUCCESS")
+        await self.log("Scan complete. Senses entering STANDBY mode.", level="SUCCESS")
 
     async def stop_scan(self, message):
         """Stop scanning at cycle end"""
@@ -159,6 +196,10 @@ class SensesAgent(BaseAgent):
         # If stock is low, pull fresh from Kalshi
         if len(self.market_stock) < self.QUEUE_BATCH_SIZE:
             await self.log("Stock buffer low. Fetching fresh markets from Kalshi...")
+            # Shared with the PREFLIGHT_COMPLETE rescan path (start_scan /
+            # _should_rescan) so the two do not hammer Kalshi back-to-back
+            # when both see an empty stock buffer.
+            self._last_scan_attempt_time = time.time()
             # fetch_kalshi_markets already filters, sorts by volume and
             # truncates. Re-sorting here on "volume" -- a key Kalshi no
             # longer sends -- scored every market as 0 and undid the order.

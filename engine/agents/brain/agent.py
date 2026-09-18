@@ -92,8 +92,7 @@ class BrainAgent(BaseAgent):
         await self.bus.subscribe("SYSTEM_CONTROL", self.on_system_control)
 
         # Start the continuous monitoring loop
-        self._monitoring_task = asyncio.create_task(self.monitor_queue())
-        self._monitoring_task.add_done_callback(self._on_monitor_exit)
+        await self._ensure_monitor_running()
 
     def _on_monitor_exit(self, task: asyncio.Task) -> None:
         """Report a monitor loop that stopped, instead of losing it.
@@ -119,11 +118,38 @@ class BrainAgent(BaseAgent):
         )
 
     async def on_system_control(self, message):
-        """Handle stop signals immediately"""
+        """Handle stop/start signals for the queue monitor loop."""
         action = message.payload.get("action")
         if action == "STOP_AUTOPILOT":
             self.stop_requested = True
             await self.log("Brain received STOP signal. Halting processing.")
+        elif action == "START_AUTOPILOT":
+            await self._ensure_monitor_running()
+
+    async def _ensure_monitor_running(self):
+        """(Re)start the queue monitor loop if it is not already running.
+
+        STOP_AUTOPILOT sets stop_requested, which the loop notices and exits
+        for good; nothing previously reset the flag or replaced the task, so
+        a STOP followed by a START left the opportunity queue undrained --
+        every market Senses found from then on just sat there -- for the
+        rest of the process's life. A cancel-and-await here means a stop and
+        a start landing close together can never leave two loops running
+        against the same queue at once.
+        """
+        if self._monitoring_task is not None and not self._monitoring_task.done():
+            if not self.stop_requested:
+                return  # already running normally
+            self._monitoring_task.cancel()
+            try:
+                await self._monitoring_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        self.stop_requested = False
+        self._monitoring_task = asyncio.create_task(self.monitor_queue())
+        self._monitoring_task.add_done_callback(self._on_monitor_exit)
+        await self.log("Brain monitor loop (re)started.")
 
     async def update_instructions(self, message):
         """Receive evolved instructions from Soul"""

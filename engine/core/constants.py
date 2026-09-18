@@ -68,6 +68,15 @@ MAX_OPPORTUNITY_QUEUE_SIZE = get_env_int("MAX_OPPORTUNITY_QUEUE_SIZE", 20)
 RESTOCK_THRESHOLD_VETO_COUNT = get_env_int("RESTOCK_THRESHOLD_VETO_COUNT", 5)
 RESTOCK_COOLDOWN_SECONDS = get_env_int("RESTOCK_COOLDOWN_SECONDS", 60)
 
+# How long Senses waits before scanning again after a scan (initial or
+# restock) leaves both the stock buffer and the opportunity queue empty.
+# Without this, a scan that finds nothing -- a Kalshi outage, an overly
+# strict filter, a quiet market -- leaves the engine cycling forever with
+# nothing to analyse: REQUEST_RESTOCK is the only other way back into a
+# scan, and the Brain only sends it after vetoes, which requires an
+# opportunity queue that a stuck Senses will never fill.
+SENSES_RESCAN_COOLDOWN_SECONDS = get_env_int("SENSES_RESCAN_COOLDOWN_SECONDS", 60)
+
 # ==============================================================================
 # CYCLE CONFIGURATION
 # ==============================================================================
