@@ -299,9 +299,6 @@ class GhostEngine:
         if os.getenv("KILL_SWITCH") == "true":
             return self._halt("ENV KILL SWITCH ACTIVE. HALTING.")
 
-        if self.vault.kill_switch_active:
-            return self._halt("VAULT KILL SWITCH ACTIVE. HALTING.")
-
         # Soul Lockdown Check (API Failure / Hard Floor)
         if hasattr(self, "soul") and self.soul.is_locked_down:
             return self._halt("SOUL LOCKDOWN ACTIVE. HALTING.")
@@ -316,18 +313,25 @@ class GhostEngine:
         try:
             real_balance = await kalshi_client.get_balance()
 
-            # UPDATE VAULT FIRST, then check - ensures atomic read-check
-            self.vault.current_balance = real_balance
+            # Through update_balance, not a plain assignment: that is what
+            # re-evaluates the 85% kill switch and the profit lock. Assigning
+            # current_balance directly left both evaluated once, at boot.
+            await self.vault.update_balance(real_balance)
 
             if real_balance < self.vault.HARD_FLOOR_CENTS:
                 return self._halt(
                     f"HARD FLOOR BREACH (${real_balance/100:.2f} < ${self.vault.HARD_FLOOR_CENTS/100:.2f}). EMERGENCY LOCKDOWN."
                 )
-                return False
         except Exception:
             # Fallback to vault cache if API fails
             if self.vault.current_balance < self.vault.HARD_FLOOR_CENTS:
-                return False
+                return self._halt("HARD FLOOR BREACH (cached balance; Kalshi unreachable).")
+
+        # Read after the refresh above, so it reflects the current balance: a
+        # boot-time trip (a failed balance fetch initialises the vault at $0)
+        # clears as soon as a real balance comes back, instead of latching.
+        if self.vault.kill_switch_active:
+            return self._halt("VAULT KILL SWITCH ACTIVE. HALTING.")
 
         self.last_cycle_time = datetime.now()
         trading_mode.unhalt("cycle_gate")

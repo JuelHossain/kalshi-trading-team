@@ -167,6 +167,21 @@ class RecursiveVault:
         available = self.current_balance - self._reserved_funds
         return max(0, available)  # Never return negative
 
+    def get_tradeable_balance(self) -> int:
+        """Available funds, capped at house money once the principal is locked.
+
+        get_tradeable_capital said this and had no production caller: sizing
+        read get_available_balance, so the profit lock froze nothing.
+        """
+        available = self.get_available_balance()
+        if self.is_locked:
+            return max(0, min(available, self.current_balance - self.PRINCIPAL_CAPITAL_CENTS))
+        return available
+
+    def get_floor_headroom(self) -> int:
+        """The most that can be staked without the balance falling below the hard floor."""
+        return max(0, self.current_balance - self._reserved_funds - self.HARD_FLOOR_CENTS)
+
     def _save_reservations(self):
         """Persist current reservation total to local DB."""
         if self.test_mode:

@@ -204,8 +204,12 @@ def calculate_kelly_stake(
     if fraction <= 0:
         return 0
 
-    bankroll = vault.get_available_balance()
-    return min(int(bankroll * fraction), max_stake_cents)
+    # Tradeable, not merely available: once the profit lock engages only
+    # house money is sized. Then clamped so no stake can carry the balance
+    # through the hard floor -- the floor used to be checked only against
+    # the balance before the trade.
+    bankroll = vault.get_tradeable_balance()
+    return min(int(bankroll * fraction), max_stake_cents, vault.get_floor_headroom())
 
 
 async def execute_order(
@@ -251,17 +255,22 @@ async def execute_order(
             "error": f"Stake ${stake/100:.2f} exceeds max ${max_stake_cents/100:.2f}",
         }
 
-    # 5. Check available balance
-    available_balance = vault.get_available_balance()
+    # 5. Check available balance (house money only once the profit lock is on)
+    available_balance = vault.get_tradeable_balance()
     if available_balance < stake:
         return {
             "success": False,
             "error": f"Insufficient funds: available=${available_balance/100:.2f}, required=${stake/100:.2f}",
         }
 
-    # 6. Check hard floor
+    # 6. Check hard floor -- after the trade, not just before it
     if vault.current_balance < vault.HARD_FLOOR_CENTS:
         return {"success": False, "error": "Hard floor breach - emergency lockdown active"}
+    if stake > vault.get_floor_headroom():
+        return {
+            "success": False,
+            "error": f"Stake ${stake/100:.2f} would take the balance below the hard floor",
+        }
 
     # === LIVE TRADING ===
     if not kalshi_client:
