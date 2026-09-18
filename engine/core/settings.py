@@ -677,7 +677,11 @@ class Settings:
             if setting.kind in SECRET_KINDS:
                 raw = os.environ.get(setting.key, "")
                 entry["set"] = bool(raw)
-                entry["hint"] = raw.strip()[-4:] if len(raw.strip()) >= 8 else ""
+                # The last four characters tell API keys apart; for the
+                # dashboard's own password and bearer key they only shorten
+                # what is left to guess.
+                reveal = setting.group != "auth" and len(raw.strip()) >= 8
+                entry["hint"] = raw.strip()[-4:] if reveal else ""
             else:
                 entry["value"] = self.get(setting.key)
             if setting.restart:

@@ -93,15 +93,16 @@ class AuthManager:
         return path in _STATIC_PUBLIC_PATHS or path.startswith(_STATIC_PUBLIC_PREFIX)
 
     def validate_api_key(self, request: web.Request) -> bool:
-        """Validate the API key from the request."""
-        # Check header first
-        api_key = request.headers.get("Authorization", "").replace("Bearer ", "")
+        """Validate the Bearer key from the Authorization header.
 
-        # Fall back to query param for SSE (headers not always available)
-        if not api_key:
-            api_key = request.query.get("api_key", "")
-
-        return api_key == self.api_key
+        Header only: a key in the query string (the old ?api_key= fallback)
+        ends up in logs, browser history and Referer headers, and nothing
+        uses it -- the cockpit's EventSource is same-origin. Compared in
+        constant time, like the password.
+        """
+        supplied = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        expected = self.api_key or ""
+        return bool(supplied) and secrets.compare_digest(supplied.encode(), expected.encode())
 
     async def middleware(self, app, handler):
         """aiohttp middleware for authentication."""
@@ -145,6 +146,28 @@ class AuthManager:
 auth_manager = lazy(AuthManager)
 
 
+# Failed logins per client, for the rate limit below: {client: [monotonic times]}.
+_LOGIN_FAILURES: dict[str, list[float]] = {}
+_LOGIN_WINDOW_SECONDS = 15 * 60
+_LOGIN_MAX_FAILURES = 5
+
+
+def _login_client(request: web.Request) -> str:
+    """Who is logging in: the forwarded client behind a local proxy, else the peer."""
+    remote = request.remote or ""
+    if remote in ("127.0.0.1", "::1"):
+        forwarded = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return remote
+
+
+def _recent_failures(client: str, now: float) -> list[float]:
+    kept = [t for t in _LOGIN_FAILURES.get(client, []) if now - t < _LOGIN_WINDOW_SECONDS]
+    _LOGIN_FAILURES[client] = kept
+    return kept
+
+
 async def login_handler(request: web.Request) -> web.Response:
     """
     Handle login requests.
@@ -156,9 +179,14 @@ async def login_handler(request: web.Request) -> web.Response:
 
     Note: Demo mode has been removed for production security.
     """
+    import asyncio
+    import time
+
     try:
         data = await request.json()
-        password = data.get("password", "")
+        password = data.get("password", "") if isinstance(data, dict) else None
+        if not isinstance(password, str):
+            return error_response("Bad request", "password must be a string", 400)
 
         # Password is required for all access
         if not password:
@@ -166,9 +194,27 @@ async def login_handler(request: web.Request) -> web.Response:
                 "Password required", "Empty password not allowed. Demo mode has been removed.", 401
             )
 
+        # A per-client limit on failures, checked before comparing. There was
+        # none, so the password could be guessed as fast as the network
+        # allowed. Per client, not global: a global cap would let anyone lock
+        # the operator out.
+        client = _login_client(request)
+        now = time.monotonic()
+        failures = _recent_failures(client, now)
+        if len(failures) >= _LOGIN_MAX_FAILURES:
+            retry = int(_LOGIN_WINDOW_SECONDS - (now - failures[0])) + 1
+            response = error_response("Too many attempts", f"Try again in {retry}s", 429)
+            response.headers["Retry-After"] = str(retry)
+            return response
+
         # Constant-time compare so response timing cannot leak the password.
-        if not secrets.compare_digest(password, auth_manager.auth_password):
+        if not secrets.compare_digest(
+            password.encode(), (auth_manager.auth_password or "").encode()
+        ):
+            failures.append(now)
+            await asyncio.sleep(0.5)
             return error_response("Invalid password", "Authentication failed", 401)
+        _LOGIN_FAILURES.pop(client, None)
 
         # Update session state
         auth_manager.authenticated = True
