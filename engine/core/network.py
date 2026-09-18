@@ -276,7 +276,15 @@ class KalshiClient:
         The check sits here, at the one function entries, exits and Ragnarok all
         funnel through, so no future call site can place a real order by
         forgetting to ask whether it should.
+
+        The halt check sits here for the same reason, and only for buys: a
+        halt refuses new exposure, and exits and Ragnarok's closes must still
+        go through. Paper buys are refused too, so a paper soak exercises it.
         """
+        if action.lower() == "buy" and trading_mode.is_halted():
+            reasons = ", ".join(trading_mode.halt_reasons())
+            raise RuntimeError(f"Trading halted ({reasons}); refusing new exposure")
+
         if not trading_mode.is_live():
             return trading_mode.paper_fill(ticker, side, price, count, action)
 

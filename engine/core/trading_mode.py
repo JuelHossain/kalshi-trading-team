@@ -37,6 +37,54 @@ def is_live() -> bool:
     return _live
 
 
+# Why new exposure is refused right now, keyed by who halted it. Empty means
+# positions may be opened.
+#
+# The kill switch, Ragnarok, a Soul lockdown and the error box used to be read
+# only by authorize_cycle -- they gated the cycle heartbeat and nothing else.
+# The Brain's queue loop and the Hand run independently of cycles, so a signal
+# already queued went straight through to an order with every halt engaged:
+# reproduced in the audit as "ORDER EXECUTED" with the kill switch set, right
+# after Ragnarok had flattened. place_order consults this for buys only, so
+# exits and Ragnarok's own closes keep working while halted.
+_halts: dict[str, str] = {}
+
+
+def halt(key: str, reason: str) -> None:
+    """Refuse new exposure until `key` is lifted. Re-halting a key replaces its reason."""
+    _halts[key] = reason
+
+
+def unhalt(key: str) -> None:
+    """Lift one halt; others stay in force."""
+    _halts.pop(key, None)
+
+
+def clear_halts() -> None:
+    """Lift every halt (what /reset means)."""
+    _halts.clear()
+
+
+def halted_by(key: str) -> str | None:
+    """The reason recorded under `key`, or None if that halt is not set."""
+    return _halts.get(key)
+
+
+def halt_reasons() -> list[str]:
+    """Every reason new exposure is refused, including the env KILL_SWITCH."""
+    import os
+
+    reasons = list(_halts.values())
+    if os.getenv("KILL_SWITCH") == "true":
+        reasons.append("env KILL_SWITCH")
+    return reasons
+
+
+def is_halted() -> bool:
+    """Whether opening a position is refused right now."""
+    return bool(halt_reasons())
+
+
 def paper_fill(ticker: str, side: str, price: int, count: int, action: str) -> dict:
     """The response a simulated order returns.
 

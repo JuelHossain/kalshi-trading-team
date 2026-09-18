@@ -113,6 +113,20 @@ def block_network(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def reset_trading_mode():
+    """trading_mode is process-global: a halt or live arm set by one test
+    (the kill switch routes set both) must not refuse or arm orders in the
+    next."""
+    from core import trading_mode
+
+    trading_mode.clear_halts()
+    trading_mode.set_live(False)
+    yield
+    trading_mode.clear_halts()
+    trading_mode.set_live(False)
+
+
+@pytest.fixture(autouse=True)
 def isolate_databases(tmp_path, monkeypatch):
     """Point every test at throwaway databases.
 

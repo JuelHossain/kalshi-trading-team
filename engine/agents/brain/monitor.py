@@ -6,7 +6,7 @@ Continuous monitoring and processing of opportunities from Synapse.
 import asyncio
 from datetime import datetime
 
-from core import constants
+from core import constants, trading_mode
 from core.flow_control import check_execution_queue_limit, should_restock
 from core.shared_utils import fire_and_forget
 
@@ -36,6 +36,14 @@ async def monitor_queue(brain_agent, stop_requested, synapse, log_callback, proc
         try:
             # Check if Synapse exists
             if not synapse:
+                await asyncio.sleep(1)
+                continue
+
+            # Halted (kill switch, Ragnarok, lockdown, error box): leave the
+            # queue alone. place_order would refuse the order anyway; this
+            # stops spending an AI call per market on approvals that cannot
+            # be acted on, and stops the veto count triggering restocks.
+            if trading_mode.is_halted():
                 await asyncio.sleep(1)
                 continue
 

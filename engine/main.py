@@ -270,8 +270,13 @@ class GhostEngine:
             fire_and_forget(self.bus.subscribe(topic, _recorder(topic)))
 
     def _halt(self, reason: str) -> bool:
-        """Print halt message and return False (helper for kill switch checks)."""
+        """Refuse this cycle and new exposure; return False.
+
+        The trading_mode halt reaches the Brain and the Hand, which run
+        independently of cycles. Lifted on the next cycle that authorises.
+        """
         log_critical(reason, AgentType.SOUL)
+        trading_mode.halt("cycle_gate", reason)
         return False
 
     async def authorize_cycle(self) -> bool:
@@ -325,6 +330,7 @@ class GhostEngine:
                 return False
 
         self.last_cycle_time = datetime.now()
+        trading_mode.unhalt("cycle_gate")
         return True
 
     async def execute_single_cycle(self, is_paper_trading: bool = True):
@@ -349,10 +355,10 @@ class GhostEngine:
             )
             is_paper_trading = True
 
-        # Arm or disarm real order placement for this cycle. Until this line ran,
-        # is_paper_trading reached the display and the event payloads and nothing
-        # else -- a cycle labelled PAPER TRADING still sent live orders.
-        trading_mode.set_live(not is_paper_trading)
+        # Disarming is always safe, so a paper cycle disarms before anything
+        # else runs. Arming waits for authorize_cycle below.
+        if is_paper_trading:
+            trading_mode.set_live(False)
 
         self.is_processing = True
 
@@ -380,6 +386,14 @@ class GhostEngine:
 
                 progress.complete_phase("soul")
                 self.cycle_count += 1
+
+                # Arm or disarm real order placement for this cycle. Until this
+                # line ran, is_paper_trading reached the display and the event
+                # payloads and nothing else -- a cycle labelled PAPER TRADING
+                # still sent live orders. It sits after authorize_cycle: it used
+                # to run before it, so a /trigger with isPaperTrading=false armed
+                # live placement even when the kill switch refused the cycle.
+                trading_mode.set_live(not is_paper_trading)
 
                 # Cycle Start
                 await self.bus.publish(

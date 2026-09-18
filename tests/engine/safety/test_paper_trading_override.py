@@ -95,11 +95,34 @@ async def test_cycle_arms_the_order_path_for_live(engine, monkeypatch):
     """
     from core import trading_mode
 
-    eng, seen = engine
+    eng, _seen = engine
     monkeypatch.delenv("IS_PAPER_TRADING", raising=False)
     trading_mode.set_live(False)
 
-    assert await _run(eng, seen, requested=False) is False
+    # Arming happens only once authorize_cycle has passed -- it used to run
+    # before it, so a refused cycle could arm real orders
+    # (test_halts_reach_the_hand.py). So this runs an authorised cycle to the
+    # end instead of stopping it at the progress display.
+    class _Progress:
+        def update_phase(self, *_a, **_k):
+            pass
+
+        def complete_phase(self, *_a, **_k):
+            pass
+
+    @contextlib.contextmanager
+    def progress(_cycle, _is_paper):
+        yield _Progress()
+
+    async def authorised():
+        return True
+
+    monkeypatch.setattr(eng.display, "cycle_progress", progress)
+    monkeypatch.setattr(eng, "authorize_cycle", authorised)
+    eng.is_processing = False
+
+    await eng.execute_single_cycle(is_paper_trading=False)
+
     assert (
         trading_mode.is_live() is True
     ), "cycle reported LIVE but the order path was left in paper mode"

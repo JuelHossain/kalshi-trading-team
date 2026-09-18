@@ -5,10 +5,12 @@ Extracted from main.py for better organization.
 
 import asyncio
 import json
+import os
 import sqlite3
 from datetime import datetime
 
 from aiohttp import web
+from core import trading_mode
 from core.constants import AGENT_NAME_TO_ID, AGENT_TO_PHASE, MAX_EXECUTION_QUEUE_SIZE
 from core.event_formatter import (
     format_error_event,
@@ -150,6 +152,13 @@ def activate_kill_switch(engine):
         engine.cycle_count = 0
         engine.last_cycle_time = None  # Rate limit tracking
 
+        # authorize_cycle only gates cycles; the Brain and Hand run outside
+        # them, so a queued approval still became an order with the switch
+        # set. The trading_mode halt refuses new exposure at place_order.
+        trading_mode.halt("kill_switch", "manual kill switch")
+        trading_mode.set_live(False)
+        await engine.bus.publish("SYSTEM_CONTROL", {"action": "STOP_AUTOPILOT"}, "HTTP")
+
         await engine.bus.publish(
             "SYSTEM_LOG",
             {
@@ -171,8 +180,14 @@ def deactivate_kill_switch(engine):
     """POST /deactivate-kill-switch: lift the manual kill switch."""
 
     async def handler(request):
-        """Clear the manual kill switch and log it."""
+        """Clear the manual kill switch and log it.
+
+        Lifts only the kill-switch halt (which Ragnarok also sets). Autopilot
+        stays off until started again: resuming after an emergency stop is a
+        separate, deliberate step.
+        """
         engine.manual_kill_switch = False
+        trading_mode.unhalt("kill_switch")
         await engine.bus.publish(
             "SYSTEM_LOG",
             {
@@ -208,6 +223,10 @@ def reset_system(engine):
         """
         engine.manual_kill_switch = False
         engine.is_processing = False
+        # Every halt this clears (kill switch, lockdown, error box) also
+        # lifts its trading_mode halt. The env KILL_SWITCH is still honoured:
+        # trading_mode.is_halted reads it directly.
+        trading_mode.clear_halts()
 
         errors_cleared = 0
         if getattr(engine, "synapse", None):
@@ -299,6 +318,13 @@ def health_check(engine):
             halted.append("soul lockdown")
         if error_count:
             halted.append(f"error box holds {error_count}")
+        if os.getenv("KILL_SWITCH") == "true":
+            halted.append("env kill switch")
+        # A refused cycle's own reason, when none of the above explains it
+        # (a hard-floor breach, for one).
+        gate = trading_mode.halted_by("cycle_gate")
+        if gate and not halted:
+            halted.append(gate)
         return web.json_response(
             {
                 "status": "healthy",
@@ -877,23 +903,36 @@ def trigger_ragnarok(engine):
         """Emergency protocol to liquidate all positions and lock the vault."""
         from core.safety import execute_ragnarok
 
-        await execute_ragnarok()
+        result = await execute_ragnarok()
         engine.manual_kill_switch = True
+        # Ragnarok locked nothing: only authorize_cycle read the kill switch,
+        # so the next queued approval re-opened a position straight after the
+        # flatten. Halt new exposure, disarm live placement, stop autopilot,
+        # and drop approvals made before the emergency. Lifted by
+        # /deactivate-kill-switch or /reset.
+        trading_mode.halt("kill_switch", "Ragnarok")
+        trading_mode.set_live(False)
+        await engine.bus.publish("SYSTEM_CONTROL", {"action": "STOP_AUTOPILOT"}, "HTTP")
+        dropped = await engine.synapse.executions.clear() if engine.synapse else 0
+
+        summary = (
+            f"Cancelled {result.get('orders_cancelled', 0)}/{result.get('orders_found', 0)} "
+            f"orders, closed {result.get('positions_closed', 0)}/"
+            f"{result.get('positions_found', 0)} positions, dropped {dropped} pending "
+            "approvals. New positions halted until the kill switch is deactivated."
+        )
         await engine.bus.publish(
             "SYSTEM_LOG",
             {
                 "level": "ERROR",
-                "message": "[GHOST] RAGNAROK EXECUTED - All positions liquidated",
+                "message": f"[GHOST] RAGNAROK EXECUTED - {summary}",
                 "agent_id": 1,
                 "timestamp": datetime.now().isoformat(),
             },
             "GHOST",
         )
         return web.json_response(
-            {
-                "status": "ragnarok_executed",
-                "message": "Emergency liquidation complete. Vault locked.",
-            }
+            {"status": "ragnarok_executed", "message": summary, "result": result}
         )
 
     return handler
