@@ -91,10 +91,11 @@ class TestAsyncErrorRace:
         synapse.errors.push.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_medium_errors_can_be_async(self):
+    async def test_medium_errors_do_not_enter_the_error_box(self):
         """
-        Verify that MEDIUM and lower severity errors can use async logging
-        (non-blocking is acceptable for non-critical errors).
+        MEDIUM and lower must not be persisted: the box is only ever counted,
+        and any row in it halts every cycle until /reset. They used to be
+        pushed fire-and-forget, so one MEDIUM error latched the engine off.
         """
         synapse = MockSynapse()
         event_bus = MagicMock()
@@ -107,10 +108,8 @@ class TestAsyncErrorRace:
             code="DATA_VALIDATION_FAILED", severity=ErrorSeverity.MEDIUM, domain=ErrorDomain.DATA
         )
 
-        # For MEDIUM, async is acceptable
-        # We just verify it was eventually called
-        await asyncio.sleep(0.1)  # Allow async task to run
-        synapse.errors.push.assert_called_once()
+        await asyncio.sleep(0.1)  # a fire-and-forget push would have run by now
+        synapse.errors.push.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_error_box_populated_before_next_cycle(self):

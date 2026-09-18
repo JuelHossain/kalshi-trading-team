@@ -83,6 +83,14 @@ class SensesAgent(BaseAgent):
             await self._scan()
             return
 
+        # Stock left over and nothing waiting for the Brain: hand it the next
+        # batch. A restock otherwise needs five vetoes in a row and any
+        # approval resets the count, so leftovers could sit unqueued forever.
+        if self.market_stock and self.synapse and await self.synapse.opportunities.size() == 0:
+            await self.log("Brain idle; queueing the next batch from stock.", level="INFO")
+            await self.on_restock_request(message)
+            return
+
         await self.log("Initial scan already complete. Senses in STANDBY mode.", level="INFO")
 
     async def _should_rescan(self) -> bool:
@@ -212,7 +220,7 @@ class SensesAgent(BaseAgent):
             if markets:
                 self.market_stock = markets
                 await self.log(f"Stock buffer refilled with {len(self.market_stock)} markets")
-            else:
+            elif not self.market_stock:
                 # An empty result is usually "nothing new": every tradeable
                 # market in the close window was queued recently. A real
                 # fetch failure is already logged at ERROR by the scanner.
@@ -220,6 +228,8 @@ class SensesAgent(BaseAgent):
                     "No new tradeable markets to queue; buffer stays empty.", level="WARN"
                 )
                 return
+            # else: nothing new from Kalshi, but leftovers are still worth
+            # queueing rather than returning with them unqueued.
 
         # Queue from stock
         queued = await queue_from_stock(

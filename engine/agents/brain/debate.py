@@ -155,7 +155,12 @@ async def run_debate(
         # Use centralized error system
         await log_error_callback(
             code="INTELLIGENCE_AI_UNAVAILABLE",
-            severity=ErrorSeverity.HIGH,
+            # MEDIUM, as at every per-sample failure below: each returns
+            # confidence 0, which vetoes this one market, and the ensemble
+            # tolerates a failed sample. At HIGH, one truncated reply from one
+            # sample latched the error box and halted the whole engine -- seen
+            # live 2026-09-18, on a ticker the other two samples still scored.
+            severity=ErrorSeverity.MEDIUM,
             context={"opportunity": opportunity.get("ticker", "UNKNOWN")},
         )
         # Return zero confidence to trigger veto
@@ -276,7 +281,7 @@ Respond in JSON format:
                 await log_error_callback(
                     code="INTELLIGENCE_PARSE_ERROR",
                     message=f"JSON parsing failed for {ticker}",
-                    severity=ErrorSeverity.HIGH,
+                    severity=ErrorSeverity.MEDIUM,
                     context={
                         "ticker": ticker,
                         "error": str(je)[:100],
@@ -297,7 +302,7 @@ Respond in JSON format:
         await log_error_callback(
             code="INTELLIGENCE_PARSE_ERROR",
             message="No JSON found in AI response",
-            severity=ErrorSeverity.HIGH,
+            severity=ErrorSeverity.MEDIUM,
             context={"ticker": ticker, "response_preview": text[:200]},
         )
         return {
@@ -311,7 +316,7 @@ Respond in JSON format:
         await log_error_callback(
             code="INTELLIGENCE_PARSE_ERROR",
             message=f"JSON parsing failed for {ticker}",
-            severity=ErrorSeverity.HIGH,
+            severity=ErrorSeverity.MEDIUM,
             context={"ticker": ticker, "error": str(e)[:100]},
             exception=e,
         )
@@ -325,7 +330,7 @@ Respond in JSON format:
         await log_error_callback(
             code="INTELLIGENCE_PARSE_ERROR",
             message="AI response format error",
-            severity=ErrorSeverity.HIGH,
+            severity=ErrorSeverity.MEDIUM,
             context={"ticker": ticker, "error": str(e)[:100]},
             exception=e,
         )
@@ -339,7 +344,7 @@ Respond in JSON format:
         await log_error_callback(
             code="INTELLIGENCE_TIMEOUT",
             message="AI API connection failed",
-            severity=ErrorSeverity.HIGH,
+            severity=ErrorSeverity.MEDIUM,
             context={"ticker": ticker, "error": str(e)[:100]},
             exception=e,
         )
@@ -355,7 +360,7 @@ Respond in JSON format:
         await log_error_callback(
             code="INTELLIGENCE_DEBATE_FAILED",
             message=f"Debate error ({error_type}) for {ticker}",
-            severity=ErrorSeverity.HIGH,
+            severity=ErrorSeverity.MEDIUM,
             context={"ticker": ticker, "error_type": error_type, "error": str(e)[:100]},
             exception=e,
         )

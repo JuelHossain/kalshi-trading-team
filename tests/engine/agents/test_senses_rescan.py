@@ -130,3 +130,38 @@ async def test_no_rescan_while_brain_still_has_work(bus, synapse):
     senses.RESCAN_COOLDOWN_SECONDS = 0
 
     assert await senses._should_rescan() is False
+
+
+@pytest.mark.asyncio
+async def test_queued_markets_leave_the_stock(bus, synapse):
+    """queue_from_stock sliced copies, so the stock never shrank: every restock
+    re-queued the same top batch, later markets were never reached, and the
+    stock never emptied -- which is what the rescan above waits for."""
+    client = _FakeKalshiClient(pages=[[_market(f"KXS-{i}") for i in range(5)]])
+    senses = SensesAgent(2, bus, kalshi_client=client, synapse=synapse)
+    senses.QUEUE_BATCH_SIZE = 2
+    await senses.setup()
+
+    await bus.publish("PREFLIGHT_COMPLETE", {}, "TEST")
+
+    assert [m["ticker"] for m in senses.market_stock] == ["KXS-2", "KXS-3", "KXS-4"]
+
+
+@pytest.mark.asyncio
+async def test_an_idle_brain_gets_the_next_batch_from_stock(bus, synapse):
+    """Leftover stock must not wait for five vetoes in a row to be queued."""
+    client = _FakeKalshiClient(pages=[[_market(f"KXS-{i}") for i in range(5)]])
+    senses = SensesAgent(2, bus, kalshi_client=client, synapse=synapse)
+    senses.QUEUE_BATCH_SIZE = 2
+    senses.RESCAN_COOLDOWN_SECONDS = 3600
+    await senses.setup()
+    await bus.publish("PREFLIGHT_COMPLETE", {}, "TEST")
+    await synapse.opportunities.clear()  # the Brain drained the first batch
+
+    await bus.publish("PREFLIGHT_COMPLETE", {}, "TEST")
+
+    queued = []
+    while (opp := await synapse.opportunities.pop()) is not None:
+        queued.append(opp.ticker)
+    assert sorted(queued) == ["KXS-2", "KXS-3"], "the next batch, not the first one again"
+    assert client.calls == 1, "leftover stock is queued without asking Kalshi again"

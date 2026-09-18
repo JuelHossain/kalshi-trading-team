@@ -177,9 +177,14 @@ async def queue_from_stock(
         await log_callback("Stock buffer empty. Cannot queue.", level="WARN")
         return 0
 
-    # Take top QUEUE_BATCH_SIZE from stock
+    # Take the top batch OUT of the stock, in place -- both callers pass the
+    # agent's own list. Slicing copies left the stock untouched, so every
+    # restock re-queued the same top ten, markets past them were never
+    # queued, and the stock never emptied -- which is the condition the
+    # Senses rescan waits for, so the engine stalled with stock "on hand".
     to_queue = market_stock[:queue_batch_size]
-    remaining = market_stock[queue_batch_size:]
+    del market_stock[:queue_batch_size]
+    remaining = market_stock
 
     await log_callback(
         f"Queueing {len(to_queue)} markets from stock (remaining in stock: {len(remaining)})"
