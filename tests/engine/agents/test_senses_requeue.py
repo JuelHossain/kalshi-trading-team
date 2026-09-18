@@ -103,18 +103,20 @@ class TestFetchPagesPastExcludedTickers:
         assert client.calls == 2
 
     @pytest.mark.asyncio
-    async def test_it_stops_as_soon_as_it_has_enough(self):
+    async def test_it_keeps_the_best_volume_not_the_first_found(self):
+        """The listing is not in volume order, so stopping at the first
+        `needed` tradeable markets took an arbitrary slice."""
         client = _PagedClient(
             [
-                [_market("A"), _market("B")],
-                [_market("C")],
+                [_market("A", volume=300), _market("B", volume=400)],
+                [_market("C", volume=9000)],
             ]
         )
 
         got = await fetch_kalshi_markets(client, _log, needed=2)
 
-        assert len(got) == 2
-        assert client.calls == 1
+        assert [m["ticker"] for m in got] == ["C", "B"]
+        assert client.calls == 2
 
     @pytest.mark.asyncio
     async def test_no_exclusions_is_the_default(self):

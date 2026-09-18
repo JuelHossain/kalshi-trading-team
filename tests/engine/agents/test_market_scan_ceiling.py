@@ -111,13 +111,21 @@ async def test_no_ceiling_warning_when_the_cursor_simply_runs_out():
 
 
 @pytest.mark.asyncio
-async def test_no_ceiling_warning_once_enough_markets_are_found():
-    """Stopping early because `needed` was satisfied is not a ceiling hit either."""
-    pages = [[_market(f"A{i}") for i in range(10)] for _ in range(MAX_MARKET_PAGES + 2)]
+async def test_the_whole_window_is_walked_and_ranked_by_volume():
+    """The most liquid markets can sit on any page; the scan must reach them."""
+    pages = [[_market(f"LOW{p}", volume=250)] for p in range(5)]
+    pages.append([_market("DEEP", volume=1_000_000)])
     client = _RecordingClient(pages=pages)
     log = _Log()
 
-    await fetch_kalshi_markets(client, log, needed=5)
+    got = await fetch_kalshi_markets(client, log, needed=2)
 
-    assert client.calls == 1
+    assert client.calls == len(pages)
+    assert got[0]["ticker"] == "DEEP"
     assert not any("ceiling" in msg.lower() for _lvl, msg in log.lines)
+
+
+def test_pages_are_kalshis_maximum_size():
+    from agents.senses import scanner
+
+    assert scanner.MARKET_PAGE_SIZE == 1000

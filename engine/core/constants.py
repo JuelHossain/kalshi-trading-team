@@ -94,6 +94,10 @@ SENSES_REQUEUE_AFTER_SECONDS = get_env_float("SENSES_REQUEUE_AFTER_SECONDS", 216
 SENSES_MIN_VOLUME = get_env_int("SENSES_MIN_VOLUME", 200)
 SENSES_MAX_SPREAD_CENTS = get_env_int("SENSES_MAX_SPREAD_CENTS", 8)
 SENSES_MAX_DAYS_TO_CLOSE = get_env_int("SENSES_MAX_DAYS_TO_CLOSE", 10)
+# Pages of 1,000 markets walked per scan. Measured on the demo exchange
+# (2026-09-18): the 10-day window held over 60,000 non-combo markets, 250 of
+# them tradeable, and a 60-page walk took about 11 s.
+SENSES_MAX_MARKET_PAGES = get_env_int("SENSES_MAX_MARKET_PAGES", 60)
 
 # Brain Agent
 BRAIN_CONFIDENCE_THRESHOLD = get_env_float("BRAIN_CONFIDENCE_THRESHOLD", 0.85)

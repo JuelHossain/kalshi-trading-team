@@ -243,6 +243,9 @@ class GhostEngine:
             "SENSES_MAX_DAYS_TO_CLOSE", lambda v: setattr(scanner, "MAX_DAYS_TO_CLOSE", int(v))
         )
         settings.register_applier(
+            "SENSES_MAX_MARKET_PAGES", lambda v: setattr(scanner, "MAX_MARKET_PAGES", int(v))
+        )
+        settings.register_applier(
             "AUTH_PASSWORD", lambda v: setattr(auth_manager, "auth_password", str(v))
         )
         settings.register_applier(

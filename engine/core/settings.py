@@ -306,6 +306,17 @@ REGISTRY: list[Setting] = [
         unit="d",
     ),
     _s(
+        "SENSES_MAX_MARKET_PAGES",
+        "senses",
+        "int",
+        60,
+        "Scan depth",
+        "Pages of 1,000 markets read per scan. The listing is not in volume order, so a "
+        "shallow scan sees an arbitrary slice.",
+        minimum=1,
+        maximum=200,
+    ),
+    _s(
         "SENSES_STOCK_BUFFER_SIZE",
         "senses",
         "int",

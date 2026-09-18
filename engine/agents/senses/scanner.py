@@ -22,12 +22,13 @@ MIN_VOLUME = constants.SENSES_MIN_VOLUME
 MAX_SPREAD_CENTS = constants.SENSES_MAX_SPREAD_CENTS
 MAX_DAYS_TO_CLOSE = constants.SENSES_MAX_DAYS_TO_CLOSE
 
-# Markets requested per page, and the ceiling on pages walked before giving
-# up. Paging exists only because combo shards crowd out real markets; the
-# loop stops the moment the stock buffer is full, so a normal restock reads
-# far fewer than the ceiling.
-MARKET_PAGE_SIZE = 500
-MAX_MARKET_PAGES = 8
+# Markets per page (Kalshi's maximum) and the ceiling on pages per scan.
+# The ceiling was 8 x 500: every scan stopped at 4,000 markets while the
+# 10-day window held over 60,000 even with combos excluded, so the engine
+# only ever saw one Monday-night game and some NASCAR -- seven other NFL
+# games, MLB and gas prices, the most liquid markets there were, never.
+MARKET_PAGE_SIZE = 1000
+MAX_MARKET_PAGES = constants.SENSES_MAX_MARKET_PAGES
 
 
 def _money(value) -> float:
@@ -83,12 +84,11 @@ async def fetch_kalshi_markets(
     `exclude` is a set of tickers to skip -- typically those queued recently.
     Restock re-fetched the top of the same volume ranking every time, so the
     same ten NFL markets were analysed cycle after cycle: a grounded Gemini
-    call each, and the same approval reaching the Hand again. Paging continues
-    past excluded tickers until `needed` new ones are found.
+    call each, and the same approval reaching the Hand again.
 
-    Walks pages only until the stock buffer can be filled. The buffer is
-    then drained a batch at a time across cycles, so one restock covers
-    several cycles and no cycle pulls thousands of markets it will discard.
+    Walks the whole close window (up to MAX_MARKET_PAGES) and ranks what it
+    found by volume. The buffer is then drained a batch at a time across
+    cycles, so one scan covers several cycles.
     """
     if not kalshi_client:
         await log_callback("ERROR: Kalshi client not initialized.", level="ERROR")
@@ -131,8 +131,9 @@ async def fetch_kalshi_markets(
             seen += len(page)
             tradeable.extend(m for m in page if is_tradeable(m) and m.get("ticker") not in exclude)
 
-            if len(tradeable) >= needed:
-                break
+            # No early exit once `needed` are found: the listing is not in
+            # volume order, so the first 30 tradeable markets are an arbitrary
+            # slice, not the best. Walk the window, then rank by volume below.
             if not cursor:
                 break
         else:
