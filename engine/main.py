@@ -63,7 +63,7 @@ from core.vault import RecursiveVault
 from http_api.routes import register_all_routes, register_sse_subscriptions
 
 # HTTP imports
-from http_api.server import setup_middlewares, start_server
+from http_api.server import register_frontend, setup_middlewares, start_server
 
 # Initialize Logger
 logger = get_logger("GHOST")
@@ -546,6 +546,14 @@ class GhostEngine:
 
         # Register all routes
         register_all_routes(app, self)
+
+        # Serve the built cockpit from the same port, when a build exists.
+        # COCKPIT_DIST points elsewhere; SERVE_FRONTEND=false turns it off.
+        if get_env_bool("SERVE_FRONTEND", default=True):
+            dist = os.getenv("COCKPIT_DIST") or os.path.join(
+                os.path.dirname(__file__), "..", "frontend", "dist"
+            )
+            register_frontend(app, dist)
 
         # Start server
         await start_server(app)

@@ -40,6 +40,10 @@ _DIRECT_PATHS = {
 }
 _API_PREFIX = "/api"
 
+# The built cockpit, served by http_api.server.register_frontend.
+_STATIC_PUBLIC_PATHS = {"/", "/index.html"}
+_STATIC_PUBLIC_PREFIX = "/assets/"
+
 # Auth status constants
 MODE_PRODUCTION = "production"
 
@@ -77,8 +81,16 @@ class AuthManager:
         self.public_paths.add("/api/auth/logout")
 
     def is_public_path(self, path: str) -> bool:
-        """Check if a path is public (no auth required)."""
-        return path in self.public_paths
+        """Check if a path is public (no auth required).
+
+        Whitelist only. Besides the explicit route list, the cockpit's own
+        static files are public: the page and its hashed bundles contain
+        no secrets, and the password gate lives inside the app. Nothing
+        else is opened.
+        """
+        if path in self.public_paths:
+            return True
+        return path in _STATIC_PUBLIC_PATHS or path.startswith(_STATIC_PUBLIC_PREFIX)
 
     def validate_api_key(self, request: web.Request) -> bool:
         """Validate the API key from the request."""

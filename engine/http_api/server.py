@@ -65,6 +65,39 @@ def setup_middlewares(app, auth_manager):
     app.middlewares.append(auth_manager.middleware)
 
 
+def register_frontend(app, dist_dir) -> bool:
+    """Serve the built cockpit from the engine itself.
+
+    One process, one port: `frontend/dist` (from `npm run build`) is served
+    at `/` and `/index.html`, its hashed bundles at `/assets/`. Nothing
+    else is exposed: the cockpit keeps its views in memory rather than in
+    the URL, so no catch-all route is needed and the auth whitelist stays
+    exact. Returns False, and serves nothing, when there is no build --
+    the API keeps working exactly as before.
+    """
+    import os
+
+    from core.logger import get_logger
+
+    dist = os.path.abspath(str(dist_dir))
+    index = os.path.join(dist, "index.html")
+    assets = os.path.join(dist, "assets")
+    if not os.path.isfile(index):
+        get_logger("GHOST").info(f"No cockpit build at {dist}; API only.")
+        return False
+
+    async def serve_index(request):
+        """The page. Never cached, so a rebuild shows up on the next load."""
+        return web.FileResponse(index, headers={"Cache-Control": "no-cache"})
+
+    if os.path.isdir(assets):
+        app.router.add_static("/assets/", assets, name="cockpit-assets")
+    app.router.add_get("/", serve_index)
+    app.router.add_get("/index.html", serve_index)
+    get_logger("GHOST").info(f"Serving the cockpit from {dist}")
+    return True
+
+
 async def start_server(app, host="0.0.0.0", port=3002):
     """
     Start the HTTP server.

@@ -164,6 +164,10 @@ by the running engine through the HTTP and SSE interface documented in
 cd frontend && npm install && npm run dev   # http://localhost:3000, proxies /api to :3002
 ```
 
+For a deployment there is no separate web server: `npm run build` in
+`frontend/` and the engine serves the result itself at `/` on port 3002
+(set `SERVE_FRONTEND=false` to turn that off).
+
 Sign in with the engine's `AUTH_PASSWORD`. Demo asks for paper cycles,
 Production asks for live ones; the server's `IS_PAPER_TRADING` pin has the
 final say either way. See [frontend/README.md](frontend/README.md) for how
@@ -172,6 +176,8 @@ each panel is wired.
 ## Documentation
 
 - [RUNBOOK.md](RUNBOOK.md) — install, configure, run, watch, stop
+- [docs/DEPLOY.md](docs/DEPLOY.md) — the Fedora mini PC deployment: one
+  service, Tailscale for access from anywhere, Claude Code from your phone
 - [docs/architecture/README.md](docs/architecture/README.md) — agents, bus,
   queues, capital rails, the model and why it is grounded
 - [docs/api/README.md](docs/api/README.md) — every HTTP route the engine serves

@@ -1,0 +1,32 @@
+# Sentient Alpha engine + cockpit, as a systemd *user* service.
+#
+# Install:  mkdir -p ~/.config/systemd/user
+#           cp deploy/sentient-alpha.service ~/.config/systemd/user/
+#           systemctl --user daemon-reload
+#           systemctl --user enable --now sentient-alpha
+#           loginctl enable-linger $USER      # keep it running after logout / at boot
+#
+# A user service runs as you, from your home directory, which keeps SELinux
+# and file ownership out of the picture. The engine loads engine/.env itself
+# and serves the built cockpit from frontend/dist on port 3002.
+
+[Unit]
+Description=Sentient Alpha trading engine and cockpit
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/kalshi-trading-team
+ExecStart=%h/kalshi-trading-team/.venv/bin/python engine/main.py
+Environment=PYTHONPATH=engine
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONIOENCODING=utf-8
+Restart=always
+RestartSec=5
+# Never let a crash loop hammer Kalshi or Gemini.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Install]
+WantedBy=default.target
