@@ -1,0 +1,98 @@
+name: Calibration study
+
+# Samples Kalshi markets daily, settles what has closed, and commits the
+# growing dataset back to the repo. Runners are ephemeral, so the repo is
+# the persistence layer.
+#
+# NOTE: scheduled workflows only fire from the default branch. This file
+# must be on main for the cron to run at all.
+
+on:
+  schedule:
+    # 13:00 UTC daily. GitHub delays scheduled runs under load, which does
+    # not matter here — the sample just needs to be roughly daily.
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+    inputs:
+      count:
+        description: Markets to sample this run
+        default: "15"
+      variant:
+        description: Prompt variant
+        type: choice
+        options: [blind, anchored]
+        default: blind
+
+permissions:
+  contents: write
+
+concurrency:
+  group: calibration
+  cancel-in-progress: false
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    # Free-tier models are slow and retry through a fallback chain; a
+    # 15-market run measured around 20 minutes. Generous ceiling so a slow
+    # provider does not lose the day's sample.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet aiohttp pytest
+
+      - name: Verify scoring math
+        # Guards the only code where a silent bug produces a confident
+        # wrong verdict. Cheap enough to run every day.
+        run: pytest research/ -q
+
+      - name: Settle and collect
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -m research.daily \
+            --count "${{ inputs.count || 15 }}" \
+            --variant "${{ inputs.variant || 'blind' }}"
+
+      - name: Build report
+        if: always()
+        run: |
+          {
+            echo "# Calibration report"
+            echo
+            echo "_Updated $(date -u '+%Y-%m-%d %H:%M UTC')_"
+            echo
+            echo '```'
+            python -m research.analyze --variant blind || true
+            echo '```'
+          } > research/REPORT.md
+
+      - name: Commit dataset and report
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f research/predictions.db research/REPORT.md
+          if git diff --staged --quiet; then
+            echo "Nothing changed this run."
+            exit 0
+          fi
+          git commit -m "chore(research): calibration sample $(date -u +%F) [skip ci]"
+          git pull --rebase --autostash
+          git push
+
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-log-${{ github.run_number }}
+          path: research/logs/daily.log
+          retention-days: 30
+          if-no-files-found: ignore

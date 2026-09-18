@@ -45,3 +45,8 @@ test_report*.txt
 # SQLite WAL sidecars next to the runtime databases
 *.db-wal
 *.db-shm
+
+# Calibration experiment: the dataset IS the deliverable and CI runners are
+# ephemeral, so this one database is tracked despite any *.db rule above.
+!research/predictions.db
+research/logs/
