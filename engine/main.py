@@ -606,9 +606,40 @@ class GhostEngine:
         """Main event loop."""
         await self.initialize_system()
         await self.start_http_server()
+        await self._resume_autopilot_if_asked()
 
         while self.running:
             await asyncio.sleep(1)
+
+    async def _resume_autopilot_if_asked(self) -> None:
+        """Re-arm paper autopilot after a start, when the operator asked for it.
+
+        Resuming used to live in an untracked systemd ExecStartPost hook,
+        missing from fresh installs and not re-run by the dashboard Restart
+        (it keeps the same PID) -- so after the Restart the Config view asks
+        for, autopilot stayed off while the cockpit toggle still read ON.
+        AUTOPILOT_ON_BOOT covers every kind of start; a dashboard Restart
+        also carries the running state across via SENTIENT_RESUME_AUTOPILOT.
+        Never while any halt is set.
+        """
+        from core.settings import settings
+
+        carried = os.environ.pop("SENTIENT_RESUME_AUTOPILOT", "") == "1"
+        if not (carried or settings.get_bool("AUTOPILOT_ON_BOOT")):
+            return
+        soul = getattr(self, "soul", None)
+        if (
+            trading_mode.env_kill_switch()
+            or self.manual_kill_switch
+            or self.vault.kill_switch_active
+            or (soul is not None and soul.is_locked_down)
+        ):
+            log_warning("Autopilot not resumed: a halt is set.")
+            return
+        log_info("Resuming paper autopilot after start.")
+        await self.bus.publish(
+            "SYSTEM_CONTROL", {"action": "START_AUTOPILOT", "isPaperTrading": True}, "GHOST"
+        )
 
     def start(self):
         """Create the event loop and run until shutdown; signal handlers where the platform allows."""
@@ -633,7 +664,10 @@ class GhostEngine:
             if getattr(self, "restart_requested", False):
                 import sys
 
-                os.execve(sys.executable, [sys.executable, *sys.argv], BOOT_PARENT_ENV)
+                env = dict(BOOT_PARENT_ENV)
+                if getattr(self, "resume_autopilot", False):
+                    env["SENTIENT_RESUME_AUTOPILOT"] = "1"
+                os.execve(sys.executable, [sys.executable, *sys.argv], env)
 
 
 if __name__ == "__main__":

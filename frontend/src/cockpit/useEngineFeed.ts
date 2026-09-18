@@ -186,6 +186,7 @@ export function useEngineFeed(enabled: boolean, isPaperTrading: boolean) {
           errorBox: Number(data.error_box) || 0,
           halted: Array.isArray(data.halted) ? data.halted.map(String) : [],
           ...(typeof data.processing === 'boolean' ? { processing: data.processing } : {}),
+          ...(typeof data.autopilot === 'boolean' ? { autopilot: data.autopilot } : {}),
         });
         if (data.kill_switch === true && !st.kill) st.setLocked(true);
         if (data.kill_switch === false && st.kill) st.setLocked(false);

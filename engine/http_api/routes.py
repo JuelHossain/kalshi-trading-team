@@ -335,6 +335,9 @@ def health_check(engine):
                 "error_box": error_count,
                 "kill_switch": engine.manual_kill_switch or engine.vault.kill_switch_active,
                 "locked_down": bool(soul is not None and soul.is_locked_down),
+                # Polled by the cockpit, so its toggle cannot go stale after
+                # a restart it did not see.
+                "autopilot": bool(soul is not None and soul.autopilot_enabled),
                 "halted": halted,
             }
         )
@@ -858,6 +861,8 @@ def restart_engine(engine):
             # read afresh. exec-ing from inside the loop kept this process's
             # edited environment, so hand edits to .env never applied.
             engine.restart_requested = True
+            soul = getattr(engine, "soul", None)
+            engine.resume_autopilot = bool(soul is not None and soul.autopilot_enabled)
             await engine.shutdown("Restart requested from the dashboard")
 
         fire_and_forget(_restart())

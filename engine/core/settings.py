@@ -93,6 +93,14 @@ REGISTRY: list[Setting] = [
         "A second kill switch, read before every cycle. On means no cycle is authorised.",
     ),
     _s(
+        "AUTOPILOT_ON_BOOT",
+        "engine",
+        "bool",
+        False,
+        "Resume autopilot on start",
+        "Re-arm paper autopilot after every start (reboot, crash, restart) unless a halt is set.",
+    ),
+    _s(
         "MIN_CYCLE_INTERVAL_SECONDS",
         "engine",
         "int",
