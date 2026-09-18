@@ -6,6 +6,7 @@ Core SoulAgent class with evolution and lifecycle management.
 """
 
 import asyncio
+import contextvars
 from typing import Any
 
 from agents.base import BaseAgent
@@ -41,6 +42,7 @@ class SoulAgent(BaseAgent):
         self.autopilot_enabled = False
         self.autopilot_delay = 30
         self.is_paper_trading = True
+        self._pulse_task: asyncio.Task | None = None
 
         # Initialize Gemini for self-evolution
         self.client, self.ai_client, self.gemini_model, self._gemini_available = (
@@ -150,15 +152,38 @@ class SoulAgent(BaseAgent):
                 await self.log("AUTOPILOT DISABLED. (System will pause after current cycle)")
 
     async def on_cycle_complete(self, message):
-        """Trigger next cycle if in Autopilot mode"""
+        """Schedule the next cycle if in Autopilot mode.
+
+        The pulse runs as its own task in a fresh context rather than inline.
+        This handler executes inside the dispatch of the REQUEST_CYCLE that
+        started the cycle -- publish awaits every subscriber, and the whole
+        cycle is nested awaits below that -- so publishing REQUEST_CYCLE from
+        here is re-entrant and the bus drops it. Observed live on 2026-09-18:
+        autopilot ran exactly one cycle, logged "Waiting 30s", and then sat
+        idle for good while /health reported healthy and autopilot enabled.
+
+        A task inherits its creator's contextvars, which is how the bus's
+        guard travels, so the task has to be created with an empty Context to
+        escape it. It also takes the 30s wait off the CYCLE_COMPLETE
+        publisher's stack, which was blocking for the whole delay.
+        """
         if self.autopilot_enabled and not self.is_locked_down:
             await self.log(f"Cycle complete. Waiting {self.autopilot_delay}s for next pulse...")
-            await asyncio.sleep(self.autopilot_delay)
+            self._pulse_task = asyncio.create_task(self._pulse(), context=contextvars.Context())
 
-            if self.autopilot_enabled and not self.is_locked_down:
-                await self.bus.publish(
-                    "REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name
-                )
+    async def _pulse(self):
+        """Wait out the autopilot delay, then request the next cycle if still enabled."""
+        await asyncio.sleep(self.autopilot_delay)
+        if self.autopilot_enabled and not self.is_locked_down:
+            await self.bus.publish(
+                "REQUEST_CYCLE", {"isPaperTrading": self.is_paper_trading}, self.name
+            )
+
+    async def teardown(self):
+        """Cancel a pending pulse so a stopped engine cannot request one more cycle."""
+        if self._pulse_task is not None and not self._pulse_task.done():
+            self._pulse_task.cancel()
+        self._pulse_task = None
 
     async def on_system_lockdown(self, message):
         """Handle system lockdown by disabling autopilot immediately"""
