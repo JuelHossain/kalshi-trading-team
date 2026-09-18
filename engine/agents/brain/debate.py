@@ -30,6 +30,35 @@ GROUNDING_ENABLED = os.getenv("BRAIN_SEARCH_GROUNDING", "true").strip().lower() 
 )
 
 
+# Sites whose prices the estimate is compared against. Search grounding
+# found them on its own: live grounded estimates sat an average of 0.006 from
+# the Kalshi price, and a research log cited "Prediction markets price the New
+# York Giants at 24%". An estimate read off the market cannot disagree with it,
+# so the engine could never find an edge -- or found one only by noise.
+PREDICTION_MARKET_DOMAINS = ("kalshi.com", "polymarket.com", "predictit.org", "manifold.markets")
+
+
+def prediction_market_sources(response) -> list[str]:
+    """Grounding sources that are prediction markets. [] when none, or unreadable."""
+    try:
+        candidates = response.candidates or []
+        metadata = candidates[0].grounding_metadata if candidates else None
+        chunks = (metadata.grounding_chunks or []) if metadata else []
+    except Exception:
+        return []
+    found = []
+    for chunk in chunks:
+        web = getattr(chunk, "web", None)
+        if web is None:
+            continue
+        # uri is a Google redirect; domain and title carry the real site.
+        label = " ".join(str(getattr(web, f, "") or "") for f in ("domain", "title", "uri"))
+        for domain in PREDICTION_MARKET_DOMAINS:
+            if domain in label.lower() and domain not in found:
+                found.append(domain)
+    return found
+
+
 def build_grounding_config():
     """Return a generate_content config enabling Google Search, or None.
 
@@ -174,6 +203,25 @@ async def run_debate(
     market_data = opportunity.get("market_data", {})
     title = market_data.get("title", ticker)
     subtitle = market_data.get("subtitle", "")
+    raw = market_data.get("raw_response") or {}
+    # The event is described by its resolution rule, not its ticker: a
+    # Kalshi ticker is a search key for the Kalshi market page, which is the
+    # price this estimate must not see. Titles alone are side-only ("Las
+    # Vegas wins"); rules_primary names both sides, the date and the source.
+    rules = str(raw.get("rules_primary") or "").strip()[:600]
+    resolves = raw.get("expected_expiration_time") or market_data.get("expiration") or ""
+    event_lines = f"EVENT: {title}\n"
+    if rules:
+        event_lines += f"RESOLUTION RULE: {rules}\n"
+    else:
+        # Without the rule the title may not identify the event at all; the
+        # ticker is then the only context, and the source check below still
+        # drops a sample that went and read the market.
+        event_lines += f"MARKET ID: {ticker}\n"
+    if subtitle:
+        event_lines += f"SUBTITLE: {subtitle}\n"
+    if resolves:
+        event_lines += f"RESOLVES AROUND: {resolves}\n"
 
     # The market price is deliberately NOT shown to the model.
     #
@@ -190,10 +238,7 @@ async def run_debate(
 
     prompt = f"""You are a forecasting committee estimating the probability of a real-world event.
 
-EVENT: {ticker}
-TITLE: {title}
-SUBTITLE: {subtitle}
-
+{event_lines}
 {f"Today's Trading Instructions: {trading_instructions[:500]}" if trading_instructions else ""}
 
 TASK:
@@ -202,6 +247,11 @@ information about it -- form, injuries, standings, recent reporting, whatever
 bears on the outcome -- rather than relying on memory, which may be stale or
 may predate the event entirely. You are NOT being shown any market price, and
 you should not guess at one -- estimate the event on its merits alone.
+Do not use or report prices, odds or probabilities from prediction markets or
+exchanges (Kalshi, Polymarket, PredictIt, Manifold): your estimate is compared
+against those prices, so it must be independent of them. Sportsbook lines,
+polls, statistics and news are all fair evidence. If a prediction-market price
+is the only evidence you find, say so and give a low confidence.
 
 1. OPTIMIST: argue why the event is more likely than it first appears.
 2. CRITIC: argue why it is less likely than it first appears.
@@ -238,6 +288,18 @@ Respond in JSON format:
                 ),
             )
             text = response.text
+            leaked = prediction_market_sources(response)
+            if leaked:
+                await log_callback(
+                    f"[BRAIN] Estimate for {ticker} drew on {', '.join(leaked)}; "
+                    "discarding it -- the market price is what it is measured against.",
+                    level="WARN",
+                )
+                return {
+                    "confidence": 0.0,
+                    "estimated_probability": None,
+                    "reasoning": f"Sourced from a prediction market ({', '.join(leaked)})",
+                }
         except Exception as e:
             if grounding is not None:
                 # No substitute. The fallback is a free, ungrounded chat model
