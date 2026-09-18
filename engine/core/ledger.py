@@ -182,6 +182,92 @@ def calibration(buckets: int = 5) -> list[dict]:
     return report
 
 
+def recent_fills(limit: int = 200) -> list[dict]:
+    """Executed orders, newest first, for the dashboard's Orders panel.
+
+    A fill is an APPROVED decision that record_fill attached an order id to.
+    Paper ids encode the side, price and count (PAPER-buy-no-TICKER-23x8), so
+    the panel can show the ticket without a second table. Settled rows carry
+    the realised P&L in cents; open rows carry None.
+    """
+    try:
+        with _connect() as conn:
+            rows = conn.execute(
+                """SELECT id, decided_at, ticker, market_price, estimated_probability,
+                          edge, stake_cents, order_id, settled_yes, settled_at
+                     FROM decisions
+                    WHERE order_id IS NOT NULL
+                    ORDER BY id DESC
+                    LIMIT ?""",
+                (int(limit),),
+            ).fetchall()
+    except Exception:
+        return []
+
+    fills = []
+    for row in rows:
+        (
+            row_id,
+            decided_at,
+            ticker,
+            market_price,
+            estimated_probability,
+            edge,
+            stake_cents,
+            order_id,
+            settled_yes,
+            settled_at,
+        ) = row
+        side, price_cents, count = _parse_order_id(order_id, market_price, stake_cents)
+        pnl_cents = None
+        if settled_yes is not None and price_cents and count:
+            won = bool(settled_yes) if side == "yes" else not bool(settled_yes)
+            pnl_cents = (100 - price_cents) * count if won else -price_cents * count
+        fills.append(
+            {
+                "id": row_id,
+                "decided_at": decided_at,
+                "ticker": ticker,
+                "side": side,
+                "price_cents": price_cents,
+                "count": count,
+                "stake_cents": stake_cents,
+                "order_id": order_id,
+                "market_price": market_price,
+                "estimated_probability": estimated_probability,
+                "edge": edge,
+                "settled_yes": settled_yes,
+                "settled_at": settled_at,
+                "pnl_cents": pnl_cents,
+            }
+        )
+    return fills
+
+
+def _parse_order_id(
+    order_id: str | None, market_price: float | None, stake_cents: int | None
+) -> tuple[str, int | None, int | None]:
+    """Recover (side, price_cents, count) from a paper order id, else estimate.
+
+    Paper ids look like PAPER-buy-no-KXNFLGAME-26SEP21-23x8. A real Kalshi
+    order id carries none of this, so fall back to the YES market price and
+    the stake to estimate a count.
+    """
+    text = str(order_id or "")
+    if text.startswith("PAPER-"):
+        parts = text.split("-")
+        if len(parts) >= 5 and "x" in parts[-1]:
+            side = parts[2].lower() if parts[2].lower() in ("yes", "no") else "yes"
+            try:
+                price, count = parts[-1].split("x")
+                return side, int(price), int(count)
+            except ValueError:
+                pass
+    price_cents = round(float(market_price) * 100) if market_price else None
+    count = int(stake_cents) // price_cents if stake_cents and price_cents else None
+    return "yes", price_cents, count
+
+
 def realised_edge() -> dict:
     """Actual profit per $1 staked on settled trades, against what was expected.
 

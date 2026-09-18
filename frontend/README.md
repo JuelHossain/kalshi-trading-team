@@ -1,36 +1,63 @@
-# 📟 Sentient Alpha HUD (Frontend)
+# Sentient Alpha Cockpit (frontend)
 
-The **Sentient Alpha HUD** is a premium, cyber-command interface designed to visualize and control the Sentient Alpha Trading Engine. It provides real-time visibility into the autonomous "funnel" process, terminal logging, and portfolio performance.
+The dashboard for the Sentient Alpha engine. The trading pipeline is drawn
+as an **orrery**: the Synapse store is the star at the centre and the four
+agents (Soul → Senses → Brain → Hand) are planets orbiting it on a tilted
+plane. When an agent finishes it throws its payload at the star, the star
+catches it with an ink ripple, then throws a signal out to the next agent.
+Click a planet or the star to open the inspector.
 
-## 🌌 Visual Design System
+Everything on screen is driven by the running engine. Nothing is simulated.
 
-The HUD utilizes a **"Neural Trace"** aesthetic:
+## Stack
 
-- **Glassmorphism**: High-blur translucent panels with electromagnetic border glows.
-- **Cyber-Terminal**: Custom monospaced logging with level-based color coding.
-- **Performance Metrics**: Real-time balance, cycle counting, and PnL heatmaps.
+React 19 · TypeScript · Vite 6 · Tailwind v4 (tokens in `src/index.css`) ·
+zustand · lucide-react (stroke width 2.75) · vitest.
 
-## 🏗 Key Components
+## Run it
 
-- **Terminal**: A high-performance log-streamer optimized for rapid AI output.
-- **MarketAnalysis**: Deep-dive view of markets currently under "Analyst" debate.
-- **SystemHealth**: Real-time status of API keys, engine connection, and agent health.
+```bash
+npm install
+npm run dev          # http://localhost:3000, proxies /api to the engine on :3002
+```
 
-## 🔌 Connection Protocol
+Start the engine first (`PYTHONPATH=engine python engine/main.py` from the
+repository root). Sign in with **Demo** for paper fills; **Production** asks
+for the engine's `AUTH_PASSWORD` and only matters once live trading is armed
+on the server.
 
-The frontend relies on a persistent **SSE (Server-Sent Events) Bridge** to the backend at `localhost:3001`. It remains "thin," meaning all trading logic is decoupled, allowing the UI to be highly responsive and purely focused on data visualization.
+```bash
+npm run typecheck
+npm test
+npm run build
+```
 
-## 🛠 Tech Stack
+## How it is wired to the engine
 
-- **Framework**: React 19
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS 4.0 (Modern Engine)
-- **Charts**: Recharts (for PnL and Delta visualization)
-- **Icons/Graphics**: Custom CSS patterns and SVG-based neural nodes.
+| Source | What it feeds |
+|---|---|
+| `GET /api/stream` (SSE) | The beat machine. Agent log lines start and finish work beats, verdicts and fills become History runs and Orders rows, the vault frame moves the bankroll. See `src/cockpit/engineEvents.ts` for every line it understands. |
+| `GET /api/synapse/queues` | The star's depth gauge and the Synapse inspector's list of held items. Polled every 2.5 s. |
+| `GET /api/orders` | The Orders panel, from the decision ledger. Polled every 20 s and after each fill. |
+| `GET /api/health`, `GET /api/autopilot/status` | Cycle number, balance, autopilot and lockdown state. |
+| `POST /api/trigger`, `/cancel`, `/autopilot/*`, `/kill-switch` | The Run cycle, Cancel, Autopilot and Kill switch controls. |
 
-## 🚦 Getting Started
+Transit beats (throw, catch, signal) are visual and run on fixed timers.
+Work beats last until the engine reports the agent finished; the progress
+arc holds just short of full if an agent runs over its expected budget.
 
-1. Ensure the **Backend Engine** is running on `:3001`.
-2. Run `npm install`.
-3. Launch the HUD: `npm run dev`.
-4. Open the HUD in your browser (typically `localhost:5173`).
+## Layout of `src/cockpit`
+
+| File | Role |
+|---|---|
+| `orrery-geometry.ts` | The layout algorithm from the design handoff, verbatim. Pinned by `orrery-geometry.test.ts`. |
+| `stations.ts` | The four agents: icon, lane, expected duration, payload name. Add an agent by adding a row. |
+| `palette.ts` | Light and dark palettes as CSS custom properties, plus the glass treatment. |
+| `store.ts` | The zustand store: beat machine, engine facts, artifacts, inspector and filter state. |
+| `engineEvents.ts` | Pure mapping from engine events to store actions. |
+| `useEngineFeed.ts` | SSE subscription, polls, the 240 ms clock, and the control calls. |
+| `OrreryPlate.tsx` | The glass plate, star, planets, throws. |
+| `BeatBar.tsx`, `OrdersPanel.tsx`, `Telemetry.tsx`, `InspectorCard.tsx`, `Guardrails.tsx`, `Cockpit.tsx` | The screens. |
+
+Motion is pure CSS animation with negative `animation-delay` (keyframes in
+`src/index.css`). Do not reimplement the orbit in JavaScript.

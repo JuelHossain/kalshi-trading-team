@@ -29,7 +29,8 @@ proxy a single prefix. All bodies are JSON.
 |---|---|---|
 | `GET` | `/health` | `{"status", "agents", "cycle", "balance"}`. Note that "healthy" means the process is up, not that a cycle can run. |
 | `GET` | `/env-health` | Which optional services are configured and reachable. |
-| `GET` | `/synapse/queues` | Sizes of the opportunity, execution and error queues. |
+| `GET` | `/synapse/queues` | Sizes of the opportunity and execution queues, with up to ten queued items from each. |
+| `GET` | `/orders` | Executed orders from the decision ledger, newest first. `?limit=` caps rows (default 200). Each row carries `side`, `price_cents`, `count`, `stake_cents`, `order_id`, `settled_yes` and `pnl_cents` (null until settled). |
 | `GET` | `/pnl` | Balance history. |
 | `GET` | `/pnl/heatmap` | Daily P&L. |
 | `GET` | `/stream` | Server-sent events. Frames are `{"type": ...}` with type `LOG`, `VAULT`, `SIMULATION`, `STATE` or `ERROR`. |
@@ -38,7 +39,7 @@ proxy a single prefix. All bodies are JSON.
 
 | Method | Route | What it does |
 |---|---|---|
-| `POST` | `/auth/login` | Body `{"mode": "demo"}` or `{"mode": "production", "password": ...}`. Production mode is rate limited to 5 attempts per minute per IP. |
+| `POST` | `/auth/login` | Body `{"password": "<AUTH_PASSWORD>"}`. The password is required for every session; an empty one is refused with 401. A `mode` field is accepted and ignored: the dashboard uses it only to decide whether it asks for paper or live cycles, and the server's `IS_PAPER_TRADING` pin has the final say. |
 | `GET` | `/auth/verify` | Current session state. |
 | `POST` | `/auth/logout` | Clear it. |
 | `POST` | `/auth` | Legacy check used by the original dashboard. |

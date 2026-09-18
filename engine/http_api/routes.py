@@ -68,6 +68,10 @@ def register_all_routes(app, engine):
     app.router.add_get("/synapse/queues", get_synapse_queues(engine))
     app.router.add_get("/api/synapse/queues", get_synapse_queues(engine))
 
+    # Ledger routes
+    app.router.add_get("/orders", get_orders(engine))
+    app.router.add_get("/api/orders", get_orders(engine))
+
     # Environment routes
     app.router.add_get("/env-health", get_env_health(engine))
     app.router.add_get("/api/env-health", get_env_health(engine))
@@ -522,6 +526,22 @@ def get_synapse_queues(engine):
                 },
             }
         )
+
+    return handler
+
+
+def get_orders(engine):
+    """GET /orders: executed orders from the decision ledger, newest first."""
+
+    async def handler(request):
+        """Read the ledger; `limit` query param caps the rows (default 200)."""
+        from core.ledger import recent_fills
+
+        try:
+            limit = max(1, min(1000, int(request.query.get("limit", "200"))))
+        except ValueError:
+            limit = 200
+        return web.json_response({"orders": recent_fills(limit)})
 
     return handler
 

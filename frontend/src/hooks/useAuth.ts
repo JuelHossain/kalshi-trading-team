@@ -109,8 +109,10 @@ export const useAuth = (): UseAuthReturn => {
 
       if (data.isAuthenticated) {
         store.setAuthenticated(true);
-        // Use server-returned mode or fall back to stored mode
-        const mode = data.mode || getStoredAuthMode();
+        // The stored mode is the operator's paper-or-live choice; the engine
+        // reports every password session as "production", so it is only a
+        // fallback when nothing was stored.
+        const mode = getStoredAuthMode() || data.mode;
         if (mode) {
           store.setAuthMode(mode);
         }

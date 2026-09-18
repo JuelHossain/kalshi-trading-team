@@ -32,6 +32,7 @@ _DIRECT_PATHS = {
     "/autopilot/stop",
     "/autopilot/status",
     "/synapse/queues",
+    "/orders",
 }
 _API_PREFIX = "/api"
 
