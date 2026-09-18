@@ -24,7 +24,16 @@ export interface UseAuthReturn {
 }
 
 export const useAuth = (): UseAuthReturn => {
-  const store = useStore();
+  // One selector per field. `useStore()` with no selector subscribed to the
+  // whole state, and zustand builds a new state object on every set() --
+  // so each /auth/verify reply recreated verifyAuth, re-ran the mount
+  // effect, and verified again: 97 to 1,381 requests in two seconds from
+  // one open cockpit (measured in the 2026-09-18 audit). Actions are stable.
+  const isAuthenticated = useStore((s) => s.isAuthenticated);
+  const authMode = useStore((s) => s.authMode);
+  const setAuthenticated = useStore((s) => s.setAuthenticated);
+  const setAuthMode = useStore((s) => s.setAuthMode);
+  const clearSession = useStore((s) => s.logout);
 
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -72,21 +81,21 @@ export const useAuth = (): UseAuthReturn => {
         }
 
         // Update store with auth state
-        store.setAuthMode(mode);
-        store.setAuthenticated(true);
+        setAuthMode(mode);
+        setAuthenticated(true);
 
         console.log(`[Auth] Successfully logged in as ${mode} mode`);
       } catch (error: any) {
         console.error('[Auth] Login error:', error);
         const message = error.message || 'Failed to authenticate';
         setAuthError(message);
-        store.setAuthenticated(false);
+        setAuthenticated(false);
         throw error;
       } finally {
         setIsAuthenticating(false);
       }
     },
-    [store]
+    [setAuthenticated, setAuthMode]
   );
 
   /**
@@ -100,34 +109,34 @@ export const useAuth = (): UseAuthReturn => {
       });
 
       if (!response.ok) {
-        store.setAuthenticated(false);
-        store.setAuthMode(null);
+        setAuthenticated(false);
+        setAuthMode(null);
         return false;
       }
 
       const data: AuthResponse = await response.json();
 
       if (data.isAuthenticated) {
-        store.setAuthenticated(true);
+        setAuthenticated(true);
         // The stored mode is the operator's paper-or-live choice; the engine
         // reports every password session as "production", so it is only a
         // fallback when nothing was stored.
         const mode = getStoredAuthMode() || data.mode;
         if (mode) {
-          store.setAuthMode(mode);
+          setAuthMode(mode);
         }
         return true;
       } else {
-        store.setAuthenticated(false);
-        store.setAuthMode(null);
+        setAuthenticated(false);
+        setAuthMode(null);
         return false;
       }
     } catch (error) {
       console.error('[Auth] Verification failed:', error);
-      store.setAuthenticated(false);
+      setAuthenticated(false);
       return false;
     }
-  }, [store]);
+  }, [setAuthenticated, setAuthMode, clearSession]);
 
   /**
    * Logout the current user
@@ -144,9 +153,9 @@ export const useAuth = (): UseAuthReturn => {
       console.error('[Auth] Logout error:', error);
     } finally {
       // Always clear local state even if server request fails
-      store.logout();
+      clearSession();
     }
-  }, [store]);
+  }, [setAuthenticated, setAuthMode, clearSession]);
 
   // Verify auth on mount
   useEffect(() => {
@@ -158,8 +167,8 @@ export const useAuth = (): UseAuthReturn => {
   }, [verifyAuth]);
 
   return {
-    isAuthenticated: store.isAuthenticated,
-    authMode: store.authMode,
+    isAuthenticated,
+    authMode,
     isAuthenticating,
     authError,
     login,

@@ -10,13 +10,15 @@ let mockIsAuthenticated = false;
 let mockAuthMode: 'demo' | 'production' | null = null;
 
 vi.mock('../store/useStore', () => ({
-  useStore: () => ({
-    isAuthenticated: mockIsAuthenticated,
-    authMode: mockAuthMode,
-    setAuthenticated: mockSetAuthenticated,
-    setAuthMode: mockSetAuthMode,
-    logout: mockLogout,
-  }),
+  // Honours the selector, as zustand does.
+  useStore: (selector: (s: Record<string, unknown>) => unknown) =>
+    selector({
+      isAuthenticated: mockIsAuthenticated,
+      authMode: mockAuthMode,
+      setAuthenticated: mockSetAuthenticated,
+      setAuthMode: mockSetAuthMode,
+      logout: mockLogout,
+    }),
   getStoredAuthMode: () => mockAuthMode,
 }));
 
