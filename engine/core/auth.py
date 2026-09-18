@@ -107,7 +107,27 @@ class AuthManager:
         """aiohttp middleware for authentication."""
 
         async def middleware_handler(request):
-            """Let public paths through; require the API key on everything else."""
+            """Refuse cross-site writes; let public paths through; API key elsewhere."""
+            # Cross-site request forgery. A page on any other site can make the
+            # operator's browser POST here with a "simple" body (text/plain or
+            # a form) and no CORS preflight, and aiohttp's request.json() parses
+            # it regardless of Content-Type. The audit reproduced that turning
+            # off paper trading and zeroing the hard floor through /config.
+            # A browser always sends Origin on such a POST, and cannot send
+            # application/json cross-site without a preflight that the CORS
+            # allow-list refuses. The cockpit sends JSON on every write; clients
+            # with no Origin (curl, the systemd hook) are not browsers.
+            if request.method not in ("GET", "HEAD", "OPTIONS") and request.headers.get("Origin"):
+                content_type = request.headers.get("Content-Type", "").lower()
+                if not content_type.startswith("application/json"):
+                    return web.json_response(
+                        {
+                            "error": "Forbidden",
+                            "message": "Browser writes must be application/json.",
+                        },
+                        status=403,
+                    )
+
             # Skip auth for public paths
             if self.is_public_path(request.path):
                 return await handler(request)

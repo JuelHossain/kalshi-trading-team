@@ -65,12 +65,21 @@ async def test_live_request_is_forced_to_paper_when_set(engine, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_live_request_is_honoured_when_unset(engine, monkeypatch):
-    """Unset means the request decides, which is the previous behaviour."""
+async def test_live_request_is_honoured_when_explicitly_unpinned(engine, monkeypatch):
+    """IS_PAPER_TRADING=false on the host means the request decides."""
+    eng, seen = engine
+    monkeypatch.setenv("IS_PAPER_TRADING", "false")
+
+    assert await _run(eng, seen, requested=False) is False
+
+
+@pytest.mark.asyncio
+async def test_an_absent_pin_fails_safe(engine, monkeypatch):
+    """A missing or cleared key must not open live trading."""
     eng, seen = engine
     monkeypatch.delenv("IS_PAPER_TRADING", raising=False)
 
-    assert await _run(eng, seen, requested=False) is False
+    assert await _run(eng, seen, requested=False) is True
 
 
 @pytest.mark.asyncio
@@ -96,7 +105,7 @@ async def test_cycle_arms_the_order_path_for_live(engine, monkeypatch):
     from core import trading_mode
 
     eng, _seen = engine
-    monkeypatch.delenv("IS_PAPER_TRADING", raising=False)
+    monkeypatch.setenv("IS_PAPER_TRADING", "false")
     trading_mode.set_live(False)
 
     # Arming happens only once authorize_cycle has passed -- it used to run

@@ -136,6 +136,8 @@ export const useAuth = (): UseAuthReturn => {
     try {
       await fetch(`${ENGINE_URL}/auth/logout`, {
         method: 'POST',
+        // The engine refuses browser writes that are not JSON (CSRF guard).
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       });
     } catch (error) {

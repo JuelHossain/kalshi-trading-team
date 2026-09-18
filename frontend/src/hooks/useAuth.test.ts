@@ -394,8 +394,10 @@ describe('useAuth Hook', () => {
         await result.current.logout();
       });
 
+      // JSON header required: the engine refuses non-JSON browser writes (CSRF guard).
       expect(mockFetch).toHaveBeenCalledWith('/api/auth/logout', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       });
     });

@@ -348,7 +348,9 @@ class GhostEngine:
             log_warning("Cycle already in progress. Ignoring.")
             return
 
-        if get_env_bool("IS_PAPER_TRADING", default=False) and not is_paper_trading:
+        # Absent means pinned: the registry's default is True, and a missing
+        # or cleared key must fail safe, not open live trading.
+        if get_env_bool("IS_PAPER_TRADING", default=True) and not is_paper_trading:
             log_warning(
                 "IS_PAPER_TRADING is set: forcing this cycle to paper. "
                 "Unset it on the server to allow live trading."

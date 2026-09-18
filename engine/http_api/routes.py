@@ -621,7 +621,7 @@ def engine_config(engine) -> dict:
     vault = engine.vault
     brain = getattr(engine, "brain", None)
     return {
-        "paper_pinned": get_env_bool("IS_PAPER_TRADING", default=False),
+        "paper_pinned": get_env_bool("IS_PAPER_TRADING", default=True),
         "live_armed": trading_mode.is_live(),
         "kalshi_env": os.getenv("KALSHI_ENV", "demo"),
         "brain": {
@@ -688,6 +688,79 @@ def secrets_equal(a: str, b: str) -> bool:
     return bool(a) and bool(b) and _secrets.compare_digest(a, b)
 
 
+# Settings whose change arms real money. Going live is meant to take a change
+# on the machine running the engine (main.execute_single_cycle's docstring),
+# yet one signed-in session -- the flag is process-wide, so any client once
+# the operator has signed in anywhere -- could turn it on over HTTP. The safe
+# direction stays open, so the cockpit can still pin paper or pick demo.
+_HOST_ONLY_ARMING = {
+    "IS_PAPER_TRADING": lambda v: str(v).strip().lower() in ("false", "0", "no", "off", ""),
+    "KALSHI_ENV": lambda v: str(v).strip().lower() == "prod",
+}
+
+# Credentials and the rails that bound a loss. Changing one needs the
+# dashboard password in the request (or the API key), not just the ambient
+# session: the audit set HARD_FLOOR_CENTS=0, full Kelly and a new
+# AUTH_PASSWORD -- locking the operator out -- in one request.
+_STEP_UP_KEYS = frozenset(
+    {
+        "AUTH_PASSWORD",
+        "GHOST_API_KEY",
+        "KALSHI_DEMO_KEY_ID",
+        "KALSHI_DEMO_PRIVATE_KEY",
+        "KALSHI_PROD_KEY_ID",
+        "KALSHI_PROD_PRIVATE_KEY",
+        "GEMINI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "SUPABASE_URL",
+        "SUPABASE_KEY",
+        "FRONTEND_ORIGIN",
+        "KILL_SWITCH",
+        "HARD_FLOOR_CENTS",
+        "VAULT_PRINCIPAL_CENTS",
+        "VAULT_KILL_SWITCH_PCT",
+        "HAND_MAX_STAKE_CENTS",
+        "HAND_KELLY_FRACTION",
+        "BRAIN_MIN_EDGE",
+    }
+)
+
+
+def _guard_sensitive_changes(request, data: dict, changes: dict) -> web.Response | None:
+    """403 for arming live over HTTP, or for a sensitive key without the password."""
+    arming = sorted(
+        k for k, is_arming in _HOST_ONLY_ARMING.items() if k in changes and is_arming(changes[k])
+    )
+    if arming:
+        return web.json_response(
+            {
+                "error": "Host only",
+                "message": "Going live is changed in engine/.env on the host, not over HTTP.",
+                "keys": arming,
+            },
+            status=403,
+        )
+
+    sensitive = sorted(_STEP_UP_KEYS & changes.keys())
+    if not sensitive:
+        return None
+    from core.auth import auth_manager
+
+    bearer = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    if bearer and secrets_equal(bearer, auth_manager.api_key or ""):
+        return None
+    if secrets_equal(str(data.get("password") or ""), auth_manager.auth_password or ""):
+        return None
+    return web.json_response(
+        {
+            "error": "Password required",
+            "message": "Re-enter the dashboard password to change these.",
+            "keys": sensitive,
+        },
+        status=403,
+    )
+
+
 def get_config(engine):
     """GET /config: the settings registry (secrets masked) plus the runtime summary."""
 
@@ -729,6 +802,9 @@ def update_config(engine):
                 {"error": "Bad request", "message": 'Body must be {"changes": {KEY: value}}'},
                 status=400,
             )
+        guarded = _guard_sensitive_changes(request, data, changes)
+        if guarded is not None:
+            return guarded
         report = settings.update(changes)
         status = (
             400 if report.errors and not report.applied and not report.restart_required else 200

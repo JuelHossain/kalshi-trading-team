@@ -375,8 +375,18 @@ export function useEngineFeed(enabled: boolean, isPaperTrading: boolean) {
   /** POST /config. Returns the engine's report; the store is updated from the reply. */
   const updateSettings = useCallback(async (changes: Record<string, unknown>): Promise<UpdateReport> => {
     try {
-      const res = await post('/config', { changes });
-      const body = await res.json();
+      let res = await post('/config', { changes });
+      let body = await res.json();
+      // Credentials and the loss-bounding rails need the dashboard password,
+      // not just the session. Ask once and retry; cancelling leaves it unsaved.
+      if (res.status === 403 && body.error === 'Password required') {
+        const keys = (body.keys ?? []).join(', ');
+        const password = window.prompt(`Re-enter the dashboard password to change: ${keys}`);
+        if (password) {
+          res = await post('/config', { changes, password });
+          body = await res.json();
+        }
+      }
       const report: UpdateReport = {
         applied: body.applied ?? [],
         restart_required: body.restart_required ?? [],

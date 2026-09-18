@@ -35,6 +35,7 @@ def signed_in(monkeypatch):
     from core.auth import auth_manager
 
     monkeypatch.setattr(auth_manager, "authenticated", True)
+    monkeypatch.setattr(auth_manager, "auth_password", "operator-pw")
     yield
     monkeypatch.setattr(auth_manager, "authenticated", False)
 
@@ -51,8 +52,11 @@ class TestRuntimeSummary:
     def test_paper_pin_reflects_the_environment(self, engine, monkeypatch):
         monkeypatch.setenv("IS_PAPER_TRADING", "true")
         assert engine_config(engine)["paper_pinned"] is True
-        monkeypatch.delenv("IS_PAPER_TRADING")
+        monkeypatch.setenv("IS_PAPER_TRADING", "false")
         assert engine_config(engine)["paper_pinned"] is False
+        # Absent fails safe: pinned, matching the registry default.
+        monkeypatch.delenv("IS_PAPER_TRADING")
+        assert engine_config(engine)["paper_pinned"] is True
 
 
 class TestGetConfig:
@@ -106,7 +110,12 @@ class TestUpdateConfig:
         monkeypatch.delenv("BRAIN_MIN_EDGE", raising=False)
         try:
             response = await update_config(engine)(
-                _request({"changes": {"BRAIN_MIN_EDGE": 0.02, "KALSHI_ENV": "demo"}})
+                _request(
+                    {
+                        "changes": {"BRAIN_MIN_EDGE": 0.02, "KALSHI_ENV": "demo"},
+                        "password": "operator-pw",
+                    }
+                )
             )
             body = json.loads(response.text)
             assert response.status == 200
@@ -164,3 +173,58 @@ class TestJournalAndDecisions:
         body = json.loads((await get_decisions(engine)(_request(query={"limit": "10"}))).text)
         assert body["decisions"][0]["ticker"] == "T"
         assert body["decisions"][0]["veto_reason"].startswith("Edge")
+
+
+class TestSensitiveChangesNeedMoreThanASession:
+    """One signed-in session is process-wide, so it cannot be enough to go
+    live, drop the safety rails, or change the password (audit finding #7)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "changes",
+        [{"IS_PAPER_TRADING": False}, {"IS_PAPER_TRADING": "false"}, {"KALSHI_ENV": "prod"}],
+    )
+    async def test_arming_live_is_host_only(self, engine, signed_in, changes):
+        body = {"changes": changes, "password": "operator-pw"}
+        response = await update_config(engine)(_request(body))
+        assert response.status == 403
+        assert json.loads(response.text)["error"] == "Host only"
+
+    @pytest.mark.asyncio
+    async def test_disarming_is_still_allowed(self, engine, signed_in, monkeypatch):
+        monkeypatch.setattr("core.settings.settings.update", _fake_update)
+        response = await update_config(engine)(_request({"changes": {"IS_PAPER_TRADING": True}}))
+        assert response.status == 200
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "key,value",
+        [("HARD_FLOOR_CENTS", 0), ("HAND_KELLY_FRACTION", 1.0), ("AUTH_PASSWORD", "attacker")],
+    )
+    async def test_rails_and_credentials_need_the_password(self, engine, signed_in, key, value):
+        response = await update_config(engine)(_request({"changes": {key: value}}))
+        assert response.status == 403
+        assert json.loads(response.text)["keys"] == [key]
+
+    @pytest.mark.asyncio
+    async def test_a_wrong_password_is_refused(self, engine, signed_in):
+        body = {"changes": {"HARD_FLOOR_CENTS": 0}, "password": "guess"}
+        assert (await update_config(engine)(_request(body))).status == 403
+
+    @pytest.mark.asyncio
+    async def test_the_api_key_is_enough(self, engine, signed_in, monkeypatch):
+        from core.auth import auth_manager
+
+        monkeypatch.setattr(auth_manager, "api_key", "k-123")
+        monkeypatch.setattr("core.settings.settings.update", _fake_update)
+        request = _request(
+            {"changes": {"HARD_FLOOR_CENTS": 25000}}, headers={"Authorization": "Bearer k-123"}
+        )
+        assert (await update_config(engine)(request)).status == 200
+
+
+def _fake_update(changes):
+    """Accept the batch without touching a real .env; only the guard is under test."""
+    from core.settings import UpdateReport
+
+    return UpdateReport(applied=sorted(changes))
