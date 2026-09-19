@@ -13,9 +13,8 @@ The fix adds a narrow rescan: on PREFLIGHT_COMPLETE, if the stock buffer and
 the opportunity queue are both empty and a cooldown has elapsed, scan again.
 The cooldown keeps a persistently empty result (a real Kalshi outage, a quiet
 market) from re-walking the listing every 30s cycle -- see
-test_agent_flow_control.py::test_senses_guard for the companion invariant
-this must not break: a healthy stock buffer must not be re-scanned every
-cycle.
+test_healthy_stock_is_not_rescanned below for the companion invariant this
+must not break: a healthy stock buffer must not be re-scanned every cycle.
 """
 
 import pytest
@@ -23,27 +22,7 @@ from agents.senses import SensesAgent
 from core.bus import EventBus
 from core.synapse import Synapse
 
-
-def _market(ticker: str, volume: int = 5000) -> dict:
-    return {
-        "ticker": ticker,
-        "yes_bid_dollars": "0.40",
-        "yes_ask_dollars": "0.44",
-        "volume_fp": str(volume),
-    }
-
-
-class _FakeKalshiClient:
-    """Returns each queued page in order; an empty list means "nothing found"."""
-
-    def __init__(self, pages: list[list[dict]]):
-        self._pages = list(pages)
-        self.calls = 0
-
-    async def get_markets_page(self, **kwargs):
-        self.calls += 1
-        page = self._pages.pop(0) if self._pages else []
-        return page, None
+from tests.engine.support import _FakeKalshiClient, _market
 
 
 @pytest.fixture
@@ -91,7 +70,12 @@ async def test_rescan_respects_its_cooldown(bus, synapse):
 
 @pytest.mark.asyncio
 async def test_healthy_stock_is_not_rescanned(bus, synapse):
-    """test_senses_guard's invariant, restated: unqueued stock must not be re-fetched."""
+    """The scan-once guard's invariant: unqueued stock must not be re-fetched.
+
+    Uses a fake client that returns markets, so it can tell "no rescan" from
+    "nothing to scan" -- the gap that made the old test_senses_guard
+    (kalshi_client=None) pass unconditionally regardless of the guard.
+    """
     client = _FakeKalshiClient(pages=[[_market(f"KXTEST-{i}") for i in range(3)]])
     senses = SensesAgent(2, bus, kalshi_client=client, synapse=synapse)
     senses.RESCAN_COOLDOWN_SECONDS = 0
