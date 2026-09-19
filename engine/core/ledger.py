@@ -41,6 +41,19 @@ CREATE INDEX IF NOT EXISTS idx_decisions_ticker ON decisions(ticker);
 CREATE INDEX IF NOT EXISTS idx_decisions_settled ON decisions(settled_yes);
 """
 
+# Added after the table above shipped, so existing databases need the columns
+# added rather than created. Without these, the only way to know which side a
+# fill bought and at what price was to parse it back out of a paper order id
+# (_parse_order_id) -- which cannot be done at all for a real Kalshi order id,
+# so every live fill's realised P&L was computed as though it had bought YES.
+_FILL_COLUMNS = {
+    "side": "TEXT",
+    "price_cents": "INTEGER",
+    "count": "INTEGER",
+}
+
+_SETTLED_STATUSES = {"settled", "finalized", "determined"}
+
 
 def _db_path() -> str:
     return os.getenv("GHOST_LEDGER_DB", "ghost_ledger.db")
@@ -49,7 +62,31 @@ def _db_path() -> str:
 def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(_db_path())
     conn.executescript(_SCHEMA)
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(decisions)")}
+    for column, sqltype in _FILL_COLUMNS.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE decisions ADD COLUMN {column} {sqltype}")
     return conn
+
+
+def outcome_from_market(market: dict) -> bool | None:
+    """Whether a Kalshi market record resolved yes, no, or not yet.
+
+    A market can be past its close time but not yet determined, so status is
+    checked before the result field is trusted. Mirrors research/settle's
+    outcome_from; duplicated rather than imported so the trading engine does
+    not pull in research's own dependencies (aiohttp session helpers, its own
+    prediction store) just for this one mapping.
+    """
+    status = str(market.get("status", "")).lower()
+    result = str(market.get("result", "")).lower()
+    if status not in _SETTLED_STATUSES and not result:
+        return None
+    if result == "yes":
+        return True
+    if result == "no":
+        return False
+    return None
 
 
 @retry_sqlite()
@@ -98,13 +135,26 @@ def record_decision(
 
 
 @retry_sqlite()
-def record_fill(ticker: str, stake_cents: int, order_id: str | None) -> int:
+def record_fill(
+    ticker: str,
+    stake_cents: int,
+    order_id: str | None,
+    side: str | None = None,
+    price_cents: int | None = None,
+    count: int | None = None,
+) -> int:
     """Attach an executed order to its APPROVED decision. Returns rows updated.
 
     stake_cents and order_id existed as columns from the start and nothing
     ever wrote them: five paper fills in one run left zero filled rows. Without
     this, realised P&L cannot be computed from the ledger, which is the one
     thing a paper soak exists to measure.
+
+    side, price_cents and count are optional so existing callers (and the
+    test suite) keep working unchanged, but the caller in hand/agent.py
+    supplies them: they are what recent_fills and realised_edge need to get a
+    live NO fill's P&L sign right, which _parse_order_id cannot recover from a
+    real Kalshi order id.
 
     Targets the most recent APPROVED row for the ticker that has no order
     yet, so two fills on one market attach to two decisions rather than the
@@ -114,17 +164,40 @@ def record_fill(ticker: str, stake_cents: int, order_id: str | None) -> int:
         with _connect() as conn:
             cur = conn.execute(
                 """UPDATE decisions
-                      SET stake_cents = ?, order_id = ?
+                      SET stake_cents = ?, order_id = ?, side = ?, price_cents = ?, count = ?
                     WHERE id = (
                         SELECT id FROM decisions
                          WHERE ticker = ? AND outcome = 'APPROVED' AND order_id IS NULL
                          ORDER BY id DESC LIMIT 1
                     )""",
-                (int(stake_cents), order_id, ticker),
+                (
+                    int(stake_cents),
+                    order_id,
+                    side.lower() if side else None,
+                    int(price_cents) if price_cents is not None else None,
+                    int(count) if count is not None else None,
+                    ticker,
+                ),
             )
             return cur.rowcount
     except Exception:
         return 0
+
+
+def unsettled_fill_tickers() -> list[str]:
+    """Tickers with an executed fill whose settlement is still unknown.
+
+    What Hand.settle_positions polls each cycle. Nothing called
+    record_settlement in production before this existed, so every fill's
+    pnl_cents stayed None forever and calibration() had nothing to measure.
+    """
+    try:
+        with _connect() as conn:
+            rows = conn.execute("""SELECT DISTINCT ticker FROM decisions
+                    WHERE order_id IS NOT NULL AND settled_yes IS NULL""").fetchall()
+        return [row[0] for row in rows]
+    except Exception:
+        return []
 
 
 @retry_sqlite()
@@ -225,15 +298,17 @@ def recent_fills(limit: int = 200) -> list[dict]:
     """Executed orders, newest first, for the dashboard's Orders panel.
 
     A fill is an APPROVED decision that record_fill attached an order id to.
-    Paper ids encode the side, price and count (PAPER-buy-no-TICKER-23x8), so
-    the panel can show the ticket without a second table. Settled rows carry
+    record_fill now stores the ticket (side, price_cents, count) directly;
+    _parse_order_id is kept only for rows written before those columns
+    existed, or for a caller that did not supply them. Settled rows carry
     the realised P&L in cents; open rows carry None.
     """
     try:
         with _connect() as conn:
             rows = conn.execute(
                 """SELECT id, decided_at, ticker, market_price, estimated_probability,
-                          edge, stake_cents, order_id, settled_yes, settled_at
+                          edge, stake_cents, order_id, settled_yes, settled_at,
+                          side, price_cents, count
                      FROM decisions
                     WHERE order_id IS NOT NULL
                     ORDER BY id DESC
@@ -256,8 +331,12 @@ def recent_fills(limit: int = 200) -> list[dict]:
             order_id,
             settled_yes,
             settled_at,
+            side,
+            price_cents,
+            count,
         ) = row
-        side, price_cents, count = _parse_order_id(order_id, market_price, stake_cents)
+        if side is None or price_cents is None or count is None:
+            side, price_cents, count = _parse_order_id(order_id, market_price, stake_cents)
         pnl_cents = None
         if settled_yes is not None and price_cents and count:
             won = bool(settled_yes) if side == "yes" else not bool(settled_yes)
@@ -313,22 +392,49 @@ def realised_edge() -> dict:
     `expected` is what the engine thought it was buying; `realised` is what the
     market paid. A persistent gap between them is the answer to whether this
     strategy works.
+
+    edge and market_price are always in YES terms (Brain records them from
+    the YES market price, regardless of which side it went on to buy -- see
+    agents/brain/agent.py). A NO trade's own edge and P&L are the negation of
+    that: buying NO at (1 - k) when the model believes p is the same bet as
+    buying YES at k when it believes (1 - p), so this is side-aware rather
+    than treating every fill as a YES purchase, which silently flipped the
+    sign of every live NO trade's reported P&L.
+
+    Rows with no stored side fall back to _parse_order_id, the same recovery
+    recent_fills uses -- a legacy PAPER- id encodes its own side correctly, so
+    defaulting it to "yes" here (as this used to) flipped those rows' P&L
+    exactly like a real order id with no ticket does.
     """
     with _connect() as conn:
-        rows = conn.execute("""SELECT market_price, edge, settled_yes
+        rows = conn.execute(
+            """SELECT market_price, edge, settled_yes, side, price_cents, order_id, stake_cents
                  FROM decisions
                 WHERE settled_yes IS NOT NULL
                   AND outcome = 'APPROVED'
-                  AND edge IS NOT NULL""").fetchall()
+                  AND edge IS NOT NULL"""
+        ).fetchall()
 
     if not rows:
         return {"n": 0, "expected": None, "realised": None}
 
-    expected = sum(edge for _, edge, _ in rows) / len(rows)
-    # A contract bought at k returns (1 - k) if it settles yes, else -k.
-    realised = sum((1 - k) if settled else -k for k, _, settled in rows) / len(rows)
+    total_expected = 0.0
+    total_realised = 0.0
+    for market_price, edge, settled_yes, side, price_cents, order_id, stake_cents in rows:
+        if side is None:
+            side, price_cents, _count = _parse_order_id(order_id, market_price, stake_cents)
+        side = side.lower()
+        k = (price_cents / 100.0) if price_cents is not None else market_price
+        won = bool(settled_yes) if side == "yes" else not bool(settled_yes)
+        # A contract bought at k returns (1 - k) if its own side wins, else -k.
+        total_realised += (1 - k) if won else -k
+        total_expected += edge if side == "yes" else -edge
+
+    n = len(rows)
+    expected = total_expected / n
+    realised = total_realised / n
     return {
-        "n": len(rows),
+        "n": n,
         "expected": round(expected, 4),
         "realised": round(realised, 4),
         "gap": round(realised - expected, 4),

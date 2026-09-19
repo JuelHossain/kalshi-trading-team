@@ -60,6 +60,32 @@ class TestRecentFills:
 
         assert (fill["side"], fill["price_cents"], fill["count"]) == ("yes", 50, 3)
 
+    def test_a_stored_ticket_is_used_instead_of_guessing(self):
+        """hand/agent.py now always passes record_fill the actual ticket.
+
+        Before, a real Kalshi order id carried no side or price, so
+        _parse_order_id always guessed "yes" at the YES market price -- right
+        for a YES fill, backwards for a NO one. This is the ticket a live NO
+        buy now stores.
+        """
+        ledger.record_decision("R2", 0.30, outcome="APPROVED", estimated_probability=0.75)
+        ledger.record_fill("R2", 700, "kalshi-uuid-5678", side="no", price_cents=70, count=10)
+
+        (fill,) = ledger.recent_fills()
+
+        assert (fill["side"], fill["price_cents"], fill["count"]) == ("no", 70, 10)
+
+    def test_a_live_no_fill_settles_with_the_correct_pnl_sign(self):
+        """The regression: a live NO trade's P&L must not be reported as
+        though it were a YES trade bought at the YES market price."""
+        ledger.record_decision("R3", 0.30, outcome="APPROVED", estimated_probability=0.75)
+        ledger.record_fill("R3", 700, "kalshi-uuid-9999", side="no", price_cents=70, count=10)
+        ledger.record_settlement("R3", settled_yes=False)  # NO happened: the NO holder wins
+
+        (fill,) = ledger.recent_fills()
+
+        assert fill["pnl_cents"] == 300  # (100 - 70)c x 10 contracts
+
     def test_limit_is_honoured(self):
         for i in range(5):
             _approve_and_fill(f"T{i}", 0.5, f"PAPER-buy-yes-T{i}-50x1")

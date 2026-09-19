@@ -185,11 +185,23 @@ class GhostEngine:
                 hint="Check agent configurations and dependencies",
             )
 
+        # Recover whatever the paper book (and paper bankroll) held before
+        # this process started -- both live only in memory otherwise, so a
+        # restart (systemd's Restart=always, deploy/update.sh, a crash, or
+        # POST /engine/restart; see trading_mode) emptied them, and the soak
+        # re-bought markets it already held with a bankroll re-seeded from
+        # real cash every time.
+        trading_mode.load_paper_positions()
+
         # Initialize Vault with Real Balance
         try:
             real_balance = await kalshi_client.get_balance()
             log_info(f"Fetched Real Balance: ${real_balance/100:.2f}", AgentType.SOUL)
             await self.vault.initialize(real_balance)
+            # A no-op if load_paper_positions above already recovered a
+            # bankroll from an earlier boot; only a genuinely fresh paper
+            # book gets seeded from real cash.
+            trading_mode.seed_paper_cash(real_balance)
             update_agent_status(AgentType.SOUL, "BALANCE_LOADED")
         except Exception as e:
             log_warning(
@@ -293,10 +305,24 @@ class GhostEngine:
         trading_mode.halt("cycle_gate", reason)
         return False
 
-    async def authorize_cycle(self) -> bool:
+    async def authorize_cycle(self, is_paper_trading: bool = False) -> bool:
         """
         SOUL: Strategic Authorization
         Checks Kill Switch and safety conditions.
+
+        is_paper_trading decides whose balance the vault, Kelly sizing, the
+        hard floor and the kill switch see for this cycle: the real Kalshi
+        balance when False (the default -- also what every safety test in
+        tests/engine/safety calls this with, and it must keep meaning
+        "drive everything off the real balance" for them), or the paper
+        bankroll when True. The real balance's own hard floor check always
+        runs regardless of mode: it is what protects the account, and must
+        not depend on what a paper soak believes it has.
+
+        Read is_paper_trading from the caller rather than trading_mode.is_live()
+        here: execute_single_cycle arms/disarms is_live for the cycle it is
+        about to run only *after* this returns, so is_live() would still
+        reflect the previous cycle's mode while this one is being authorised.
         """
         # Temporarily disabled for manual testing
         if self.last_cycle_time:
@@ -327,14 +353,49 @@ class GhostEngine:
         try:
             real_balance = await kalshi_client.get_balance()
 
-            # Through update_balance, not a plain assignment: that is what
-            # re-evaluates the 85% kill switch and the profit lock. Assigning
-            # current_balance directly left both evaluated once, at boot.
-            await self.vault.update_balance(real_balance)
-
+            # The real hard floor always gates on the real balance, in paper
+            # mode too -- it is the one check that protects the account
+            # regardless of which book this cycle trades.
             if real_balance < self.vault.HARD_FLOOR_CENTS:
                 return self._halt(
                     f"HARD FLOOR BREACH (${real_balance/100:.2f} < ${self.vault.HARD_FLOOR_CENTS/100:.2f}). EMERGENCY LOCKDOWN."
+                )
+
+            if is_paper_trading:
+                # Seeded once per process (a no-op after the first
+                # successful call); see trading_mode.seed_paper_cash. What
+                # the vault, Kelly and the paper floor/kill-switch checks
+                # below see is the paper bankroll, not the real demo cash
+                # that paper spending never touched -- previously this
+                # overwrote vault.current_balance with real_balance on
+                # every cycle, so a paper soak's stakes vanished on the next
+                # one and neither the floor nor the kill switch could ever
+                # trip on a paper loss.
+                trading_mode.seed_paper_cash(real_balance)
+                balance = trading_mode.paper_cash()
+                if balance is None:  # seeding failed (a persistence error); fail safe on real cash
+                    balance = real_balance
+            else:
+                balance = real_balance
+
+            # Through update_balance, not a plain assignment: that is what
+            # re-evaluates the 85% kill switch and the profit lock. Assigning
+            # current_balance directly left both evaluated once, at boot.
+            #
+            # is_paper_trading also picks which start-of-day baseline the
+            # profit lock measures against. The paper bankroll is persisted
+            # and can carry accumulated P&L across restarts while the real
+            # balance's own start-of-day figure is only ever the value at
+            # this boot; comparing a restart's paper balance against that
+            # boot-time real figure could trip (or fail to trip) the lock
+            # for reasons that had nothing to do with this session's paper
+            # trading. See core.vault.RecursiveVault.update_balance.
+            await self.vault.update_balance(balance, is_paper_trading=is_paper_trading)
+
+            if is_paper_trading and balance < self.vault.HARD_FLOOR_CENTS:
+                return self._halt(
+                    f"PAPER HARD FLOOR BREACH (${balance/100:.2f} < "
+                    f"${self.vault.HARD_FLOOR_CENTS/100:.2f})."
                 )
         except Exception:
             # Fallback to vault cache if API fails
@@ -389,7 +450,7 @@ class GhostEngine:
                 update_agent_status(AgentType.SOUL, "AUTHORIZING")
                 progress.update_phase("soul", 25)
 
-                if not await self.authorize_cycle():
+                if not await self.authorize_cycle(is_paper_trading):
                     msg = f"Cycle {self.cycle_count + 1} not authorized."
                     log_warning(msg)
                     await self.bus.publish(

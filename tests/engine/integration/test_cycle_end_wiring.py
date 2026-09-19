@@ -35,25 +35,40 @@ async def test_execute_single_cycle_publishes_cycle_end():
 
 
 @pytest.mark.asyncio
-async def test_cycle_end_reaches_hands_exit_review():
+async def test_cycle_end_reaches_hands_exit_review(monkeypatch):
     """Not just published -- Hand's subscriber must actually run.
 
     check_exits is bound to the bus at subscribe time (setup()), so
     monkeypatching engine.hand.check_exits afterwards would not be seen by
     the dispatcher -- it would only ever call the original function object.
     Instead this replaces an attribute check_exits reads dynamically on
-    every call (self.kalshi_client) and confirms it was actually reached.
+    every call, and confirms it was actually reached.
+
+    This cycle runs in paper mode (execute_single_cycle's default here),
+    and check_exits only reads the real Kalshi account
+    (self.kalshi_client.get_positions) on a live cycle -- in paper mode it
+    reads trading_mode.paper_positions instead, since a paper cycle cannot
+    act on real Kalshi exposure anyway (see check_exits). That is the
+    attribute this replaces.
     """
+    from core import trading_mode
+
     engine = GhostEngine()
     await engine.initialize_system()
+    engine.hand.kalshi_client = AsyncMock()
 
-    fake_client = AsyncMock()
-    fake_client.get_positions = AsyncMock(return_value=[])
-    engine.hand.kalshi_client = fake_client
+    calls = []
+    real_paper_positions = trading_mode.paper_positions
+
+    def spy_paper_positions():
+        calls.append(True)
+        return real_paper_positions()
+
+    monkeypatch.setattr(trading_mode, "paper_positions", spy_paper_positions)
 
     await engine.execute_single_cycle(is_paper_trading=True)
 
-    fake_client.get_positions.assert_awaited()
+    assert calls, "check_exits never consulted the paper book"
 
 
 @pytest.mark.asyncio
@@ -96,3 +111,42 @@ def test_cycle_end_subscribers_exist():
 
     assert "check_exits" in dir(HandAgent)
     assert "stop_scan" in dir(SensesAgent)
+
+
+@pytest.mark.asyncio
+async def test_cycle_end_reaches_hands_settlement_pass():
+    """Not just published -- Hand.settle_positions must actually run and
+    reach the ledger.
+
+    Every other settlement test (tests/engine/agents/test_hand_settlement.py)
+    calls hand.settle_positions() directly, which would keep passing even if
+    `await self.bus.subscribe("CYCLE_END", self.settle_positions)` were
+    deleted from HandAgent.setup. This drives it through the real engine,
+    the same way test_cycle_end_reaches_hands_exit_review above drives
+    check_exits, so that deletion fails here instead.
+    """
+    from core import ledger
+
+    engine = GhostEngine()
+    await engine.initialize_system()
+
+    fake_client = AsyncMock()
+    fake_client.get_positions = AsyncMock(return_value=[])
+    fake_client.get_market = AsyncMock(return_value={"status": "finalized", "result": "no"})
+    engine.hand.kalshi_client = fake_client
+
+    ledger.record_decision("WIRED-SETTLE", 0.30, outcome="APPROVED", estimated_probability=0.40)
+    ledger.record_fill(
+        "WIRED-SETTLE", 300, "kalshi-order-wired-settle", side="no", price_cents=30, count=10
+    )
+
+    await engine.execute_single_cycle(is_paper_trading=True)
+
+    with ledger._connect() as conn:
+        row = conn.execute(
+            "SELECT settled_yes FROM decisions WHERE ticker = ?", ("WIRED-SETTLE",)
+        ).fetchone()
+    assert row is not None and row[0] == 0, "settle_positions did not reach the ledger"
+
+    wired = next(f for f in ledger.recent_fills() if f["ticker"] == "WIRED-SETTLE")
+    assert wired["pnl_cents"] is not None, "a settled fill must have its P&L computed"

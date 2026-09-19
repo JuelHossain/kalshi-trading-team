@@ -11,7 +11,13 @@ from typing import Any
 from agents.base import BaseAgent
 from core import trading_mode
 from core.bus import EventBus
-from core.ledger import record_decision, record_fill
+from core.ledger import (
+    outcome_from_market,
+    record_decision,
+    record_fill,
+    record_settlement,
+    unsettled_fill_tickers,
+)
 from core.settings import Live
 from core.synapse import Synapse
 from core.vault import RecursiveVault
@@ -54,6 +60,10 @@ class HandAgent(BaseAgent):
         # deciding whether to leave it is how a drifting loser becomes a
         # certain one.
         await self.bus.subscribe("CYCLE_END", self.check_exits)
+        # Nothing else in the engine ever called record_settlement, so every
+        # fill's pnl_cents stayed None forever and calibration() had nothing
+        # to measure. Checked on the same cycle boundary as exits.
+        await self.bus.subscribe("CYCLE_END", self.settle_positions)
 
     async def check_exits(self, _message=None) -> int:
         """Review every open position against the exit policy. Returns closures.
@@ -64,17 +74,37 @@ class HandAgent(BaseAgent):
         if not self.kalshi_client:
             return 0
 
-        try:
-            positions = list(await self.kalshi_client.get_positions() or [])
-        except Exception as e:
-            await self.log(f"Could not read positions for exit review: {e}", level="ERROR")
-            positions = []
-
-        # Paper fills never reach Kalshi's portfolio, so the exit policy could
-        # not see anything a paper run held. They are reviewed alongside, and
-        # closing one goes through the same place_order path, which records
-        # the paper sell.
-        positions = trading_mode.paper_positions() + positions
+        # is_live() is already set for this cycle by the time CYCLE_END
+        # fires (execute_single_cycle arms it before publishing CYCLE_END),
+        # so it tells us which book this review can actually act on.
+        #
+        # Live: review the real Kalshi account. A ticker held only on paper
+        # -- e.g. from an earlier paper soak, replayed by
+        # load_paper_positions at boot -- must not be merged in here: it
+        # would be evaluated as though it were real exposure, and a
+        # paper-only exit would call close_position, which places a real
+        # reduce-only sell on Kalshi for contracts the live account may not
+        # even hold.
+        #
+        # Paper: review the paper book only. KalshiClient.place_order
+        # simulates every fill while is_live() is False, real position or
+        # not, so calling close_position on a *real* Kalshi holding here
+        # would not actually sell it -- the position stays open -- while
+        # still looking locally like a successful close. Worse, that
+        # simulated fill goes through paper_fill same as any other paper
+        # order, which would write a phantom short into the paper book for
+        # a ticker the paper book never actually bought (a sell with
+        # nothing on the other side of it), repeatable every cycle the
+        # policy kept tripping on that real position. A real holding is
+        # left for a live cycle, the only mode that can actually act on it.
+        if trading_mode.is_live():
+            try:
+                positions = list(await self.kalshi_client.get_positions() or [])
+            except Exception as e:
+                await self.log(f"Could not read positions for exit review: {e}", level="ERROR")
+                positions = []
+        else:
+            positions = trading_mode.paper_positions()
 
         closed = 0
         for position in positions:
@@ -121,6 +151,16 @@ class HandAgent(BaseAgent):
 
             if result:
                 closed += 1
+                if not trading_mode.is_live():
+                    # `current` is the resting bid this decision was made
+                    # against -- the real proceeds a sell at this price
+                    # would fetch. close_position itself asks for a 1c
+                    # marketable limit to guarantee the fill (see
+                    # KalshiClient.close_position), so crediting from its
+                    # own price argument would credit a cent a contract;
+                    # this is the one place that knows what the exit was
+                    # actually worth.
+                    trading_mode.adjust_paper_cash(current * abs(int(quantity)))
                 record_decision(
                     ticker,
                     current / 100.0,
@@ -134,6 +174,51 @@ class HandAgent(BaseAgent):
                 )
 
         return closed
+
+    async def settle_positions(self, _message=None) -> int:
+        """Look up the outcome of every ticker with an unsettled fill.
+
+        Nothing else in the engine calls record_settlement in production, so
+        without this every fill's pnl_cents stayed None forever, calibration()
+        had nothing to measure, and realised_edge() reported n=0 no matter how
+        long a paper soak ran. Never raises: a settlement check runs on the
+        cycle boundary and must not be able to take the cycle down with it.
+        """
+        if not self.kalshi_client:
+            return 0
+
+        settled = 0
+        for ticker in unsettled_fill_tickers():
+            try:
+                market = await self.kalshi_client.get_market(ticker)
+            except Exception as e:
+                await self.log(f"Could not check settlement for {ticker}: {e}", level="ERROR")
+                continue
+            if not market:
+                continue
+
+            outcome = outcome_from_market(market)
+            if outcome is None:
+                continue
+
+            record_settlement(ticker, outcome)
+            settled += 1
+            await self.log(f"SETTLED {ticker}: {'YES' if outcome else 'NO'}")
+
+            # A settled market cannot be traded again. Paper fills never reach
+            # Kalshi's own portfolio, so the paper book is the only place that
+            # would otherwise go on believing this ticker is still held --
+            # has_open_position would refuse to re-enter a market that no
+            # longer exists, and check_exits would keep polling a dead book
+            # forever.
+            #
+            # settle_paper_position reports what the winning side (if any)
+            # pays in cents; crediting it is what makes a paper win actually
+            # grow the paper bankroll rather than just deleting the holding.
+            payout = trading_mode.settle_paper_position(ticker, outcome)
+            trading_mode.adjust_paper_cash(payout)
+
+        return settled
 
     async def _current_price_cents(self, ticker: str, side: str = "yes") -> int | None:
         """What closing the held side would fetch right now, in cents.
@@ -276,14 +361,30 @@ class HandAgent(BaseAgent):
             await self.log(
                 f"ORDER EXECUTED: {side.upper()} {ticker} @ {entry_price}¢ for ${stake/100:.2f}"
             )
-            record_fill(ticker, stake, order_result.get("order_id"))
+            # side and entry_price came off the book this order actually
+            # crossed, not parsed back out of an order id after the fact --
+            # the only way a real Kalshi order id (which carries none of
+            # this) can be told apart from a paper one bought at the other
+            # side's price.
+            record_fill(
+                ticker,
+                stake,
+                order_result.get("order_id"),
+                side=side,
+                price_cents=entry_price,
+                count=stake // entry_price if entry_price else None,
+            )
 
             # 4. Check for Vault Lock
             should_lock, _current_profit = check_profit_lock_threshold(
                 self.vault, self.PROFIT_LOCK_THRESHOLD
             )
             if should_lock:
-                self.vault.lock_principal()
+                # is_live() already reflects this cycle's mode by the time a
+                # fill reaches here (execute_single_cycle arms it before
+                # publishing the events that lead to this); the vault latches
+                # the lock per mode, see RecursiveVault.lock_principal.
+                self.vault.lock_principal(is_paper_trading=not trading_mode.is_live())
                 await self.log("VAULT LOCKED: $300 principal secured. Trading house money!")
 
             # 5. Send Notification

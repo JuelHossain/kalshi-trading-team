@@ -35,8 +35,15 @@ class _Kalshi:
         return self.balance
 
 
-async def _authorize(monkeypatch, vault, balance):
-    """Run the real authorize_cycle against a stub balance."""
+async def _authorize(monkeypatch, vault, balance, is_paper_trading=False):
+    """Run the real authorize_cycle against a stub balance.
+
+    is_paper_trading defaults to False -- "drive everything off the real
+    balance" -- which is what every call in this file made before
+    authorize_cycle gained the parameter, and what it must keep meaning:
+    these tests assert the real-money safety net (the hard floor, the kill
+    switch) works whether or not a cycle happens to be trading paper.
+    """
     import main
 
     engine = main.GhostEngine.__new__(main.GhostEngine)
@@ -45,7 +52,7 @@ async def _authorize(monkeypatch, vault, balance):
     engine.last_cycle_time = None
     engine.synapse = None
     monkeypatch.setattr(main, "kalshi_client", _Kalshi(balance))
-    return await engine.authorize_cycle()
+    return await engine.authorize_cycle(is_paper_trading)
 
 
 class TestTheKillSwitchFollowsTheBalance:
@@ -92,3 +99,154 @@ class TestSizingRespectsTheLockAndTheFloor:
 
         assert result["success"] is False
         assert "hard floor" in result["error"]
+
+
+class TestThePaperBankrollDrivesAuthorizeCycleInPaperMode:
+    """authorize_cycle used to overwrite vault.current_balance with the real
+    Kalshi balance on every cycle, paper or live -- so a paper soak's
+    spending never depleted the balance Kelly and the floor read, and
+    neither the hard floor nor the kill switch could trip on a paper loss.
+
+    In paper mode it must feed the vault the paper bankroll instead, while
+    the real balance's own hard floor keeps gating regardless of mode: that
+    is what protects the account, independent of what a paper soak believes
+    it has.
+    """
+
+    @pytest.fixture(autouse=True)
+    def clean_paper_book(self):
+        from core import trading_mode
+
+        trading_mode.reset_paper_positions()
+        yield
+        trading_mode.reset_paper_positions()
+
+    @pytest.mark.asyncio
+    async def test_a_paper_cycle_seeds_and_uses_the_paper_bankroll(self, vault, monkeypatch):
+        from core import trading_mode
+
+        assert trading_mode.paper_cash() is None
+
+        authorized = await _authorize(monkeypatch, vault, 32813, is_paper_trading=True)
+
+        assert authorized is True
+        assert trading_mode.paper_cash() == 32813
+        assert vault.current_balance == 32813
+
+    @pytest.mark.asyncio
+    async def test_paper_spending_persists_across_cycles(self, vault, monkeypatch):
+        """The whole point: a paper stake must still be gone on the next
+        cycle's floor check, unlike before, when the real balance reset the
+        vault to the same figure every cycle."""
+        from core import trading_mode
+
+        await _authorize(monkeypatch, vault, 32813, is_paper_trading=True)
+        trading_mode.adjust_paper_cash(-7_500)  # a $75 paper stake
+
+        # A second cycle: the real Kalshi balance has not moved (paper
+        # spending never touches it), but the vault this cycle actually
+        # sizes against must reflect the paper spend, not reset to 32813.
+        await _authorize(monkeypatch, vault, 32813, is_paper_trading=True)
+
+        assert vault.current_balance == 32813 - 7_500
+
+    @pytest.mark.asyncio
+    async def test_the_real_hard_floor_still_gates_a_paper_cycle(self, vault, monkeypatch):
+        """The real balance's floor check is a safety net that must not
+        depend on what the paper bankroll believes it has."""
+        from core import trading_mode
+
+        trading_mode.seed_paper_cash(1_000_000)  # plenty of paper cash
+
+        authorized = await _authorize(monkeypatch, vault, 20000, is_paper_trading=True)
+
+        assert authorized is False, "real balance below the hard floor must still halt paper"
+
+    @pytest.mark.asyncio
+    async def test_the_paper_bankroll_can_also_trip_its_own_floor(self, vault, monkeypatch):
+        """The other direction: real cash is fine, but paper trading has
+        spent itself past the floor. Before this fix, nothing in paper mode
+        could ever halt on the floor at all."""
+        from core import trading_mode
+
+        trading_mode.seed_paper_cash(vault.HARD_FLOOR_CENTS - 100)
+
+        authorized = await _authorize(monkeypatch, vault, 32813, is_paper_trading=True)
+
+        assert authorized is False
+
+    @pytest.mark.asyncio
+    async def test_a_live_cycle_is_unaffected_by_a_depleted_paper_bankroll(
+        self, vault, monkeypatch
+    ):
+        """The default (is_paper_trading=False, what every other test in
+        this file calls) must still mean "real balance drives everything",
+        exactly as before authorize_cycle gained the parameter."""
+        from core import trading_mode
+
+        trading_mode.seed_paper_cash(0)  # paper trading has nothing left
+
+        authorized = await _authorize(monkeypatch, vault, 32813, is_paper_trading=False)
+
+        assert authorized is True
+        assert vault.current_balance == 32813
+
+    @pytest.mark.asyncio
+    async def test_the_profit_lock_measures_the_paper_bankroll_against_itself(
+        self, vault, monkeypatch
+    ):
+        """The paper bankroll is persisted and can carry accumulated P&L
+        across a restart, while the vault's start_of_day_balance is only
+        ever the real balance at *this* boot (vault.initialize, called once
+        at boot with the real Kalshi balance -- see main.py). Comparing a
+        restart's recovered paper cash against that real boot-time figure
+        could trip the profit lock -- freezing the paper soak's own
+        principal -- for a gap that has nothing to do with what this paper
+        session itself made, and never re-trips for a paper session that
+        starts behind the real balance but is genuinely profitable.
+
+        Simulates a restart that recovered a paper bankroll ($60 ahead of
+        the real balance, clearing the $50 default threshold) from disk.
+        """
+        from core import trading_mode
+
+        trading_mode.seed_paper_cash(32813 + 6_000)  # a restart recovered this from disk
+
+        authorized = await _authorize(monkeypatch, vault, 32813, is_paper_trading=True)
+
+        assert authorized is True
+        assert vault.is_locked is False, "must not lock on a gap that predates this session"
+
+    @pytest.mark.asyncio
+    async def test_the_profit_lock_still_trips_on_the_paper_bankrolls_own_profit(
+        self, vault, monkeypatch
+    ):
+        """The other direction: the lock must still work for paper, measured
+        from its own start-of-day, once *this* session's paper trading
+        actually clears the threshold."""
+        from core import trading_mode
+
+        await _authorize(monkeypatch, vault, 32813, is_paper_trading=True)
+        assert vault.is_locked is False
+
+        trading_mode.adjust_paper_cash(6_000)  # this session's own $60 paper profit
+
+        authorized = await _authorize(monkeypatch, vault, 32813, is_paper_trading=True)
+
+        assert authorized is True
+        assert vault.is_locked is True
+
+    @pytest.mark.asyncio
+    async def test_a_locked_paper_bankroll_does_not_lock_a_live_cycle(self, vault, monkeypatch):
+        """The two latches must not bleed into each other either."""
+        from core import trading_mode
+
+        await _authorize(monkeypatch, vault, 32813, is_paper_trading=True)
+        trading_mode.adjust_paper_cash(6_000)
+        await _authorize(monkeypatch, vault, 32813, is_paper_trading=True)
+        assert vault.is_locked is True
+
+        authorized = await _authorize(monkeypatch, vault, 32813, is_paper_trading=False)
+
+        assert authorized is True
+        assert vault.is_locked is False

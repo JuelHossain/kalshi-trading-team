@@ -123,7 +123,7 @@ async def test_cycle_arms_the_order_path_for_live(engine, monkeypatch):
     def progress(_cycle, _is_paper):
         yield _Progress()
 
-    async def authorised():
+    async def authorised(_is_paper_trading=False):
         return True
 
     monkeypatch.setattr(eng.display, "cycle_progress", progress)

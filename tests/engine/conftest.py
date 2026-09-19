@@ -144,17 +144,36 @@ def isolate_settings_file(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def reset_trading_mode():
+def reset_trading_mode(isolate_databases):
     """trading_mode is process-global: a halt or live arm set by one test
     (the kill switch routes set both) must not refuse or arm orders in the
-    next."""
+    next.
+
+    The paper book and paper bankroll are the same kind of process-wide
+    module state (see core.trading_mode), and were not reset here even
+    though several tests (test_hard_floor_race_condition,
+    test_kill_switch_atomicity, test_cycle_end_wiring, and others) drive
+    execute_single_cycle/authorize_cycle without ever calling
+    reset_paper_positions themselves. A paper bankroll seeded by one such
+    test then drove every later paper cycle in the same run, making those
+    tests' outcomes depend on run order. Autouse so no test can opt out by
+    forgetting to reset it.
+
+    Depends explicitly on isolate_databases so GHOST_VAULT_DB is already
+    pointed at this test's tmp path before reset_paper_positions's own
+    SQLite write runs -- without that dependency, fixture order between two
+    same-scope autouse fixtures is not guaranteed, and this would otherwise
+    risk touching the real database path.
+    """
     from core import trading_mode
 
     trading_mode.clear_halts()
     trading_mode.set_live(False)
+    trading_mode.reset_paper_positions()
     yield
     trading_mode.clear_halts()
     trading_mode.set_live(False)
+    trading_mode.reset_paper_positions()
 
 
 @pytest.fixture(autouse=True)

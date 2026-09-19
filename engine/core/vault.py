@@ -47,6 +47,26 @@ class RecursiveVault:
         self.initialized = False
         self._lock = asyncio.Lock()
 
+        # The profit lock is evaluated separately for the real balance and
+        # the paper bankroll: paper cash is persisted and carries accumulated
+        # P&L across restarts, while the real balance's start-of-day figure
+        # is captured fresh at every boot. Comparing the paper balance
+        # against the real boot-time figure tripped the lock on a restart
+        # whenever accumulated paper profit happened to exceed the threshold
+        # over the real balance, even on a paper soak that had made nothing
+        # this session, and it never re-tripped for a genuinely profitable
+        # paper session that started below the real balance. `start_of_day_balance`
+        # and `is_locked` above are kept as the single public view -- every
+        # existing reader (the cockpit's Telemetry P&L, Hand's profit-lock
+        # check, the safety tests) asks the vault for "the" current state
+        # without a mode argument -- and `update_balance` swaps in whichever
+        # mode's own baseline and latch applies to the balance it was just
+        # given.
+        self._live_start_of_day_balance = 0
+        self._live_locked = False
+        self._paper_start_of_day_balance: int | None = None
+        self._paper_locked = False
+
         # Atomic balance tracking
         self._reserved_funds: int = 0  # Funds reserved for pending orders
 
@@ -78,8 +98,16 @@ class RecursiveVault:
             raise RuntimeError(f"Failed to initialize vault database schema: {e}") from e
 
     async def initialize(self, current_balance_cents: int):
-        """Set the opening balance; this is the start-of-day figure the profit lock measures from."""
+        """Set the opening balance; this is the start-of-day figure the profit lock measures from.
+
+        This is always the real Kalshi balance (see main.py's boot sequence),
+        so it seeds only the live-mode baseline. The paper baseline is seeded
+        lazily, the first time a paper cycle calls update_balance, from
+        whatever the paper bankroll is at that moment -- see the note on
+        _paper_start_of_day_balance in __init__.
+        """
         async with self._lock:
+            self._live_start_of_day_balance = current_balance_cents
             self.start_of_day_balance = current_balance_cents
             self.current_balance = current_balance_cents
             self.initialized = True
@@ -110,11 +138,24 @@ class RecursiveVault:
                 f"Initialized. SOD Balance: {format_cents_to_dollars(self.start_of_day_balance)}"
             )
 
-    async def update_balance(self, new_balance_cents: int):
-        """Record a fresh balance and re-evaluate the kill switch and the profit lock."""
+    async def update_balance(self, new_balance_cents: int, is_paper_trading: bool = False):
+        """Record a fresh balance and re-evaluate the kill switch and the profit lock.
+
+        is_paper_trading selects which start-of-day baseline this balance is
+        measured against and which latch it can trip -- see the note on
+        _paper_start_of_day_balance in __init__. Defaults to the live path,
+        which is what every existing caller (the safety-test suites, the
+        manual-mode default in main.authorize_cycle) already expects.
+        """
         async with self._lock:
             self.current_balance = new_balance_cents
-            await self._check_lock()
+            if is_paper_trading:
+                if self._paper_start_of_day_balance is None:
+                    self._paper_start_of_day_balance = new_balance_cents
+                self.start_of_day_balance = self._paper_start_of_day_balance
+            else:
+                self.start_of_day_balance = self._live_start_of_day_balance
+            await self._check_lock(is_paper_trading)
             await self._check_kill_switch()
 
     async def _check_kill_switch(self):
@@ -129,25 +170,36 @@ class RecursiveVault:
         else:
             self.kill_switch_active = False
 
-    async def _check_lock(self) -> bool:
+    async def _check_lock(self, is_paper_trading: bool = False) -> bool:
+        """Evaluate the profit lock for the mode `update_balance` was just given.
 
+        Each mode latches independently (see __init__): once either mode's
+        own daily profit clears the threshold, that mode's latch stays set
+        for the rest of this process even if the balance later drops back
+        down, exactly as the single latch always has. `self.is_locked` is
+        left holding whichever mode's latch this call was for, since that is
+        the mode `self.current_balance` and `self.start_of_day_balance` also
+        currently describe.
+        """
         if not self.initialized:
             return False
 
+        locked = self._paper_locked if is_paper_trading else self._live_locked
         daily_profit = self.current_balance - self.start_of_day_balance
 
-        if daily_profit >= self.DAILY_PROFIT_THRESHOLD_CENTS:
-            if not self.is_locked:
-                logger.info(
-                    f"🔒 PROFIT THRESHOLD ({format_cents_to_dollars(daily_profit)}) REACHED."
-                )
-                logger.info(
-                    f"PRINCIPAL PROTECTION ACTIVATED. FROZEN {format_cents_to_dollars(self.PRINCIPAL_CAPITAL_CENTS)}."
-                )
-                self.is_locked = True
-            return True
+        if daily_profit >= self.DAILY_PROFIT_THRESHOLD_CENTS and not locked:
+            logger.info(f"🔒 PROFIT THRESHOLD ({format_cents_to_dollars(daily_profit)}) REACHED.")
+            logger.info(
+                f"PRINCIPAL PROTECTION ACTIVATED. FROZEN {format_cents_to_dollars(self.PRINCIPAL_CAPITAL_CENTS)}."
+            )
+            locked = True
 
-        return False
+        if is_paper_trading:
+            self._paper_locked = locked
+        else:
+            self._live_locked = locked
+        self.is_locked = locked
+        return locked
 
     async def get_tradeable_capital(self) -> int:
         """
@@ -282,9 +334,21 @@ class RecursiveVault:
             f"Emergency Rollback: Released ALL reservations ({format_cents_to_dollars(released)})"
         )
 
-    def lock_principal(self):
-        """Lock the principal amount to prevent trading with it."""
+    def lock_principal(self, is_paper_trading: bool = False):
+        """Lock the principal amount to prevent trading with it.
+
+        Also latches the mode-specific flag _check_lock reads (see
+        __init__): without this, the next update_balance call for the same
+        mode would swap self.is_locked back to that mode's own (still
+        unset) latch and silently undo a manual lock made here, between two
+        update_balance calls in the same cycle -- this is called right after
+        a fill, mid-cycle, from Hand's own profit-lock check.
+        """
         self.is_locked = True
+        if is_paper_trading:
+            self._paper_locked = True
+        else:
+            self._live_locked = True
         logger.info(
             f"PRINCIPAL LOCKED. {format_cents_to_dollars(self.PRINCIPAL_CAPITAL_CENTS)} protected. Trading with house money only."
         )

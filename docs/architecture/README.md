@@ -52,8 +52,11 @@ the bus detects re-entrancy, drops the nested publish, and counts it.
 Brain), executions (Brain to Hand), and errors. The error box is a safety
 latch: while it holds anything, no cycle is authorised. `POST /reset` drains
 it. `core/ledger.py` records every decision with the market price, the
-estimate, the outcome, and -- after the Hand acts -- the stake and order id,
-so realised results can be scored later.
+estimate, the outcome, and -- after the Hand acts -- the stake, order id and
+ticket (side, price, count). Hand's `settle_positions`, on the same
+`CYCLE_END` boundary as the exit review, asks Kalshi about every fill with
+no recorded settlement yet and fills it in, which is what lets realised
+results actually be scored rather than staying open forever.
 
 ## Capital rules
 
@@ -61,8 +64,32 @@ so realised results can be scored later.
 at 85% of principal, and a profit lock. `core/trading_mode.py` is the single
 switch between paper and live, consulted only inside
 `KalshiClient.place_order`; it also keeps the paper position book so the
-stacking guard and exit review can see simulated holdings. Sizing caps are
-in `core/constants.py`, most env-overridable.
+stacking guard and exit review can see simulated holdings, mirrored to
+`GHOST_VAULT_DB` on every change and reloaded at boot so a restart does not
+forget what paper trading is holding.
+
+`trading_mode` also keeps a paper bankroll, seeded once from real Kalshi
+cash and from then on debited by paper buys and credited by paper sells and
+settlement payouts -- the real balance never moves for a paper trade, so
+this is what has to track paper P&L instead. `GhostEngine.authorize_cycle`
+feeds the vault this bankroll on a paper cycle rather than the real balance
+(`is_paper_trading` says which), so Kelly sizing and the hard floor gate on
+what paper trading has actually spent. The real balance's own hard floor
+check still runs every cycle regardless of mode -- that is the check that
+protects the account. `RecursiveVault` tracks a separate start-of-day
+baseline and profit-lock latch per mode, since the paper bankroll can carry
+accumulated P&L across a restart while the real balance's baseline is only
+ever this boot's figure; `update_balance(balance, is_paper_trading=...)`
+picks which one a given cycle's balance is measured against. Sizing caps
+are in `core/constants.py`, most env-overridable.
+
+`agents/hand/agent.py`'s `check_exits` only reviews the book the current
+cycle's mode can actually act on -- the real Kalshi account when live, the
+paper book when not -- rather than merging both: paper mode cannot place a
+real order (`place_order` simulates every fill while `is_live()` is false,
+real position or not), so "closing" a real holding there would neither sell
+it nor be free of side effects -- the simulated fill would still write into
+the paper book as if it were a paper position.
 
 ## The model
 

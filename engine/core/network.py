@@ -295,6 +295,16 @@ class KalshiClient:
         path = f"/markets/{ticker}/orderbook"
         return await self.request("GET", path)
 
+    async def get_market(self, ticker: str) -> dict | None:
+        """GET /markets/{ticker}: a single market's current status and result.
+
+        Nothing called this before, so nothing could ever ask Kalshi whether a
+        held market had settled. `core.ledger.outcome_from_market` reads the
+        "status" and "result" fields of what this returns.
+        """
+        res = await self.request("GET", f"/markets/{ticker}")
+        return (res or {}).get("market")
+
     async def place_order(
         self,
         ticker: str,
