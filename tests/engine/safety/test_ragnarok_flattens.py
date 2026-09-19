@@ -153,7 +153,7 @@ class TestTheEmergencyPathNeverRaises:
             return_value=[{"ticker": "KXA", "position": 5}, {"ticker": "KXB", "position": 5}]
         )
 
-        async def flaky(ticker, count, side="yes"):
+        async def flaky(ticker, count, side="yes", **_kwargs):
             if ticker == "KXA":
                 raise RuntimeError("rejected")
             return {"order_id": "c"}

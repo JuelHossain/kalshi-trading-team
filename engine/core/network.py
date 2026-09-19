@@ -313,6 +313,8 @@ class KalshiClient:
         price: int,
         count: int,
         action: str = "buy",
+        *,
+        live: bool | None = None,
     ) -> dict | None:
         """Place an order on Kalshi.
 
@@ -325,6 +327,12 @@ class KalshiClient:
             action: 'buy' or 'sell'. The field was previously absent entirely,
                 which left the engine unable to express a sell at all -- there
                 was no way to exit a position once entered.
+            live: Overrides the process-wide trading_mode.is_live() for just
+                this call when not None. Ragnarok's own closes pass True here
+                so they cannot be flipped to paper fills by a concurrent
+                cycle's set_live(False) mid-flatten (main.py disarms live
+                before it authorises a cycle); everything else leaves this
+                None and defers to the process-wide switch as before.
 
         Returns:
             Order response dict or None on failure
@@ -342,7 +350,8 @@ class KalshiClient:
             reasons = ", ".join(trading_mode.halt_reasons())
             raise RuntimeError(f"Trading halted ({reasons}); refusing new exposure")
 
-        if not trading_mode.is_live():
+        is_live = trading_mode.is_live() if live is None else live
+        if not is_live:
             return trading_mode.paper_fill(ticker, side, price, count, action)
 
         return await self.request(
@@ -365,11 +374,15 @@ class KalshiClient:
             return res["positions"]
         return []
 
-    async def close_position(self, ticker: str, count: int, side: str = "yes") -> dict | None:
+    async def close_position(
+        self, ticker: str, count: int, side: str = "yes", *, live: bool | None = None
+    ) -> dict | None:
         """Flatten a holding by selling it back.
 
         Uses a marketable limit at the extreme tick so an emergency exit is not
         left resting in the book. Getting out matters more than the last cent.
+
+        `live` passes straight through to place_order -- see its docstring.
         """
         # 1c in the held side's own price space is the most marketable sell
         # for either side. NO used to get 99c -- asking 99c for a NO, which
@@ -381,6 +394,7 @@ class KalshiClient:
             price=1,
             count=count,
             action="sell",
+            live=live,
         )
 
     async def close(self):

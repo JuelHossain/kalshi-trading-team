@@ -12,6 +12,7 @@ from datetime import datetime
 from aiohttp import web
 from core import trading_mode
 from core.constants import AGENT_NAME_TO_ID, AGENT_TO_PHASE, MAX_EXECUTION_QUEUE_SIZE
+from core.display import AgentType, log_error
 from core.event_formatter import (
     format_error_event,
     format_log_event,
@@ -990,17 +991,42 @@ def trigger_ragnarok(engine):
         """Emergency protocol to liquidate all positions and lock the vault."""
         from core.safety import execute_ragnarok
 
-        result = await execute_ragnarok()
+        # Lock down BEFORE awaiting the flatten, not after. execute_ragnarok
+        # awaits Kalshi several times (cancels, a positions read, the
+        # closes); while it awaited, this used to leave new exposure fully
+        # armed -- the Brain's queue loop only checks is_halted() and kept
+        # approving, so a paper-approved buy already queued would reach
+        # place_order mid-flatten and see no halt at all and go out as a
+        # real order. Ragnarok's own closes are sells, and place_order's
+        # halt check is buy-only (and they now also pass live=True
+        # explicitly; see core.safety._close_all_positions), so none of this
+        # blocks the flatten itself. Only steps that cannot themselves fail
+        # go before the flatten -- these are plain in-memory flag flips, not
+        # I/O, so nothing here can raise and cancel the flatten before it
+        # starts. Lifted by /deactivate-kill-switch or /reset.
         engine.manual_kill_switch = True
-        # Ragnarok locked nothing: only authorize_cycle read the kill switch,
-        # so the next queued approval re-opened a position straight after the
-        # flatten. Halt new exposure, disarm live placement, stop autopilot,
-        # and drop approvals made before the emergency. Lifted by
-        # /deactivate-kill-switch or /reset.
         trading_mode.halt("kill_switch", "Ragnarok")
         trading_mode.set_live(False)
+
+        result = await execute_ragnarok()
+
+        # A live cycle can still re-arm mid-flatten: one whose
+        # authorize_cycle had already passed the kill-switch check when this
+        # route set it arms live as soon as authorisation returns (main.py,
+        # execute_single_cycle). So disarm again now that the flatten is
+        # done -- Ragnarok must never hand back control with live placement
+        # still armed.
+        trading_mode.set_live(False)
         await engine.bus.publish("SYSTEM_CONTROL", {"action": "STOP_AUTOPILOT"}, "HTTP")
-        dropped = await engine.synapse.executions.clear() if engine.synapse else 0
+        try:
+            dropped = await engine.synapse.executions.clear() if engine.synapse else 0
+        except Exception as e:
+            # A stale approval sitting in the queue is a much smaller risk
+            # than losing the flatten result over it -- the closes above
+            # already happened. Report the drop count as unknown rather than
+            # raising past a completed emergency flatten.
+            log_error(f"Ragnarok: failed to clear stale approvals: {e}", AgentType.GATEWAY)
+            dropped = "unknown"
 
         summary = (
             f"{'Paper book: ' if result.get('mode') == 'paper' else ''}"

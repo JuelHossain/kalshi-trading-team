@@ -59,13 +59,20 @@ async def execute_ragnarok() -> dict[str, Any]:
 
     - Pinned to paper: flatten the paper book and leave Kalshi alone; report
       any real positions found as untouched.
-    - Not pinned: cancel and close on Kalshi, arming live placement for the
-      flatten whether or not a cycle has yet.
+    - Not pinned: cancel and close on Kalshi. The closes pass live=True to
+      close_position explicitly (see _close_all_positions) instead of
+      toggling the process-wide trading_mode._live flag for the whole
+      flatten -- that used to arm every other coroutine's buys for the
+      duration too (a paper-approved signal reaching place_order mid-flatten
+      would go out as a real order), and a concurrent cycle's
+      set_live(False) could just as easily disarm Ragnarok's own closes back
+      to paper fills. The caller (routes.trigger_ragnarok) halts new
+      exposure before calling this, so the only thing that can happen to a
+      concurrent buy is refusal, not a real fill.
 
     Cancelling first is deliberate: flattening while orders are still resting
     invites a fill against the exit.
     """
-    from core import trading_mode
     from core.settings import settings
 
     log_critical("INITIATING RAGNAROK PROTOCOL...", AgentType.HAND)
@@ -73,13 +80,8 @@ async def execute_ragnarok() -> dict[str, Any]:
     if settings.get_bool("IS_PAPER_TRADING"):
         return await _paper_ragnarok()
 
-    was_live = trading_mode.is_live()
-    trading_mode.set_live(True)
-    try:
-        cancelled_count, orders_found = await _cancel_all_orders()
-        positions_closed, positions_found = await _close_all_positions()
-    finally:
-        trading_mode.set_live(was_live)
+    cancelled_count, orders_found = await _cancel_all_orders()
+    positions_closed, positions_found = await _close_all_positions()
 
     # found is -1 when positions could not be read: that is not "nothing to
     # close", it is "cannot say", and must not be reported as complete.
@@ -237,7 +239,13 @@ async def _close_all_positions() -> tuple[int, int]:
         # actually held.
         side = "no" if quantity < 0 else "yes"
         try:
-            result = await kalshi_client.close_position(ticker, count, side=side)
+            # live=True: this close must reach Kalshi regardless of what the
+            # process-wide trading_mode flag says at this instant -- a
+            # concurrent paper cycle's set_live(False) (main.py, before
+            # authorize_cycle) must not turn an emergency close into a
+            # paper fill that leaves the real position open behind a
+            # "closed N/N" report.
+            result = await kalshi_client.close_position(ticker, count, side=side, live=True)
         except Exception as e:
             log_error(f"Failed to close {ticker}: {e}", AgentType.HAND)
             return False
