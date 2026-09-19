@@ -5,17 +5,14 @@ Role: 24/7 Passive Observer
 Core SensesAgent class with market scanning capabilities.
 """
 
-import os
 import time
 from typing import Any
 
 from agents.base import BaseAgent
+from core import constants
 from core.bus import EventBus
-from core.constants import (
-    SENSES_QUEUE_BATCH_SIZE,
-    SENSES_STOCK_BUFFER_SIZE,
-)
 from core.flow_control import check_execution_queue_limit, check_opportunity_queue_limit
+from core.settings import Live
 from core.synapse import MarketData, Opportunity, Synapse
 
 from .scanner import fetch_kalshi_markets, queue_from_stock, surveillance_loop
@@ -24,8 +21,12 @@ from .scanner import fetch_kalshi_markets, queue_from_stock, surveillance_loop
 class SensesAgent(BaseAgent):
     """The 24/7 Observer - Surveillance & Signal Detection"""
 
-    STOCK_BUFFER_SIZE = SENSES_STOCK_BUFFER_SIZE
-    QUEUE_BATCH_SIZE = SENSES_QUEUE_BATCH_SIZE
+    # Live: read from core.constants at access time, so a dashboard edit
+    # applies to the next scan. Tests may still assign an instance override.
+    STOCK_BUFFER_SIZE = Live("SENSES_STOCK_BUFFER_SIZE")
+    QUEUE_BATCH_SIZE = Live("SENSES_QUEUE_BATCH_SIZE")
+    REQUEUE_AFTER_SECONDS = Live("SENSES_REQUEUE_AFTER_SECONDS")
+    RESCAN_COOLDOWN_SECONDS = Live("SENSES_RESCAN_COOLDOWN_SECONDS")
 
     def __init__(
         self,
@@ -42,6 +43,7 @@ class SensesAgent(BaseAgent):
         self.market_stock: list[dict] = []
         self._initial_scan_done = False
         self._dumped_count = 0
+        self._last_scan_attempt_time = 0.0
 
     async def setup(self):
         """Subscribe to pre-flight completion and restock requests."""
@@ -51,14 +53,57 @@ class SensesAgent(BaseAgent):
         await self.bus.subscribe("REQUEST_RESTOCK", self.on_restock_request)
 
     async def start_scan(self, message):
-        """Begin passive market surveillance (runs only once per startup)"""
-        if self._initial_scan_done:
-            await self.log("Initial scan already complete. Senses in STANDBY mode.", level="INFO")
+        """Begin passive market surveillance, or rescan a Senses stuck empty.
+
+        The first PREFLIGHT_COMPLETE (published every cycle) runs the full
+        scan; every one after that is normally a no-op, which is what keeps
+        a healthy stock buffer from being re-fetched every 30s.
+
+        But if a scan -- the first one, or a later restock -- ever leaves
+        both the stock buffer and the opportunity queue empty, standing pat
+        is a deadlock, not patience: REQUEST_RESTOCK is the only other route
+        into a scan, and the Brain only sends it after enough vetoes, which
+        needs an opportunity queue that will now never have anything in it.
+        Confirmed live 2026-09-18: the first scan found 0 markets and the
+        engine ran ~500 cycles analysing nothing, reporting healthy the
+        whole time. A cooldown keeps this from re-walking Kalshi's listing
+        every cycle while it stays empty.
+        """
+        if not self._initial_scan_done:
+            self._initial_scan_done = True
+            await self.log("Initiating passive market scan (zero token cost)...")
+            await self._scan()
             return
 
-        self._initial_scan_done = True
-        await self.log("Initiating passive market scan (zero token cost)...")
+        if await self._should_rescan():
+            await self.log(
+                "Scan left nothing queued and the cooldown has passed; rescanning.",
+                level="INFO",
+            )
+            await self._scan()
+            return
 
+        # Stock left over and nothing waiting for the Brain: hand it the next
+        # batch. A restock otherwise needs five vetoes in a row and any
+        # approval resets the count, so leftovers could sit unqueued forever.
+        if self.market_stock and self.synapse and await self.synapse.opportunities.size() == 0:
+            await self.log("Brain idle; queueing the next batch from stock.", level="INFO")
+            await self.on_restock_request(message)
+            return
+
+        await self.log("Initial scan already complete. Senses in STANDBY mode.", level="INFO")
+
+    async def _should_rescan(self) -> bool:
+        """Whether a Senses that has already scanned should scan again now."""
+        if self.market_stock:
+            return False  # unqueued stock on hand; no need to hit Kalshi
+        if self.synapse and await self.synapse.opportunities.size() > 0:
+            return False  # Brain still has work; scanning now would just pile on
+        return (time.time() - self._last_scan_attempt_time) >= self.RESCAN_COOLDOWN_SECONDS
+
+    async def _scan(self):
+        """Run one surveillance pass and record when it was attempted."""
+        self._last_scan_attempt_time = time.time()
         await surveillance_loop(
             senses_agent=self,
             stock_buffer_size=self.STOCK_BUFFER_SIZE,
@@ -67,17 +112,15 @@ class SensesAgent(BaseAgent):
             log_error_callback=self.log_error,
             bus=self.bus,
         )
-        await self.log("Initial scan complete. Senses entering STANDBY mode.", level="SUCCESS")
+        await self.log("Scan complete. Senses entering STANDBY mode.", level="SUCCESS")
 
     async def stop_scan(self, message):
         """Stop scanning at cycle end"""
         await self.log("Surveillance paused. Cycle complete.")
 
-    # How long a ticker stays excluded from re-queueing after it was queued.
-    # Session-scoped and time-bounded: a market vetoed at 09:00 may deserve a
-    # fresh look hours later, but not on the very next restock. Restart
-    # forgets this; the Hand's position guard is what survives a restart.
-    REQUEUE_AFTER_SECONDS = float(os.getenv("SENSES_REQUEUE_AFTER_SECONDS", "21600"))
+    # Requeue exclusion is session-scoped and time-bounded: a market vetoed at
+    # 09:00 may deserve a fresh look hours later, but not on the very next
+    # restock. Restart forgets this; the Hand's position guard survives one.
 
     def _queued_at(self) -> dict[str, float]:
         if not hasattr(self, "_queued_at_map"):
@@ -153,7 +196,7 @@ class SensesAgent(BaseAgent):
             is_at_limit, exec_size = await check_execution_queue_limit(self.synapse)
             if is_at_limit:
                 await self.log(
-                    f"Flow Control: Execution queue at limit ({exec_size}/10). Skipping restock.",
+                    f"Flow Control: Execution queue at limit ({exec_size}/{constants.MAX_EXECUTION_QUEUE_SIZE}). Skipping restock.",
                     level="WARN",
                 )
                 return
@@ -161,6 +204,10 @@ class SensesAgent(BaseAgent):
         # If stock is low, pull fresh from Kalshi
         if len(self.market_stock) < self.QUEUE_BATCH_SIZE:
             await self.log("Stock buffer low. Fetching fresh markets from Kalshi...")
+            # Shared with the PREFLIGHT_COMPLETE rescan path (start_scan /
+            # _should_rescan) so the two do not hammer Kalshi back-to-back
+            # when both see an empty stock buffer.
+            self._last_scan_attempt_time = time.time()
             # fetch_kalshi_markets already filters, sorts by volume and
             # truncates. Re-sorting here on "volume" -- a key Kalshi no
             # longer sends -- scored every market as 0 and undid the order.
@@ -173,7 +220,7 @@ class SensesAgent(BaseAgent):
             if markets:
                 self.market_stock = markets
                 await self.log(f"Stock buffer refilled with {len(self.market_stock)} markets")
-            else:
+            elif not self.market_stock:
                 # An empty result is usually "nothing new": every tradeable
                 # market in the close window was queued recently. A real
                 # fetch failure is already logged at ERROR by the scanner.
@@ -181,6 +228,8 @@ class SensesAgent(BaseAgent):
                     "No new tradeable markets to queue; buffer stays empty.", level="WARN"
                 )
                 return
+            # else: nothing new from Kalshi, but leftovers are still worth
+            # queueing rather than returning with them unqueued.
 
         # Queue from stock
         queued = await queue_from_stock(

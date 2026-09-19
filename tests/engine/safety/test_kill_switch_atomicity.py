@@ -1,210 +1,137 @@
+"""Kill switch and Cancel must halt cycles without ending the process.
+
+activate_kill_switch and cancel_cycle both used to set engine.running = False.
+That flag is the condition of main.run's own loop (`while self.running: sleep
+1`), so clearing it did not halt trading -- it exited the whole Python
+process. Under systemd's Restart=always plus the autopilot drop-in
+(ExecStartPost calling POST /autopilot/start on every start), the engine came
+back up within seconds with manual_kill_switch reset to its in-memory default
+and autopilot re-armed: pressing Kill Switch or Cancel undid itself.
+
+authorize_cycle already refuses every cycle while manual_kill_switch is set
+(or, for Cancel, while autopilot is stopped) -- that is the actual halt, and
+these tests exercise it through the same handlers routes.py registers rather
+than hand-simulating the fix, so a regression here fails for real. What these
+tests check is what the handlers set (manual_kill_switch, the trading_mode
+halt); GhostEngine.authorize_cycle's own kill-switch check is pinned
+separately, against a real engine, in
+test_safety_ragnarok_protocol.py::test_ragnarok_emergency_lockdown.
 """
-Test Fix 2: Kill Switch Atomicity
-
-Vulnerability: activate_kill_switch() only sets self.manual_kill_switch = True
-Fix: Immediately set self.is_processing = False AND self.running = False
-
-This test demonstrates:
-1. The vulnerability (BEFORE fix): Cycle continues despite kill switch activation
-2. The fix (AFTER): Immediate halt guarantees cycle stops
-"""
-
-import asyncio
-import sys
-from pathlib import Path
 
 import pytest
-
-# Add engine directory to path
-engine_dir = Path(__file__).parent.parent.parent.parent / "engine"
-sys.path.insert(0, str(engine_dir))
-
-from unittest.mock import AsyncMock, MagicMock
-
-from main import GhostEngine
+from core import trading_mode
+from core.synapse import Synapse
+from http_api.routes import activate_kill_switch, cancel_cycle, deactivate_kill_switch
 
 
-class TestKillSwitchAtomicity:
-    """Test suite for kill switch atomicity vulnerability"""
+class _Bus:
+    """Records every publish; SYSTEM_CONTROL actions are also applied to autopilot_enabled."""
 
+    def __init__(self):
+        self.published = []
+
+    async def publish(self, topic, payload, sender):
+        self.published.append((topic, payload, sender))
+
+
+class _Vault:
+    def __init__(self):
+        self.released = False
+
+    def release_all_reservations(self):
+        self.released = True
+
+
+class _Engine:
+    """The surface activate_kill_switch/cancel_cycle/deactivate_kill_switch touch."""
+
+    def __init__(self, synapse):
+        self.manual_kill_switch = False
+        self.is_processing = True
+        self.running = True
+        self.cycle_count = 7
+        self.last_cycle_time = "not-none"
+        self.bus = _Bus()
+        self.vault = _Vault()
+        self.synapse = synapse
+
+
+class _Request:
+    pass
+
+
+@pytest.fixture
+def engine(tmp_path):
+    return _Engine(Synapse(db_path=str(tmp_path / "kill_switch.db")))
+
+
+class TestKillSwitchDoesNotStopTheProcess:
     @pytest.mark.asyncio
-    async def test_vulnerability_cycle_continues_after_kill_switch(self):
-        """
-        VULNERABILITY TEST: Demonstrate that a cycle can continue running
-        even after kill switch is activated.
+    async def test_kill_switch_does_not_touch_running(self, engine):
+        """The regression: kill switch used to exit the main loop."""
+        await activate_kill_switch(engine)(_Request())
 
-        Scenario:
-        1. A cycle is in-progress (is_processing = True)
-        2. User activates kill switch
-        3. BEFORE FIX: is_processing stays True, cycle continues
-        4. AFTER FIX: is_processing = False, cycle halts immediately
-        """
-        engine = GhostEngine()
-        await engine.initialize_system()
-
-        # Simulate a cycle in progress
-        engine.is_processing = True
-        engine.running = True
-        engine.manual_kill_switch = False
-
-        # Activate kill switch (via HTTP endpoint simulation)
-        request = MagicMock()
-        request.json = AsyncMock(return_value={})
-
-        # Get the activate_kill_switch handler
-        # This is defined in start_http_server(), so we need to call that first
-        # For testing, we'll directly manipulate the state
-
-        # BEFORE FIX behavior:
-        # engine.manual_kill_switch = True  # Only sets kill switch
-        # is_processing would remain True, allowing cycle to continue
-
-        # AFTER FIX behavior:
-        engine.manual_kill_switch = True
-        engine.is_processing = False  # FIX: Immediately halt processing
-        engine.running = False  # FIX: Stop the engine
-
-        # Verify both flags are set correctly
-        assert engine.manual_kill_switch is True, "Kill switch should be active"
-        assert engine.is_processing is False, "Processing should halt immediately (FIX)"
-        assert engine.running is False, "Engine should stop immediately (FIX)"
-
-    @pytest.mark.asyncio
-    async def test_fix_kill_switch_halts_in_progress_cycle(self):
-        """
-        FIX VERIFICATION: Verify that activating kill switch immediately
-        halts any in-progress cycle.
-
-        This simulates the HTTP endpoint /api/kill-switch behavior.
-        """
-        engine = GhostEngine()
-        await engine.initialize_system()
-
-        # Simulate cycle in progress
-        engine.is_processing = True
-        engine.running = True
-        engine.manual_kill_switch = False
-
-        # Start the HTTP server (not needed for state test, avoids port collision)
-        # await engine.start_http_server()
-
-        # Simulate HTTP request to activate kill switch
-        # We can't easily test the actual HTTP endpoint without a full server,
-        # so we'll test the state change directly
-
-        # Simulate what activate_kill_switch() should do (AFTER FIX)
-        engine.manual_kill_switch = True
-        engine.is_processing = False
-        engine.running = False
-
-        # Verify immediate halt
+        assert engine.running is True, "the process (and its HTTP server) must keep running"
         assert engine.manual_kill_switch is True
-        assert engine.is_processing is False, "Cycle must halt immediately"
-        assert engine.running is False, "Engine must stop immediately"
-
-        # Try to start a new cycle - should be rejected by authorize_cycle
-        authorized = await engine.authorize_cycle()
-        assert authorized is False, "No cycles should be authorized after kill switch"
+        assert engine.is_processing is False
 
     @pytest.mark.asyncio
-    async def test_kill_switch_blocks_new_cycles(self):
+    async def test_kill_switch_halts_cycle_authorization(self, engine):
+        """The handler sets both flags the real gate reads: manual_kill_switch
+        (checked by GhostEngine.authorize_cycle) and the trading_mode halt
+        (checked by place_order). This is a handler test, not the real gate
+        itself -- that is pinned against a real GhostEngine.authorize_cycle in
+        test_safety_ragnarok_protocol.py::test_ragnarok_emergency_lockdown.
         """
-        Verify that kill switch prevents new cycles from starting.
-        """
-        engine = GhostEngine()
-        await engine.initialize_system()
+        await activate_kill_switch(engine)(_Request())
 
-        # Activate kill switch
-        engine.manual_kill_switch = True
-        engine.is_processing = False
-        engine.running = False
-
-        # Try to authorize a new cycle
-        authorized = await engine.authorize_cycle()
-
-        assert authorized is False, "Kill switch should block all cycles"
-
-    @pytest.mark.asyncio
-    async def test_deactivate_kill_switch_allows_cycles(self):
-        """
-        Verify that deactivating kill switch allows cycles to resume.
-        """
-        engine = GhostEngine()
-        await engine.initialize_system()
-
-        # Activate kill switch
-        engine.manual_kill_switch = True
-        engine.is_processing = False
-        engine.running = False
-
-        # Verify blocked
-        assert await engine.authorize_cycle() is False
-
-        # Deactivate kill switch
-        engine.manual_kill_switch = False
-        engine.is_processing = False
-        engine.running = True
-
-        # Verify allowed (assuming other checks pass)
-        # Note: This may still return False if balance < hard floor
-        # So we just check that manual_kill_switch is False
-        assert engine.manual_kill_switch is False
-
-    @pytest.mark.asyncio
-    async def test_concurrent_kill_switch_and_cycle(self):
-        """
-        Race condition test: Kill switch activated while cycle is starting.
-
-        Scenario:
-        1. Cycle starts (is_processing = True)
-        2. Simultaneously, kill switch is activated
-        3. Fix should guarantee that cycle stops
-        """
-        engine = GhostEngine()
-        await engine.initialize_system()
-
-        # Simulate concurrent operations
-        async def start_cycle():
-            engine.is_processing = True
-            await asyncio.sleep(0.1)  # Simulate work
-            # Cycle should check if it should continue
-            if engine.manual_kill_switch:
-                engine.is_processing = False
-
-        async def activate_kill_switch():
-            await asyncio.sleep(0.05)  # Slight delay
-            engine.manual_kill_switch = True
-            engine.is_processing = False  # FIX: Immediate halt
-            engine.running = False
-
-        # Run both concurrently
-        await asyncio.gather(start_cycle(), activate_kill_switch())
-
-        # Verify final state
         assert engine.manual_kill_switch is True
-        assert engine.is_processing is False, "Processing must be halted"
-        assert engine.running is False, "Engine must be stopped"
+        assert trading_mode.is_halted()
 
     @pytest.mark.asyncio
-    async def test_kill_switch_persists_across_checks(self):
-        """
-        Verify that once kill switch is activated, it persists through
-        multiple authorization checks.
-        """
-        engine = GhostEngine()
-        await engine.initialize_system()
+    async def test_kill_switch_persists_across_checks(self, engine):
+        """Repeated reads stay refused; the switch does not self-clear."""
+        await activate_kill_switch(engine)(_Request())
 
-        # Activate kill switch
-        engine.manual_kill_switch = True
-        engine.is_processing = False
-        engine.running = False
-
-        # Check multiple times
         for _ in range(5):
-            authorized = await engine.authorize_cycle()
-            assert authorized is False, "Kill switch should persist"
-            assert engine.manual_kill_switch is True, "Kill switch flag should persist"
+            assert engine.manual_kill_switch is True
+            assert trading_mode.is_halted()
+
+    @pytest.mark.asyncio
+    async def test_deactivate_clears_it_and_cycles_resume(self, engine):
+        await activate_kill_switch(engine)(_Request())
+        assert engine.manual_kill_switch is True
+        assert trading_mode.is_halted()
+
+        await deactivate_kill_switch(engine)(_Request())
+
+        assert engine.manual_kill_switch is False
+        assert not trading_mode.is_halted()
+        assert engine.running is True
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+class TestCancelDoesNotStopTheProcess:
+    @pytest.mark.asyncio
+    async def test_cancel_does_not_touch_running(self, engine):
+        """The identical regression, on the /cancel handler."""
+        await cancel_cycle(engine)(_Request())
+
+        assert engine.running is True, "the process (and its HTTP server) must keep running"
+        assert engine.is_processing is False
+
+    @pytest.mark.asyncio
+    async def test_cancel_publishes_stop_autopilot(self, engine):
+        await cancel_cycle(engine)(_Request())
+
+        actions = [
+            payload.get("action")
+            for topic, payload, _sender in engine.bus.published
+            if topic == "SYSTEM_CONTROL"
+        ]
+        assert "STOP_AUTOPILOT" in actions
+
+    @pytest.mark.asyncio
+    async def test_cancel_releases_vault_reservations(self, engine):
+        await cancel_cycle(engine)(_Request())
+
+        assert engine.vault.released is True

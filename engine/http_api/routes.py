@@ -5,11 +5,14 @@ Extracted from main.py for better organization.
 
 import asyncio
 import json
+import os
 import sqlite3
 from datetime import datetime
 
 from aiohttp import web
+from core import trading_mode
 from core.constants import AGENT_NAME_TO_ID, AGENT_TO_PHASE, MAX_EXECUTION_QUEUE_SIZE
+from core.display import AgentType, log_error
 from core.event_formatter import (
     format_error_event,
     format_log_event,
@@ -68,6 +71,20 @@ def register_all_routes(app, engine):
     app.router.add_get("/synapse/queues", get_synapse_queues(engine))
     app.router.add_get("/api/synapse/queues", get_synapse_queues(engine))
 
+    # Ledger and configuration routes
+    app.router.add_get("/orders", get_orders(engine))
+    app.router.add_get("/api/orders", get_orders(engine))
+    app.router.add_get("/config", get_config(engine))
+    app.router.add_get("/api/config", get_config(engine))
+    app.router.add_post("/config", update_config(engine))
+    app.router.add_post("/api/config", update_config(engine))
+    app.router.add_post("/engine/restart", restart_engine(engine))
+    app.router.add_post("/api/engine/restart", restart_engine(engine))
+    app.router.add_get("/journal", get_journal(engine))
+    app.router.add_get("/api/journal", get_journal(engine))
+    app.router.add_get("/decisions", get_decisions(engine))
+    app.router.add_get("/api/decisions", get_decisions(engine))
+
     # Environment routes
     app.router.add_get("/env-health", get_env_health(engine))
     app.router.add_get("/api/env-health", get_env_health(engine))
@@ -119,13 +136,29 @@ def activate_kill_switch(engine):
     """POST /kill-switch: halt authorisation of every cycle until deactivated."""
 
     async def handler(request):
-        """Set the manual kill switch and log it at ERROR so it is impossible to miss."""
+        """Set the manual kill switch and log it at ERROR so it is impossible to miss.
+
+        Does not touch engine.running. That flag is the process's own main
+        loop (main.run: `while self.running: sleep(1)`) -- clearing it here
+        did not halt trading, it exited the whole process. manual_kill_switch
+        is in-memory only, so systemd's Restart=always then brought the
+        process back up with the kill switch cleared, and the autopilot
+        drop-in re-armed autopilot within seconds: pressing Kill Switch
+        deactivated itself. authorize_cycle already refuses every cycle
+        while manual_kill_switch is set, which is the actual halt.
+        """
         engine.manual_kill_switch = True
         # FIX: Immediate Halt (Atomicity)
         engine.is_processing = False
         engine.cycle_count = 0
         engine.last_cycle_time = None  # Rate limit tracking
-        engine.running = False
+
+        # authorize_cycle only gates cycles; the Brain and Hand run outside
+        # them, so a queued approval still became an order with the switch
+        # set. The trading_mode halt refuses new exposure at place_order.
+        trading_mode.halt("kill_switch", "manual kill switch")
+        trading_mode.set_live(False)
+        await engine.bus.publish("SYSTEM_CONTROL", {"action": "STOP_AUTOPILOT"}, "HTTP")
 
         await engine.bus.publish(
             "SYSTEM_LOG",
@@ -148,8 +181,14 @@ def deactivate_kill_switch(engine):
     """POST /deactivate-kill-switch: lift the manual kill switch."""
 
     async def handler(request):
-        """Clear the manual kill switch and log it."""
+        """Clear the manual kill switch and log it.
+
+        Lifts only the kill-switch halt (which Ragnarok also sets). Autopilot
+        stays off until started again: resuming after an emergency stop is a
+        separate, deliberate step.
+        """
         engine.manual_kill_switch = False
+        trading_mode.unhalt("kill_switch")
         await engine.bus.publish(
             "SYSTEM_LOG",
             {
@@ -173,7 +212,9 @@ def reset_system(engine):
 
         This used to set engine.running = False, which is the condition of
         the main loop -- so the endpoint named "reset" terminated the engine
-        instead of resetting it. Shutting down is what /kill-switch is for.
+        instead of resetting it. /kill-switch and /cancel had the identical
+        bug for the identical reason and are fixed the same way: halting
+        cycles is authorize_cycle refusing them, not the process exiting.
 
         It also has to drain the error box: authorize_cycle halts while that
         box is non-empty and nothing else empties it, so one recoverable
@@ -183,6 +224,10 @@ def reset_system(engine):
         """
         engine.manual_kill_switch = False
         engine.is_processing = False
+        # Every halt this clears (kill switch, lockdown, error box) also
+        # lifts its trading_mode halt. The env KILL_SWITCH is still honoured:
+        # trading_mode.is_halted reads it directly.
+        trading_mode.clear_halts()
 
         errors_cleared = 0
         if getattr(engine, "synapse", None):
@@ -208,13 +253,19 @@ def cancel_cycle(engine):
     """POST /cancel: stop the running cycle, stop autopilot, release vault reservations."""
 
     async def handler(request):
-        """Gracefully cancel the current cycle and disable autopilot."""
+        """Gracefully cancel the current cycle and disable autopilot.
+
+        Does not touch engine.running: that flag is the process's own main
+        loop, and clearing it exited the whole process rather than just the
+        cycle. systemd's Restart=always then brought it back up and the
+        autopilot drop-in re-armed autopilot within seconds -- pressing
+        Cancel undid itself. STOP_AUTOPILOT below is the actual stop.
+        """
         # Always allow cancellation to ensure we can stop runaway loops
         engine.is_processing = False
 
         # 1. Stop Autopilot (Critical fix for "runaway train")
         await engine.bus.publish("SYSTEM_CONTROL", {"action": "STOP_AUTOPILOT"}, "HTTP")
-        engine.running = False
 
         # --- HARDENING: Emergency Rollback on Cancellation ---
         engine.vault.release_all_reservations()
@@ -249,13 +300,46 @@ def health_check(engine):
     """GET /health: process liveness, agent count, cycle number, balance."""
 
     async def handler(request):
-        """Answer from in-memory state; never touches Kalshi."""
+        """Answer from in-memory state; never touches Kalshi.
+
+        Also says whether a cycle *could* run right now and why not: the
+        error box, the kill switches and a Soul lockdown each halt
+        authorisation silently otherwise, and the dashboard would show a
+        healthy engine that never trades.
+        """
+        synapse = getattr(engine, "synapse", None)
+        error_count = await synapse.errors.size() if synapse else 0
+        soul = getattr(engine, "soul", None)
+        halted: list[str] = []
+        if engine.manual_kill_switch:
+            halted.append("manual kill switch")
+        if engine.vault.kill_switch_active:
+            halted.append("vault kill switch")
+        if soul is not None and soul.is_locked_down:
+            halted.append("soul lockdown")
+        if error_count:
+            halted.append(f"error box holds {error_count}")
+        if trading_mode.env_kill_switch():
+            halted.append("env kill switch")
+        # A refused cycle's own reason, when none of the above explains it
+        # (a hard-floor breach, for one).
+        gate = trading_mode.halted_by("cycle_gate")
+        if gate and not halted:
+            halted.append(gate)
         return web.json_response(
             {
                 "status": "healthy",
-                "agents": 4,
+                "agents": len(engine.agents) or 4,
                 "cycle": engine.cycle_count,
                 "balance": engine.vault.current_balance / 100,
+                "processing": engine.is_processing,
+                "error_box": error_count,
+                "kill_switch": engine.manual_kill_switch or engine.vault.kill_switch_active,
+                "locked_down": bool(soul is not None and soul.is_locked_down),
+                # Polled by the cockpit, so its toggle cannot go stale after
+                # a restart it did not see.
+                "autopilot": bool(soul is not None and soul.autopilot_enabled),
+                "halted": halted,
             }
         )
 
@@ -526,12 +610,341 @@ def get_synapse_queues(engine):
     return handler
 
 
+def engine_config(engine) -> dict:
+    """The engine's effective limits and settings, for the dashboard.
+
+    Read at request time so environment overrides (BRAIN_MIN_EDGE and the
+    like) are reported as they actually apply, not as the defaults.
+    """
+
+    from agents.senses import scanner
+    from core import constants, trading_mode
+    from core.shared_utils import get_env_bool
+
+    vault = engine.vault
+    brain = getattr(engine, "brain", None)
+    return {
+        "paper_pinned": get_env_bool("IS_PAPER_TRADING", default=True),
+        "live_armed": trading_mode.is_live(),
+        # The exchange the client was built for at boot. An edit to KALSHI_ENV
+        # waits for a restart; showing the edited value read as if it applied.
+        "kalshi_env": (_boot_value("KALSHI_ENV") or os.getenv("KALSHI_ENV") or "demo"),
+        "brain": {
+            "model": getattr(brain, "gemini_model", None) or os.getenv("GEMINI_MODEL"),
+            "min_edge": constants.BRAIN_MIN_EDGE,
+            "confidence_threshold": constants.BRAIN_CONFIDENCE_THRESHOLD,
+            "estimate_samples": constants.BRAIN_ESTIMATE_SAMPLES,
+            "max_disagreement": constants.BRAIN_MAX_DISAGREEMENT,
+            "stale_opportunity_seconds": constants.BRAIN_STALE_OPPORTUNITY_SECONDS,
+            "search_grounding": os.getenv("BRAIN_SEARCH_GROUNDING", "true").strip().lower()
+            not in ("false", "0", "no"),
+        },
+        "senses": {
+            "min_volume": scanner.MIN_VOLUME,
+            "max_spread_cents": scanner.MAX_SPREAD_CENTS,
+            "max_days_to_close": scanner.MAX_DAYS_TO_CLOSE,
+            "stock_buffer_size": constants.SENSES_STOCK_BUFFER_SIZE,
+            "queue_batch_size": constants.SENSES_QUEUE_BATCH_SIZE,
+        },
+        "hand": {
+            "max_stake_cents": constants.HAND_MAX_STAKE_CENTS,
+            "kelly_fraction": constants.HAND_KELLY_FRACTION,
+            "stop_loss_pct": constants.HAND_STOP_LOSS_PCT,
+            "take_profit_pct": constants.HAND_TAKE_PROFIT_PCT,
+            "exit_before_expiry_hours": constants.HAND_EXIT_BEFORE_EXPIRY_HOURS,
+        },
+        "vault": {
+            "principal_cents": vault.PRINCIPAL_CAPITAL_CENTS,
+            "hard_floor_cents": vault.HARD_FLOOR_CENTS,
+            "kill_switch_pct": vault.KILL_SWITCH_THRESHOLD_PCT,
+            "profit_lock_cents": vault.DAILY_PROFIT_THRESHOLD_CENTS,
+            "is_locked": vault.is_locked,
+            "kill_switch_active": vault.kill_switch_active,
+        },
+        "queues": {
+            "max_execution": constants.MAX_EXECUTION_QUEUE_SIZE,
+            "max_opportunity": constants.MAX_OPPORTUNITY_QUEUE_SIZE,
+        },
+        "min_cycle_interval_seconds": constants.MIN_CYCLE_INTERVAL_SECONDS,
+    }
+
+
+def _session_required(request) -> web.Response | None:
+    """Writes to the engine need a signed-in dashboard session or the API key.
+
+    Returns a 401 response to send, or None when the caller may proceed.
+    """
+    from core.auth import auth_manager
+
+    bearer = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+    if bearer and secrets_equal(bearer, auth_manager.api_key or ""):
+        return None
+    if auth_manager.authenticated:
+        return None
+    return web.json_response(
+        {"error": "Unauthorized", "message": "Sign in to the dashboard or send the API key."},
+        status=401,
+    )
+
+
+def _boot_value(key: str) -> str | None:
+    from core.settings import settings
+
+    return settings.boot_values.get(key)
+
+
+def secrets_equal(a: str, b: str) -> bool:
+    import secrets as _secrets
+
+    return bool(a) and bool(b) and _secrets.compare_digest(a, b)
+
+
+# Settings whose change arms real money. Going live is meant to take a change
+# on the machine running the engine (main.execute_single_cycle's docstring),
+# yet one signed-in session -- the flag is process-wide, so any client once
+# the operator has signed in anywhere -- could turn it on over HTTP. The safe
+# direction stays open, so the cockpit can still pin paper or pick demo.
+_HOST_ONLY_ARMING = {
+    "IS_PAPER_TRADING": lambda v: str(v).strip().lower() in ("false", "0", "no", "off", ""),
+    "KALSHI_ENV": lambda v: str(v).strip().lower() == "prod",
+}
+
+# Credentials and the rails that bound a loss. Changing one needs the
+# dashboard password in the request (or the API key), not just the ambient
+# session: the audit set HARD_FLOOR_CENTS=0, full Kelly and a new
+# AUTH_PASSWORD -- locking the operator out -- in one request.
+_STEP_UP_KEYS = frozenset(
+    {
+        "AUTH_PASSWORD",
+        "GHOST_API_KEY",
+        "KALSHI_DEMO_KEY_ID",
+        "KALSHI_DEMO_PRIVATE_KEY",
+        "KALSHI_PROD_KEY_ID",
+        "KALSHI_PROD_PRIVATE_KEY",
+        "GEMINI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "SUPABASE_URL",
+        "SUPABASE_KEY",
+        "FRONTEND_ORIGIN",
+        "KILL_SWITCH",
+        "HARD_FLOOR_CENTS",
+        "VAULT_PRINCIPAL_CENTS",
+        "VAULT_KILL_SWITCH_PCT",
+        "HAND_MAX_STAKE_CENTS",
+        "HAND_KELLY_FRACTION",
+        "BRAIN_MIN_EDGE",
+    }
+)
+
+
+def _guard_sensitive_changes(request, data: dict, changes: dict) -> web.Response | None:
+    """403 for arming live over HTTP, or for a sensitive key without the password."""
+    arming = sorted(
+        k for k, is_arming in _HOST_ONLY_ARMING.items() if k in changes and is_arming(changes[k])
+    )
+    if arming:
+        return web.json_response(
+            {
+                "error": "Host only",
+                "message": "Going live is changed in engine/.env on the host, not over HTTP.",
+                "keys": arming,
+            },
+            status=403,
+        )
+
+    sensitive = sorted(_STEP_UP_KEYS & changes.keys())
+    if not sensitive:
+        return None
+    from core.auth import auth_manager
+
+    bearer = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+    if bearer and secrets_equal(bearer, auth_manager.api_key or ""):
+        return None
+    if secrets_equal(str(data.get("password") or ""), auth_manager.auth_password or ""):
+        return None
+    return web.json_response(
+        {
+            "error": "Password required",
+            "message": "Re-enter the dashboard password to change these.",
+            "keys": sensitive,
+        },
+        status=403,
+    )
+
+
+def get_config(engine):
+    """GET /config: the settings registry (secrets masked) plus the runtime summary."""
+
+    async def handler(request):
+        """Answer from the registry, constants and the vault; never touches Kalshi."""
+        from core.settings import settings
+
+        body = settings.describe()
+        body["runtime"] = engine_config(engine)
+        return web.json_response(body)
+
+    return handler
+
+
+def update_config(engine):
+    """POST /config: change settings. Body `{"changes": {"KEY": value, ...}}`.
+
+    Values are validated as a batch, persisted to the engine's .env, applied
+    live where the reader can be patched, and reported back with any keys
+    that need a restart to take effect. Requires a signed-in session.
+    """
+
+    async def handler(request):
+        """Validate, persist, apply; answer with the update report and the new state."""
+        denied = _session_required(request)
+        if denied is not None:
+            return denied
+        from core.settings import settings
+
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response(
+                {"error": "Bad request", "message": "JSON body required"}, status=400
+            )
+        changes = data.get("changes") if isinstance(data, dict) else None
+        if not isinstance(changes, dict) or not changes:
+            return web.json_response(
+                {"error": "Bad request", "message": 'Body must be {"changes": {KEY: value}}'},
+                status=400,
+            )
+        guarded = _guard_sensitive_changes(request, data, changes)
+        if guarded is not None:
+            return guarded
+        report = settings.update(changes)
+        status = (
+            400 if report.errors and not report.applied and not report.restart_required else 200
+        )
+        await engine.bus.publish(
+            "SYSTEM_LOG",
+            {
+                "level": "WARN" if report.errors else "INFO",
+                "message": (
+                    f"[GHOST] Settings changed: {', '.join(sorted(changes))}"
+                    + (
+                        f" · restart needed for {', '.join(report.restart_required)}"
+                        if report.restart_required
+                        else ""
+                    )
+                    + (f" · rejected {', '.join(report.errors)}" if report.errors else "")
+                ),
+                "agent_id": 1,
+                "timestamp": datetime.now().isoformat(),
+            },
+            "GHOST",
+        )
+        body = report.as_dict()
+        body["config"] = settings.describe()
+        body["config"]["runtime"] = engine_config(engine)
+        return web.json_response(body, status=status)
+
+    return handler
+
+
+def restart_engine(engine):
+    """POST /engine/restart: re-exec the process so restart-only settings take effect."""
+
+    async def handler(request):
+        """Answer first, then replace the process a moment later."""
+        denied = _session_required(request)
+        if denied is not None:
+            return denied
+
+        async def _restart():
+            await asyncio.sleep(0.8)
+            # GhostEngine.start re-executes once the loop has closed, with the
+            # environment the process was started with -- so engine/.env is
+            # read afresh. exec-ing from inside the loop kept this process's
+            # edited environment, so hand edits to .env never applied.
+            engine.restart_requested = True
+            soul = getattr(engine, "soul", None)
+            engine.resume_autopilot = bool(soul is not None and soul.autopilot_enabled)
+            await engine.shutdown("Restart requested from the dashboard")
+
+        fire_and_forget(_restart())
+        return web.json_response(
+            {
+                "status": "restarting",
+                "message": "The engine is restarting; reconnect in a few seconds.",
+            }
+        )
+
+    return handler
+
+
+def get_journal(engine):
+    """GET /journal: the durable event log. Filters: agent, topic, cycle, level, since_id, limit."""
+
+    async def handler(request):
+        """Read from the journal; `since_id` pages forward, otherwise newest first."""
+        journal = getattr(engine, "journal", None)
+        if journal is None:
+            return web.json_response({"events": [], "count": 0})
+        q = request.query
+
+        def _int(name):
+            try:
+                return int(q[name]) if name in q else None
+            except ValueError:
+                return None
+
+        events = journal.query(
+            limit=_int("limit") or 200,
+            agent=q.get("agent"),
+            topic=q.get("topic"),
+            cycle=_int("cycle"),
+            since_id=_int("since_id"),
+            level=q.get("level"),
+        )
+        return web.json_response({"events": events, "count": journal.count()})
+
+    return handler
+
+
+def get_decisions(engine):
+    """GET /decisions: every Brain judgement from the ledger, newest first."""
+
+    async def handler(request):
+        """Read the ledger; `limit` and `ticker` filter."""
+        from core.ledger import recent_decisions
+
+        try:
+            limit = max(1, min(2000, int(request.query.get("limit", "200"))))
+        except ValueError:
+            limit = 200
+        return web.json_response(
+            {"decisions": recent_decisions(limit, request.query.get("ticker"))}
+        )
+
+    return handler
+
+
+def get_orders(engine):
+    """GET /orders: executed orders from the decision ledger, newest first."""
+
+    async def handler(request):
+        """Read the ledger; `limit` query param caps the rows (default 200)."""
+        from core.ledger import recent_fills
+
+        try:
+            limit = max(1, min(1000, int(request.query.get("limit", "200"))))
+        except ValueError:
+            limit = 200
+        return web.json_response({"orders": recent_fills(limit)})
+
+    return handler
+
+
 def get_env_health(engine):
     """GET /env-health: which optional services are configured and reachable."""
 
     async def handler(request):
         """Verify 'Stay Alive' environment integrity."""
-        import os
 
         # 1. Symlink Integrity
         opencode_skills_ok = os.path.islink(".opencode/skills")
@@ -578,23 +991,69 @@ def trigger_ragnarok(engine):
         """Emergency protocol to liquidate all positions and lock the vault."""
         from core.safety import execute_ragnarok
 
-        await execute_ragnarok()
+        # Lock down BEFORE awaiting the flatten, not after. execute_ragnarok
+        # awaits Kalshi several times (cancels, a positions read, the
+        # closes); while it awaited, this used to leave new exposure fully
+        # armed -- the Brain's queue loop only checks is_halted() and kept
+        # approving, so a paper-approved buy already queued would reach
+        # place_order mid-flatten and see no halt at all and go out as a
+        # real order. Ragnarok's own closes are sells, and place_order's
+        # halt check is buy-only (and they now also pass live=True
+        # explicitly; see core.safety._close_all_positions), so none of this
+        # blocks the flatten itself. Only steps that cannot themselves fail
+        # go before the flatten -- these are plain in-memory flag flips, not
+        # I/O, so nothing here can raise and cancel the flatten before it
+        # starts. Lifted by /deactivate-kill-switch or /reset.
         engine.manual_kill_switch = True
+        trading_mode.halt("kill_switch", "Ragnarok")
+        trading_mode.set_live(False)
+
+        result = await execute_ragnarok()
+
+        # A live cycle can still re-arm mid-flatten: one whose
+        # authorize_cycle had already passed the kill-switch check when this
+        # route set it arms live as soon as authorisation returns (main.py,
+        # execute_single_cycle). So disarm again now that the flatten is
+        # done -- Ragnarok must never hand back control with live placement
+        # still armed.
+        trading_mode.set_live(False)
+        await engine.bus.publish("SYSTEM_CONTROL", {"action": "STOP_AUTOPILOT"}, "HTTP")
+        try:
+            dropped = await engine.synapse.executions.clear() if engine.synapse else 0
+        except Exception as e:
+            # A stale approval sitting in the queue is a much smaller risk
+            # than losing the flatten result over it -- the closes above
+            # already happened. Report the drop count as unknown rather than
+            # raising past a completed emergency flatten.
+            log_error(f"Ragnarok: failed to clear stale approvals: {e}", AgentType.GATEWAY)
+            dropped = "unknown"
+
+        summary = (
+            f"{'Paper book: ' if result.get('mode') == 'paper' else ''}"
+            f"Cancelled {result.get('orders_cancelled', 0)}/{result.get('orders_found', 0)} "
+            f"orders, closed {result.get('positions_closed', 0)}/"
+            f"{result.get('positions_found', 0)} positions, dropped {dropped} pending "
+            "approvals. New positions halted until the kill switch is deactivated."
+        )
+        if result.get("real_positions_untouched"):
+            summary += (
+                f" {result['real_positions_untouched']} real Kalshi position(s) untouched: "
+                "IS_PAPER_TRADING is pinned."
+            )
+        if result.get("status") == "partial":
+            summary = "INCOMPLETE -- " + summary
         await engine.bus.publish(
             "SYSTEM_LOG",
             {
                 "level": "ERROR",
-                "message": "[GHOST] RAGNAROK EXECUTED - All positions liquidated",
+                "message": f"[GHOST] RAGNAROK EXECUTED - {summary}",
                 "agent_id": 1,
                 "timestamp": datetime.now().isoformat(),
             },
             "GHOST",
         )
         return web.json_response(
-            {
-                "status": "ragnarok_executed",
-                "message": "Emergency liquidation complete. Vault locked.",
-            }
+            {"status": "ragnarok_executed", "message": summary, "result": result}
         )
 
     return handler

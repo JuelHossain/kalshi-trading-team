@@ -30,3 +30,26 @@ def _debate(confidence=0.95, probability=0.80):
             "reasoning": "integration test",
         }
     )
+
+
+def _market(ticker: str, volume: int = 5000) -> dict:
+    """A raw Kalshi market payload, the shape `_FakeKalshiClient.get_markets_page` returns."""
+    return {
+        "ticker": ticker,
+        "yes_bid_dollars": "0.40",
+        "yes_ask_dollars": "0.44",
+        "volume_fp": str(volume),
+    }
+
+
+class _FakeKalshiClient:
+    """Returns each queued page in order; an empty list means "nothing found"."""
+
+    def __init__(self, pages: list[list[dict]]):
+        self._pages = list(pages)
+        self.calls = 0
+
+    async def get_markets_page(self, **kwargs):
+        self.calls += 1
+        page = self._pages.pop(0) if self._pages else []
+        return page, None

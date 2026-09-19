@@ -13,14 +13,9 @@ from typing import Any
 from agents.base import BaseAgent
 from core.ai_utils import get_default_models, initialize_gemini_client
 from core.bus import EventBus
-from core.constants import (
-    BRAIN_CONFIDENCE_THRESHOLD,
-    BRAIN_ESTIMATE_SAMPLES,
-    BRAIN_MAX_DISAGREEMENT,
-    BRAIN_MIN_EDGE,
-)
 from core.db import log_to_db
 from core.ledger import record_decision
+from core.settings import Live
 from core.shared_utils import fire_and_forget
 from core.synapse import ExecutionSignal, MarketData, Opportunity, Synapse
 
@@ -37,10 +32,12 @@ from .simulation import run_simulation
 class BrainAgent(BaseAgent):
     """The Decision Maker - Intelligence & Mathematical Verification"""
 
-    CONFIDENCE_THRESHOLD = BRAIN_CONFIDENCE_THRESHOLD
-    MIN_EDGE = BRAIN_MIN_EDGE
-    ESTIMATE_SAMPLES = BRAIN_ESTIMATE_SAMPLES
-    MAX_DISAGREEMENT = BRAIN_MAX_DISAGREEMENT
+    # Live: read from core.constants at access time, so a dashboard edit
+    # applies to the next market. Tests may still assign an instance override.
+    CONFIDENCE_THRESHOLD = Live("BRAIN_CONFIDENCE_THRESHOLD")
+    MIN_EDGE = Live("BRAIN_MIN_EDGE")
+    ESTIMATE_SAMPLES = Live("BRAIN_ESTIMATE_SAMPLES")
+    MAX_DISAGREEMENT = Live("BRAIN_MAX_DISAGREEMENT")
 
     # Gemini model names to try (in order of preference)
     DEFAULT_MODELS = get_default_models()
@@ -57,24 +54,24 @@ class BrainAgent(BaseAgent):
 
         # Initialize Gemini
         self.gemini_model = None
-        self._model_downgrade_warning = None  # Store for logging in async context
         self.client, self.ai_client, default_model, self._gemini_available = (
             initialize_gemini_client(log_callback=self.log, bus=self.bus)
         )
 
-        # Try user-specified model first, then default list
+        # Try user-specified model first, then default list.
+        #
+        # This used to rewrite any GEMINI_MODEL containing "gemini-2.5" to
+        # gemini-2.0-flash-exp as a "defensive fix". get_default_models's own
+        # comment, eleven lines below in ai_utils.py, is what that "fix" was
+        # actually defending against: gemini-2.0-flash-exp 404'd and was
+        # removed from the list for being unreachable. gemini-2.5-flash and
+        # gemini-2.5-pro are both still in that same list as valid choices --
+        # so setting either one, or anything else containing "2.5", silently
+        # sent the Brain to the one model already known to be dead. The
+        # Brain's own OpenRouter fallback is what actually needs to handle a
+        # model going stale; nothing here should guess at that ahead of time.
         user_model = os.environ.get("GEMINI_MODEL")
-        if user_model:
-            # Defensive fix: 2.5 is deprecated/missing, downgrade to 2.0
-            if "gemini-2.5" in user_model:
-                self._model_downgrade_warning = (
-                    f"Downgrading requested model {user_model} to gemini-2.0-flash-exp"
-                )
-                self.gemini_model = "gemini-2.0-flash-exp"
-            else:
-                self.gemini_model = user_model
-        else:
-            self.gemini_model = default_model or self.DEFAULT_MODELS[0]
+        self.gemini_model = user_model or default_model or self.DEFAULT_MODELS[0]
 
         # Load personas
         self.personas = load_personas()
@@ -86,17 +83,12 @@ class BrainAgent(BaseAgent):
         )
         await self.log(f"Brain online. Intelligence & Decision engine ready. {ai_status}")
 
-        # Log any model downgrade warnings
-        if self._model_downgrade_warning:
-            await self.log(f"WARN: {self._model_downgrade_warning}", level="WARN")
-
         # Subscribe to control events only
         await self.bus.subscribe("INSTRUCTIONS_UPDATE", self.update_instructions)
         await self.bus.subscribe("SYSTEM_CONTROL", self.on_system_control)
 
         # Start the continuous monitoring loop
-        self._monitoring_task = asyncio.create_task(self.monitor_queue())
-        self._monitoring_task.add_done_callback(self._on_monitor_exit)
+        await self._ensure_monitor_running()
 
     def _on_monitor_exit(self, task: asyncio.Task) -> None:
         """Report a monitor loop that stopped, instead of losing it.
@@ -122,11 +114,38 @@ class BrainAgent(BaseAgent):
         )
 
     async def on_system_control(self, message):
-        """Handle stop signals immediately"""
+        """Handle stop/start signals for the queue monitor loop."""
         action = message.payload.get("action")
         if action == "STOP_AUTOPILOT":
             self.stop_requested = True
             await self.log("Brain received STOP signal. Halting processing.")
+        elif action == "START_AUTOPILOT":
+            await self._ensure_monitor_running()
+
+    async def _ensure_monitor_running(self):
+        """(Re)start the queue monitor loop if it is not already running.
+
+        STOP_AUTOPILOT sets stop_requested, which the loop notices and exits
+        for good; nothing previously reset the flag or replaced the task, so
+        a STOP followed by a START left the opportunity queue undrained --
+        every market Senses found from then on just sat there -- for the
+        rest of the process's life. A cancel-and-await here means a stop and
+        a start landing close together can never leave two loops running
+        against the same queue at once.
+        """
+        if self._monitoring_task is not None and not self._monitoring_task.done():
+            if not self.stop_requested:
+                return  # already running normally
+            self._monitoring_task.cancel()
+            try:
+                await self._monitoring_task
+            except (asyncio.CancelledError, Exception):
+                pass
+
+        self.stop_requested = False
+        self._monitoring_task = asyncio.create_task(self.monitor_queue())
+        self._monitoring_task.add_done_callback(self._on_monitor_exit)
+        await self.log("Brain monitor loop (re)started.")
 
     async def update_instructions(self, message):
         """Receive evolved instructions from Soul"""
@@ -207,6 +226,28 @@ class BrainAgent(BaseAgent):
             await self.log(
                 f"[VETO] VETOED: {ticker} | {reason} - skipping simulation", level="WARN"
             )
+            record_decision(
+                ticker,
+                opportunity.get("kalshi_price", 0.5),
+                outcome="VETOED",
+                estimated_probability=estimated_prob,
+                confidence=confidence,
+                veto_reason=reason,
+            )
+            return "VETOED"
+
+        # A spread needs at least two draws. With one survivor the ensemble
+        # reports disagreement 0.0, so the check below passed by default and a
+        # lone outlier was traded on: reproduced in the audit as an APPROVED
+        # 0.90 against a 50c market after two of three samples failed. Failed
+        # samples are commoner now that ungrounded and market-sourced ones are
+        # discarded, so the quorum matters more than it did.
+        wanted = int(self.ESTIMATE_SAMPLES)
+        usable = int(debate_result.get("samples", wanted))
+        quorum = 1 if wanted <= 1 else max(2, (wanted + 1) // 2)
+        if usable < quorum:
+            reason = f"Only {usable} of {wanted} estimates usable (need {quorum})"
+            await self.log(f"[VETO] VETOED: {ticker} | {reason}", level="WARN")
             record_decision(
                 ticker,
                 opportunity.get("kalshi_price", 0.5),

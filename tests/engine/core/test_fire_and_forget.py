@@ -75,3 +75,37 @@ class TestFreshnessCheckSurvivesSyncContext:
 
         now = datetime.now().isoformat()
         assert self._check({"ticker": "X", "timestamp": now}) == (True, "FRESH")
+
+
+@pytest.mark.asyncio
+async def test_detached_task_can_publish_the_topic_that_spawned_it():
+    """A task detached from inside a dispatch must not inherit its guard.
+
+    The re-entrancy guard lives in a contextvar, and tasks copy their
+    creator's Context. Without detaching, a task spawned by a REQUEST_CYCLE
+    subscriber could never publish REQUEST_CYCLE for the rest of its life,
+    which is exactly how autopilot stalled after one cycle.
+    """
+    from core.bus import EventBus
+
+    bus = EventBus()
+    seen = []
+    done = asyncio.Event()
+
+    async def later():
+        await asyncio.sleep(0)
+        await bus.publish("PING", {"n": 2}, "TASK")
+
+    async def on_ping(message):
+        seen.append(message.payload["n"])
+        if message.payload["n"] == 1:
+            fire_and_forget(later())
+        else:
+            done.set()
+
+    await bus.subscribe("PING", on_ping)
+    await bus.publish("PING", {"n": 1}, "TEST")
+    await asyncio.wait_for(done.wait(), timeout=1)
+
+    assert seen == [1, 2]
+    assert bus.reentrant_drops == 0

@@ -30,6 +30,41 @@ GROUNDING_ENABLED = os.getenv("BRAIN_SEARCH_GROUNDING", "true").strip().lower() 
 )
 
 
+# Sites whose prices the estimate is compared against. Search grounding
+# found them on its own: live grounded estimates sat an average of 0.006 from
+# the Kalshi price, and a research log cited "Prediction markets price the New
+# York Giants at 24%". An estimate read off the market cannot disagree with it,
+# so the engine could never find an edge -- or found one only by noise.
+PREDICTION_MARKET_DOMAINS = ("kalshi.com", "polymarket.com", "predictit.org", "manifold.markets")
+
+
+def prediction_market_sources(response) -> list[str]:
+    """Grounding sources that are prediction markets. [] when none, or unreadable."""
+    try:
+        candidates = response.candidates or []
+        metadata = candidates[0].grounding_metadata if candidates else None
+        chunks = (metadata.grounding_chunks or []) if metadata else []
+    except Exception:
+        return []
+    found = []
+    for chunk in chunks:
+        web = getattr(chunk, "web", None)
+        if web is None:
+            continue
+        # uri is a Google redirect; domain and title carry the real site.
+        label = " ".join(str(getattr(web, f, "") or "") for f in ("domain", "title", "uri"))
+        for domain in PREDICTION_MARKET_DOMAINS:
+            if domain in label.lower() and domain not in found:
+                found.append(domain)
+    return found
+
+
+# A backstop above the SDK's own bound (3 attempts x 45 s plus backoff).
+# Samples run in parallel, so a market still finishes well inside
+# BRAIN_STALE_OPPORTUNITY_SECONDS.
+SAMPLE_DEADLINE_SECONDS = 150
+
+
 def build_grounding_config():
     """Return a generate_content config enabling Google Search, or None.
 
@@ -38,7 +73,11 @@ def build_grounding_config():
     Brain offline -- a degraded estimate still beats no estimate, and the
     confidence threshold is what stops a bad one reaching the Hand.
     """
-    if not GROUNDING_ENABLED:
+    # Read live so the dashboard toggle applies to the next estimate;
+    # GROUNDING_ENABLED above records what the process booted with.
+    from core.settings import settings
+
+    if not settings.get_bool("BRAIN_SEARCH_GROUNDING"):
         return None
     try:
         from google.genai import types
@@ -151,7 +190,12 @@ async def run_debate(
         # Use centralized error system
         await log_error_callback(
             code="INTELLIGENCE_AI_UNAVAILABLE",
-            severity=ErrorSeverity.HIGH,
+            # MEDIUM, as at every per-sample failure below: each returns
+            # confidence 0, which vetoes this one market, and the ensemble
+            # tolerates a failed sample. At HIGH, one truncated reply from one
+            # sample latched the error box and halted the whole engine -- seen
+            # live 2026-09-18, on a ticker the other two samples still scored.
+            severity=ErrorSeverity.MEDIUM,
             context={"opportunity": opportunity.get("ticker", "UNKNOWN")},
         )
         # Return zero confidence to trigger veto
@@ -165,6 +209,25 @@ async def run_debate(
     market_data = opportunity.get("market_data", {})
     title = market_data.get("title", ticker)
     subtitle = market_data.get("subtitle", "")
+    raw = market_data.get("raw_response") or {}
+    # The event is described by its resolution rule, not its ticker: a
+    # Kalshi ticker is a search key for the Kalshi market page, which is the
+    # price this estimate must not see. Titles alone are side-only ("Las
+    # Vegas wins"); rules_primary names both sides, the date and the source.
+    rules = str(raw.get("rules_primary") or "").strip()[:600]
+    resolves = raw.get("expected_expiration_time") or market_data.get("expiration") or ""
+    event_lines = f"EVENT: {title}\n"
+    if rules:
+        event_lines += f"RESOLUTION RULE: {rules}\n"
+    else:
+        # Without the rule the title may not identify the event at all; the
+        # ticker is then the only context, and the source check below still
+        # drops a sample that went and read the market.
+        event_lines += f"MARKET ID: {ticker}\n"
+    if subtitle:
+        event_lines += f"SUBTITLE: {subtitle}\n"
+    if resolves:
+        event_lines += f"RESOLVES AROUND: {resolves}\n"
 
     # The market price is deliberately NOT shown to the model.
     #
@@ -181,10 +244,7 @@ async def run_debate(
 
     prompt = f"""You are a forecasting committee estimating the probability of a real-world event.
 
-EVENT: {ticker}
-TITLE: {title}
-SUBTITLE: {subtitle}
-
+{event_lines}
 {f"Today's Trading Instructions: {trading_instructions[:500]}" if trading_instructions else ""}
 
 TASK:
@@ -193,6 +253,11 @@ information about it -- form, injuries, standings, recent reporting, whatever
 bears on the outcome -- rather than relying on memory, which may be stale or
 may predate the event entirely. You are NOT being shown any market price, and
 you should not guess at one -- estimate the event on its merits alone.
+Do not use or report prices, odds or probabilities from prediction markets or
+exchanges (Kalshi, Polymarket, PredictIt, Manifold): your estimate is compared
+against those prices, so it must be independent of them. Sportsbook lines,
+polls, statistics and news are all fair evidence. If a prediction-market price
+is the only evidence you find, say so and give a low confidence.
 
 1. OPTIMIST: argue why the event is more likely than it first appears.
 2. CRITIC: argue why it is less likely than it first appears.
@@ -216,10 +281,12 @@ Respond in JSON format:
   "confidence": 85
 }}"""
 
+    # Outside the try so the fallback below can see whether this sample was
+    # meant to be grounded.
+    grounding = build_grounding_config()
     try:
         try:
             # Primary: Google Gemini API
-            grounding = build_grounding_config()
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: client.models.generate_content(
@@ -227,8 +294,38 @@ Respond in JSON format:
                 ),
             )
             text = response.text
+            leaked = prediction_market_sources(response)
+            if leaked:
+                await log_callback(
+                    f"[BRAIN] Estimate for {ticker} drew on {', '.join(leaked)}; "
+                    "discarding it -- the market price is what it is measured against.",
+                    level="WARN",
+                )
+                return {
+                    "confidence": 0.0,
+                    "estimated_probability": None,
+                    "reasoning": f"Sourced from a prediction market ({', '.join(leaked)})",
+                }
         except Exception as e:
-            # Fallback: OpenRouter
+            if grounding is not None:
+                # No substitute. The fallback is a free, ungrounded chat model
+                # answering a prompt that says "search for current
+                # information" -- it cannot -- and its estimate went into the
+                # same median, and sized the same Kelly stake, as grounded
+                # Gemini, with nothing on the decision saying so. A veto of
+                # this sample is the honest answer; the ensemble tolerates it.
+                await log_callback(
+                    f"[BRAIN] Grounded estimate failed for {ticker} ({str(e)[:80]}); "
+                    "not substituting an ungrounded model.",
+                    level="WARN",
+                )
+                return {
+                    "confidence": 0.0,
+                    "estimated_probability": None,
+                    "reasoning": "Grounded estimator unavailable",
+                }
+            # Grounding switched off by the operator: both paths are
+            # ungrounded, so the fallback is a like-for-like substitute.
             await log_callback(
                 f"[BRAIN] Primary AI failed ({str(e)[:50]})... Attempting OpenRouter Fallback.",
                 level="WARN",
@@ -272,7 +369,7 @@ Respond in JSON format:
                 await log_error_callback(
                     code="INTELLIGENCE_PARSE_ERROR",
                     message=f"JSON parsing failed for {ticker}",
-                    severity=ErrorSeverity.HIGH,
+                    severity=ErrorSeverity.MEDIUM,
                     context={
                         "ticker": ticker,
                         "error": str(je)[:100],
@@ -293,7 +390,7 @@ Respond in JSON format:
         await log_error_callback(
             code="INTELLIGENCE_PARSE_ERROR",
             message="No JSON found in AI response",
-            severity=ErrorSeverity.HIGH,
+            severity=ErrorSeverity.MEDIUM,
             context={"ticker": ticker, "response_preview": text[:200]},
         )
         return {
@@ -307,7 +404,7 @@ Respond in JSON format:
         await log_error_callback(
             code="INTELLIGENCE_PARSE_ERROR",
             message=f"JSON parsing failed for {ticker}",
-            severity=ErrorSeverity.HIGH,
+            severity=ErrorSeverity.MEDIUM,
             context={"ticker": ticker, "error": str(e)[:100]},
             exception=e,
         )
@@ -321,7 +418,7 @@ Respond in JSON format:
         await log_error_callback(
             code="INTELLIGENCE_PARSE_ERROR",
             message="AI response format error",
-            severity=ErrorSeverity.HIGH,
+            severity=ErrorSeverity.MEDIUM,
             context={"ticker": ticker, "error": str(e)[:100]},
             exception=e,
         )
@@ -335,7 +432,7 @@ Respond in JSON format:
         await log_error_callback(
             code="INTELLIGENCE_TIMEOUT",
             message="AI API connection failed",
-            severity=ErrorSeverity.HIGH,
+            severity=ErrorSeverity.MEDIUM,
             context={"ticker": ticker, "error": str(e)[:100]},
             exception=e,
         )
@@ -351,7 +448,7 @@ Respond in JSON format:
         await log_error_callback(
             code="INTELLIGENCE_DEBATE_FAILED",
             message=f"Debate error ({error_type}) for {ticker}",
-            severity=ErrorSeverity.HIGH,
+            severity=ErrorSeverity.MEDIUM,
             context={"ticker": ticker, "error_type": error_type, "error": str(e)[:100]},
             exception=e,
         )
@@ -385,13 +482,25 @@ async def run_debate_ensemble(samples: int = 1, **kwargs) -> dict:
     unsure, the ensemble is unsure.
     """
     if samples <= 1:
-        result = await run_debate(**kwargs)
+        try:
+            result = await asyncio.wait_for(run_debate(**kwargs), SAMPLE_DEADLINE_SECONDS)
+        except TimeoutError:
+            return {
+                "confidence": 0.0,
+                "reasoning": "Estimate timed out - trade rejected",
+                "estimated_probability": None,
+                "disagreement": 1.0,
+                "samples": 0,
+            }
         result.setdefault("disagreement", 0.0)
         result.setdefault("samples", 1)
         return result
 
+    # Each sample on its own deadline, so one late sample is dropped rather
+    # than holding the others -- and the Brain's queue loop -- hostage.
     results = await asyncio.gather(
-        *[run_debate(**kwargs) for _ in range(samples)], return_exceptions=True
+        *[asyncio.wait_for(run_debate(**kwargs), SAMPLE_DEADLINE_SECONDS) for _ in range(samples)],
+        return_exceptions=True,
     )
 
     usable = [
@@ -417,7 +526,11 @@ async def run_debate_ensemble(samples: int = 1, **kwargs) -> dict:
 
     return {
         "confidence": min(r.get("confidence", 0.0) for r in usable),
-        "reasoning": usable[0].get("reasoning", ""),
+        # From the sample nearest the median, which is the estimate used --
+        # not whichever sample happened to finish first.
+        "reasoning": min(usable, key=lambda r: abs(r["estimated_probability"] - median)).get(
+            "reasoning", ""
+        ),
         "estimated_probability": median,
         "disagreement": probabilities[-1] - probabilities[0],
         "samples": len(usable),

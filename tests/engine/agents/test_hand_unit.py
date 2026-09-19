@@ -27,6 +27,13 @@ def mock_vault():
     vault.HARD_FLOOR_CENTS = HARD_FLOOR_CENTS
     vault.current_balance = 50000  # $500
     vault.get_available_balance.return_value = 50000
+    # Derived from the values above, read at call time so tests that replace
+    # get_available_balance or current_balance are still what sizing sees.
+    # Not locked: tradeable is the available balance.
+    vault.get_tradeable_balance.side_effect = lambda: vault.get_available_balance()
+    vault.get_floor_headroom.side_effect = lambda: max(
+        0, vault.current_balance - vault.HARD_FLOOR_CENTS
+    )
     vault.kill_switch_active = False
     vault.reserve_funds.return_value = True
     vault.confirm_reservation = MagicMock()

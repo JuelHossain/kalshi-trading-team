@@ -113,6 +113,70 @@ def block_network(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def isolate_settings_file(tmp_path, monkeypatch):
+    """Never let a test write the checkout's real engine/.env.
+
+    GhostEngine.initialize_system points the process-wide settings at
+    engine/.env, and it stays pointed there for the rest of the session: any
+    later test that calls settings.update then rewrote the live file. Seen on
+    2026-09-18, when a test run set the running bot's BRAIN_MIN_EDGE to 0.02
+    and BRAIN_ESTIMATE_SAMPLES to 2. Every test now gets a throwaway file,
+    and anything a test does to it -- or to boot_values -- is undone.
+    """
+    from pathlib import Path
+
+    from core.settings import Settings, settings
+
+    real = (Path(__file__).resolve().parents[2] / "engine" / ".env").resolve()
+    throwaway = tmp_path / "test.env"
+    original = Settings.env_path
+
+    def _set(self, value):
+        # Tests may point settings at their own temp files; only the real
+        # engine/.env is redirected.
+        path = Path(value).resolve() if value else None
+        original.fset(self, throwaway if path == real else value)
+
+    monkeypatch.setattr(Settings, "env_path", property(original.fget, _set))
+    monkeypatch.setattr(settings, "_env_path", None)
+    monkeypatch.setattr(settings, "boot_values", {})
+    yield
+
+
+@pytest.fixture(autouse=True)
+def reset_trading_mode(isolate_databases):
+    """trading_mode is process-global: a halt or live arm set by one test
+    (the kill switch routes set both) must not refuse or arm orders in the
+    next.
+
+    The paper book and paper bankroll are the same kind of process-wide
+    module state (see core.trading_mode), and were not reset here even
+    though several tests (test_hard_floor_race_condition,
+    test_kill_switch_atomicity, test_cycle_end_wiring, and others) drive
+    execute_single_cycle/authorize_cycle without ever calling
+    reset_paper_positions themselves. A paper bankroll seeded by one such
+    test then drove every later paper cycle in the same run, making those
+    tests' outcomes depend on run order. Autouse so no test can opt out by
+    forgetting to reset it.
+
+    Depends explicitly on isolate_databases so GHOST_VAULT_DB is already
+    pointed at this test's tmp path before reset_paper_positions's own
+    SQLite write runs -- without that dependency, fixture order between two
+    same-scope autouse fixtures is not guaranteed, and this would otherwise
+    risk touching the real database path.
+    """
+    from core import trading_mode
+
+    trading_mode.clear_halts()
+    trading_mode.set_live(False)
+    trading_mode.reset_paper_positions()
+    yield
+    trading_mode.clear_halts()
+    trading_mode.set_live(False)
+    trading_mode.reset_paper_positions()
+
+
+@pytest.fixture(autouse=True)
 def isolate_databases(tmp_path, monkeypatch):
     """Point every test at throwaway databases.
 
@@ -126,6 +190,7 @@ def isolate_databases(tmp_path, monkeypatch):
     monkeypatch.setenv("GHOST_VAULT_DB", str(tmp_path / "vault.db"))
     monkeypatch.setenv("GHOST_SYNAPSE_DB", str(tmp_path / "synapse.db"))
     monkeypatch.setenv("GHOST_LEDGER_DB", str(tmp_path / "ledger.db"))
+    monkeypatch.setenv("GHOST_JOURNAL_DB", str(tmp_path / "journal.db"))
 
 
 @pytest.fixture(scope="session")

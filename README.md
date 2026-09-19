@@ -13,7 +13,7 @@ pipeline that enforces lint and formatting. What it has *not* been shown to
 have is a trading edge — the honest reading of the data so far is that a
 grounded model tracks the market price to within a cent or two. See
 [Is the bot any good?](RUNBOOK.md#is-the-bot-any-good) before pointing it at
-real money. The dashboard is being redesigned; see [Frontend](#frontend).
+real money. The dashboard is described under [Frontend](#frontend-the-cockpit).
 
 ## What it does
 
@@ -48,6 +48,10 @@ real money. The dashboard is being redesigned; see [Frontend](#frontend).
 
 Agents communicate only through an in-process event bus. Opportunities,
 execution signals and errors persist in SQLite so a restart loses nothing.
+Every bus event of interest is also written to a journal
+(`ghost_journal.db`, `GET /journal`) and every Brain judgement to the
+decision ledger (`GET /decisions`), so how the bot behaved can be studied
+after the fact.
 
 ## Safety model
 
@@ -81,7 +85,7 @@ engine/
 tests/           pytest; blocks HTTP, isolates databases, needs no secrets
 docs/            architecture, HTTP API reference, design history
 ai-env/          instructions and personas for AI coding assistants
-frontend/        React dashboard — being replaced, see below
+frontend/        the cockpit: React 19 + Vite, see below
 ```
 
 ## Quick start
@@ -117,8 +121,13 @@ means, backtesting, stopping — is [RUNBOOK.md](RUNBOOK.md).
 
 ### Tuning
 
-Everything adjustable lives in `engine/core/constants.py`; the ones an
-operator is likely to touch are environment-overridable:
+Every adjustable value is a setting in `engine/core/settings.py`: its
+group, type, default, limits, whether it is a secret and whether a change
+needs a restart. Settings are read from the environment (`engine/.env`)
+and can be edited from the dashboard's Config view or with
+`POST /config`; the engine validates the batch, writes it back to `.env`,
+and applies it live wherever the reader can be patched. The most common
+ones:
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -140,18 +149,35 @@ black --check engine tests
 All three run in CI on every push and pull request. A test that must reach
 the network says so with a marker; everything else runs against fakes.
 
-## Frontend
+## Frontend: the cockpit
 
-The React dashboard under `frontend/` is the original cockpit and is being
-replaced. A new frontend is in design now and will land after v1; it will
-consume the engine's HTTP and SSE interface exactly as documented in
-[`docs/api/README.md`](docs/api/README.md), which is the contract between the
-two. Until then the engine is fully operable from the command line and any
-HTTP client, as shown above.
+`frontend/` is the dashboard. The pipeline is drawn as an orrery: the
+Synapse store is the star at the centre and the four agents orbit it; an
+agent that finishes throws its payload at the star, the star catches it,
+then throws a signal out to the next agent. Click a planet or the star to
+inspect what it is working on and its run history. Orders, the bankroll, a
+live trace and the guardrails are alongside. Everything on screen is driven
+by the running engine through the HTTP and SSE interface documented in
+[`docs/api/README.md`](docs/api/README.md); nothing is simulated.
+
+```bash
+cd frontend && npm install && npm run dev   # http://localhost:3000, proxies /api to :3002
+```
+
+For a deployment there is no separate web server: `npm run build` in
+`frontend/` and the engine serves the result itself at `/` on port 3002
+(set `SERVE_FRONTEND=false` to turn that off).
+
+Sign in with the engine's `AUTH_PASSWORD`. Demo asks for paper cycles,
+Production asks for live ones; the server's `IS_PAPER_TRADING` pin has the
+final say either way. See [frontend/README.md](frontend/README.md) for how
+each panel is wired.
 
 ## Documentation
 
 - [RUNBOOK.md](RUNBOOK.md) — install, configure, run, watch, stop
+- [docs/DEPLOY.md](docs/DEPLOY.md) — the Fedora mini PC deployment: one
+  service, Tailscale for access from anywhere, Claude Code from your phone
 - [docs/architecture/README.md](docs/architecture/README.md) — agents, bus,
   queues, capital rails, the model and why it is grounded
 - [docs/api/README.md](docs/api/README.md) — every HTTP route the engine serves

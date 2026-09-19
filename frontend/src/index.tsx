@@ -3,20 +3,16 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
-import { Agent13Intervention } from './components/Agent13Intervention';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error('Could not find root element to mount to');
 }
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <Agent13Intervention>
-        <App />
-      </Agent13Intervention>
+      <App />
     </ErrorBoundary>
   </React.StrictMode>
 );

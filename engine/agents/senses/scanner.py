@@ -5,6 +5,7 @@ Handles Kalshi market fetching, filtering, and stock management.
 
 from datetime import UTC, datetime, timedelta
 
+from core import constants
 from core.error_dispatcher import ErrorSeverity
 from core.flow_control import check_execution_queue_limit
 
@@ -15,16 +16,19 @@ from core.flow_control import check_execution_queue_limit
 # page of results.
 MVE_PREFIX = "KXMVE"
 
-MIN_VOLUME = 200
-MAX_SPREAD_CENTS = 8
-MAX_DAYS_TO_CLOSE = 10
+# Boot-time values; the settings applier rewrites these module globals in
+# place, and is_tradeable reads them at call time.
+MIN_VOLUME = constants.SENSES_MIN_VOLUME
+MAX_SPREAD_CENTS = constants.SENSES_MAX_SPREAD_CENTS
+MAX_DAYS_TO_CLOSE = constants.SENSES_MAX_DAYS_TO_CLOSE
 
-# Markets requested per page, and the ceiling on pages walked before giving
-# up. Paging exists only because combo shards crowd out real markets; the
-# loop stops the moment the stock buffer is full, so a normal restock reads
-# far fewer than the ceiling.
-MARKET_PAGE_SIZE = 500
-MAX_MARKET_PAGES = 8
+# Markets per page (Kalshi's maximum) and the ceiling on pages per scan.
+# The ceiling was 8 x 500: every scan stopped at 4,000 markets while the
+# 10-day window held over 60,000 even with combos excluded, so the engine
+# only ever saw one Monday-night game and some NASCAR -- seven other NFL
+# games, MLB and gas prices, the most liquid markets there were, never.
+MARKET_PAGE_SIZE = 1000
+MAX_MARKET_PAGES = constants.SENSES_MAX_MARKET_PAGES
 
 
 def _money(value) -> float:
@@ -80,12 +84,11 @@ async def fetch_kalshi_markets(
     `exclude` is a set of tickers to skip -- typically those queued recently.
     Restock re-fetched the top of the same volume ranking every time, so the
     same ten NFL markets were analysed cycle after cycle: a grounded Gemini
-    call each, and the same approval reaching the Hand again. Paging continues
-    past excluded tickers until `needed` new ones are found.
+    call each, and the same approval reaching the Hand again.
 
-    Walks pages only until the stock buffer can be filled. The buffer is
-    then drained a batch at a time across cycles, so one restock covers
-    several cycles and no cycle pulls thousands of markets it will discard.
+    Walks the whole close window (up to MAX_MARKET_PAGES) and ranks what it
+    found by volume. The buffer is then drained a batch at a time across
+    cycles, so one scan covers several cycles.
     """
     if not kalshi_client:
         await log_callback("ERROR: Kalshi client not initialized.", level="ERROR")
@@ -98,23 +101,47 @@ async def fetch_kalshi_markets(
     tradeable: list[dict] = []
     seen = 0
     cursor: str | None = None
+    hit_page_ceiling = False
 
     try:
-        for _ in range(MAX_MARKET_PAGES):
-            page, cursor = await kalshi_client.get_markets_page(
-                limit=MARKET_PAGE_SIZE,
-                min_close_ts=min_close,
-                max_close_ts=max_close,
-                cursor=cursor,
-            )
+        for page_num in range(MAX_MARKET_PAGES):
+            try:
+                page, cursor = await kalshi_client.get_markets_page(
+                    limit=MARKET_PAGE_SIZE,
+                    min_close_ts=min_close,
+                    max_close_ts=max_close,
+                    cursor=cursor,
+                    mve_filter="exclude",
+                )
+            except Exception as e:
+                # A page failing partway through used to discard every
+                # market already collected, on the same walk that server-
+                # side mve_filter was added to make short. Whatever was
+                # found before the failure is still real and worth keeping.
+                await log_callback(
+                    f"Kalshi fetch error on page {page_num + 1}: {str(e)[:100]}"
+                    + (f"; keeping {len(tradeable)} already found" if tradeable else ""),
+                    level="ERROR",
+                )
+                break
+
             if not page:
                 break
 
             seen += len(page)
             tradeable.extend(m for m in page if is_tradeable(m) and m.get("ticker") not in exclude)
 
-            if len(tradeable) >= needed or not cursor:
+            # No early exit once `needed` are found: the listing is not in
+            # volume order, so the first 30 tradeable markets are an arbitrary
+            # slice, not the best. Walk the window, then rank by volume below.
+            if not cursor:
                 break
+        else:
+            # The for/else `else` runs only when the loop completed all
+            # MAX_MARKET_PAGES iterations without an internal `break`, i.e.
+            # `needed` was never met and the cursor never ran out -- there
+            # was more to see and the ceiling, not the market, ended it.
+            hit_page_ceiling = True
 
         tradeable.sort(key=lambda m: _money(m.get("volume_fp")), reverse=True)
         selected = tradeable[:needed]
@@ -125,11 +152,18 @@ async def fetch_kalshi_markets(
             f"closing within {MAX_DAYS_TO_CLOSE}d)",
             level="INFO",
         )
+        if hit_page_ceiling:
+            await log_callback(
+                f"Hit the {MAX_MARKET_PAGES}-page scan ceiling with more markets still "
+                "available (cursor not exhausted). Real markets past this point were not "
+                "seen this scan.",
+                level="WARN",
+            )
         return selected
 
     except Exception as e:
         await log_callback(f"Kalshi fetch error: {str(e)[:100]}", level="ERROR")
-        return []
+        return tradeable[:needed] if tradeable else []
 
 
 async def queue_from_stock(
@@ -144,9 +178,14 @@ async def queue_from_stock(
         await log_callback("Stock buffer empty. Cannot queue.", level="WARN")
         return 0
 
-    # Take top QUEUE_BATCH_SIZE from stock
+    # Take the top batch OUT of the stock, in place -- both callers pass the
+    # agent's own list. Slicing copies left the stock untouched, so every
+    # restock re-queued the same top ten, markets past them were never
+    # queued, and the stock never emptied -- which is the condition the
+    # Senses rescan waits for, so the engine stalled with stock "on hand".
     to_queue = market_stock[:queue_batch_size]
-    remaining = market_stock[queue_batch_size:]
+    del market_stock[:queue_batch_size]
+    remaining = market_stock
 
     await log_callback(
         f"Queueing {len(to_queue)} markets from stock (remaining in stock: {len(remaining)})"

@@ -29,7 +29,13 @@ proxy a single prefix. All bodies are JSON.
 |---|---|---|
 | `GET` | `/health` | `{"status", "agents", "cycle", "balance"}`. Note that "healthy" means the process is up, not that a cycle can run. |
 | `GET` | `/env-health` | Which optional services are configured and reachable. |
-| `GET` | `/synapse/queues` | Sizes of the opportunity, execution and error queues. |
+| `GET` | `/synapse/queues` | Sizes of the opportunity and execution queues, with up to ten queued items from each. |
+| `GET` | `/orders` | Executed orders from the decision ledger, newest first. `?limit=` caps rows (default 200). Each row carries `side`, `price_cents`, `count`, `stake_cents`, `order_id`, `settled_yes`, `exit_price_cents`, `exited_at`, `closed` (true once a row has either an exit or a settlement) and `pnl_cents` (set once a row is exited or settled -- null until then, and it can stay null after an exit whose price could not be read). |
+| `GET` | `/config` | `groups`: every editable setting (`core/settings.py` registry) with its kind, help, limits, whether it needs a restart, and its current value; secrets carry only `set` and a four-character `hint`. `runtime`: the effective limits (`paper_pinned`, `live_armed`, `kalshi_env`, `brain`, `senses`, `hand`, `vault`, `queues`). `env_file`: where saves are persisted. |
+| `POST` | `/config` | Body `{"changes": {"KEY": value, ...}}`. Validated as a batch (one bad value rejects all), persisted to the engine's `.env`, applied live where the reader can be patched. Reply: `applied`, `restart_required`, `errors`, plus the fresh `config`. Requires a signed-in dashboard session or `Authorization: Bearer <GHOST_API_KEY>`. A value of `null` clears a key back to its default. |
+| `POST` | `/engine/restart` | Re-execs the engine process so restart-only settings take effect. Same auth as `POST /config`. |
+| `GET` | `/journal` | The durable event log (`ghost_journal.db`): every log line, estimate, verdict, fill, exit, vault reading and error, with agent, level and cycle. Filters `agent`, `topic`, `cycle`, `level`, `since_id` (pages forward, oldest first), `limit` (max 5000). |
+| `GET` | `/decisions` | Every Brain judgement from the ledger, approvals and vetoes alike, newest first: price, estimate, confidence, edge, outcome, veto reason, fill and settlement. `?limit=`, `?ticker=`. |
 | `GET` | `/pnl` | Balance history. |
 | `GET` | `/pnl/heatmap` | Daily P&L. |
 | `GET` | `/stream` | Server-sent events. Frames are `{"type": ...}` with type `LOG`, `VAULT`, `SIMULATION`, `STATE` or `ERROR`. |
@@ -38,7 +44,7 @@ proxy a single prefix. All bodies are JSON.
 
 | Method | Route | What it does |
 |---|---|---|
-| `POST` | `/auth/login` | Body `{"mode": "demo"}` or `{"mode": "production", "password": ...}`. Production mode is rate limited to 5 attempts per minute per IP. |
+| `POST` | `/auth/login` | Body `{"password": "<AUTH_PASSWORD>"}`. The password is required for every session; an empty one is refused with 401. A `mode` field is accepted and ignored: the dashboard uses it only to decide whether it asks for paper or live cycles, and the server's `IS_PAPER_TRADING` pin has the final say. |
 | `GET` | `/auth/verify` | Current session state. |
 | `POST` | `/auth/logout` | Clear it. |
 | `POST` | `/auth` | Legacy check used by the original dashboard. |
