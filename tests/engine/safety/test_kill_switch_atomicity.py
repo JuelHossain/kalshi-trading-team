@@ -11,10 +11,15 @@ and autopilot re-armed: pressing Kill Switch or Cancel undid itself.
 authorize_cycle already refuses every cycle while manual_kill_switch is set
 (or, for Cancel, while autopilot is stopped) -- that is the actual halt, and
 these tests exercise it through the same handlers routes.py registers rather
-than hand-simulating the fix, so a regression here fails for real.
+than hand-simulating the fix, so a regression here fails for real. What these
+tests check is what the handlers set (manual_kill_switch, the trading_mode
+halt); GhostEngine.authorize_cycle's own kill-switch check is pinned
+separately, against a real engine, in
+test_safety_ragnarok_protocol.py::test_ragnarok_emergency_lockdown.
 """
 
 import pytest
+from core import trading_mode
 from core.synapse import Synapse
 from http_api.routes import activate_kill_switch, cancel_cycle, deactivate_kill_switch
 
@@ -50,10 +55,6 @@ class _Engine:
         self.vault = _Vault()
         self.synapse = synapse
 
-    async def authorize_cycle(self) -> bool:
-        """The one real gate: mirrors main.GhostEngine.authorize_cycle's kill-switch check."""
-        return not self.manual_kill_switch
-
 
 class _Request:
     pass
@@ -76,29 +77,36 @@ class TestKillSwitchDoesNotStopTheProcess:
 
     @pytest.mark.asyncio
     async def test_kill_switch_halts_cycle_authorization(self, engine):
-        """The real halt: authorize_cycle refuses while the switch is set."""
+        """The handler sets both flags the real gate reads: manual_kill_switch
+        (checked by GhostEngine.authorize_cycle) and the trading_mode halt
+        (checked by place_order). This is a handler test, not the real gate
+        itself -- that is pinned against a real GhostEngine.authorize_cycle in
+        test_safety_ragnarok_protocol.py::test_ragnarok_emergency_lockdown.
+        """
         await activate_kill_switch(engine)(_Request())
 
-        assert await engine.authorize_cycle() is False
+        assert engine.manual_kill_switch is True
+        assert trading_mode.is_halted()
 
     @pytest.mark.asyncio
     async def test_kill_switch_persists_across_checks(self, engine):
-        """Repeated authorization attempts stay refused; the switch does not self-clear."""
+        """Repeated reads stay refused; the switch does not self-clear."""
         await activate_kill_switch(engine)(_Request())
 
         for _ in range(5):
-            assert await engine.authorize_cycle() is False
             assert engine.manual_kill_switch is True
+            assert trading_mode.is_halted()
 
     @pytest.mark.asyncio
     async def test_deactivate_clears_it_and_cycles_resume(self, engine):
         await activate_kill_switch(engine)(_Request())
-        assert await engine.authorize_cycle() is False
+        assert engine.manual_kill_switch is True
+        assert trading_mode.is_halted()
 
         await deactivate_kill_switch(engine)(_Request())
 
         assert engine.manual_kill_switch is False
-        assert await engine.authorize_cycle() is True
+        assert not trading_mode.is_halted()
         assert engine.running is True
 
 
