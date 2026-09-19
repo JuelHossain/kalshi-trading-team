@@ -333,8 +333,19 @@ export function orderFromLedger(row: {
   count: number | null;
   pnl_cents: number | null;
   settled_yes: number | null;
+  exited_at?: string | null;
+  closed?: boolean;
 }): Order {
   const ts = Date.parse(row.decided_at) || Date.now();
+  // A position closed early (an exit, or Ragnarok) has no settled_yes for
+  // however long it takes the market to resolve, but it is not "open" any
+  // more -- and once ledger.recent_fills has an exit price, pnl_cents is
+  // already the realised result, not a settlement placeholder. Fall back to
+  // settled_yes/exited_at for older payloads that predate `closed`.
+  const closed =
+    row.closed ??
+    ((row.settled_yes !== null && row.settled_yes !== undefined) ||
+      (row.exited_at !== null && row.exited_at !== undefined));
   return {
     id: `ledger-${row.id}`,
     ts,
@@ -343,7 +354,7 @@ export function orderFromLedger(row: {
     side: (row.side || 'yes').toUpperCase() === 'NO' ? 'NO' : 'YES',
     qty: row.count ?? 0,
     px: row.price_cents ?? 0,
-    status: row.settled_yes === null || row.settled_yes === undefined ? 'open' : 'filled',
+    status: closed ? 'filled' : 'open',
     pnl: row.pnl_cents === null || row.pnl_cents === undefined ? null : row.pnl_cents / 100,
   };
 }

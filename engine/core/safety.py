@@ -9,7 +9,37 @@ import asyncio
 from typing import Any
 
 from core.display import AgentType, log_critical, log_error, log_info
+from core.ledger import record_exit
 from core.network import kalshi_client
+
+
+async def _closing_bid_cents(ticker: str, side: str) -> int | None:
+    """Best resting bid on `side`, read just after the close order fills.
+
+    Ragnarok's own close is a 1c marketable limit (KalshiClient.close_position)
+    so it guarantees a fill, not a price the ledger can use -- the same reason
+    hand/agent.py's check_exits prices its own exits from the book rather than
+    from the close order. Unlike check_exits, which reads its exit price
+    *before* placing the close, both callers here call this only after
+    close_position has already returned: the 1c marketable sell has already
+    hit the book by the time this reads it, so it is the best approximation
+    available afterwards, not literally what the close itself traded at.
+    agents.hand.execution is the one place that knows the orderbook's shapes
+    (see its own docstring); imported here, not at module scope, to keep
+    core from depending on agents at import time.
+
+    Never raises: a failed read must not stop the position from having been
+    flattened, it just leaves the ledger row's exit price unknown.
+    """
+    from agents.hand.execution import parse_orderbook
+
+    try:
+        raw = await kalshi_client.get_orderbook(ticker)
+    except Exception as e:
+        log_error(f"Could not price the {ticker} exit for the ledger: {e}", AgentType.HAND)
+        return None
+    book = parse_orderbook(raw, side=side)
+    return book["best_bid"] if book else None
 
 
 async def execute_ragnarok() -> dict[str, Any]:
@@ -88,13 +118,23 @@ async def _paper_ragnarok() -> dict[str, Any]:
     holdings = [p for p in trading_mode.paper_positions() if p.get("position")]
     closed = 0
     for position in holdings:
+        ticker = position["ticker"]
         quantity = int(position["position"])
         side = "no" if quantity < 0 else "yes"
         try:
-            if await kalshi_client.close_position(position["ticker"], abs(quantity), side=side):
-                closed += 1
+            result = await kalshi_client.close_position(ticker, abs(quantity), side=side)
         except Exception as e:
-            log_error(f"Failed to close paper {position['ticker']}: {e}", AgentType.HAND)
+            log_error(f"Failed to close paper {ticker}: {e}", AgentType.HAND)
+            continue
+        if result:
+            closed += 1
+            # Outside the try above: the close itself already succeeded, so
+            # a failure reading the book afterwards must not be reported as
+            # "Failed to close paper" -- _closing_bid_cents never raises and
+            # leaves the exit price unknown instead. Without this call, an
+            # exited fill sits unsettled and later gets priced off however
+            # the market resolves (see core.ledger.record_exit).
+            record_exit(ticker, side, await _closing_bid_cents(ticker, side))
 
     # Read-only: say plainly if there is real exposure this did not touch.
     real = 0
@@ -203,6 +243,11 @@ async def _close_all_positions() -> tuple[int, int]:
             return False
         if result:
             log_info(f"Closed {count} contracts of {ticker}", AgentType.HAND)
+            # Without this, an exited fill sits unsettled and later gets
+            # priced off however the market resolves (see
+            # core.ledger.record_exit), not off what this flatten actually
+            # fetched.
+            record_exit(ticker, side, await _closing_bid_cents(ticker, side))
             return True
         log_error(f"Failed to close {ticker}", AgentType.HAND)
         return False

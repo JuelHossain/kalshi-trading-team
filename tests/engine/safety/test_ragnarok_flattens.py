@@ -12,7 +12,20 @@ method did not exist.
 from unittest.mock import AsyncMock
 
 import pytest
+from core import ledger
 from core.safety import execute_ragnarok
+
+
+def _orderbook(yes_bid_cents: int) -> dict:
+    """A real orderbook_fp quoting YES at `yes_bid_cents`, NO at its mirror."""
+    yes = max(1, min(99, yes_bid_cents))
+    no = 100 - yes
+    return {
+        "orderbook_fp": {
+            "yes_dollars": [[f"{yes / 100:.2f}", "100"]],
+            "no_dollars": [[f"{no / 100:.2f}", "100"]],
+        }
+    }
 
 
 @pytest.fixture
@@ -184,6 +197,71 @@ class TestTheClientCanExpressASell:
         assert sent["reduce_only"] is True
         assert sent["count"] == "10.00"
         assert sent["ticker"] == "KXA"
+
+
+class TestRagnarokRecordsTheExitInTheLedger:
+    """A Ragnarok close is the same kind of early exit as check_exits'own:
+    without recording it, the fill sits unsettled until the market resolves
+    and then gets priced off however it settled, not off what the emergency
+    flatten actually fetched (see core.ledger.record_exit)."""
+
+    @pytest.mark.asyncio
+    async def test_a_live_close_is_recorded_at_the_book_s_bid(self, kalshi):
+        ledger.record_decision("KXA", 0.60, outcome="APPROVED", estimated_probability=0.3)
+        ledger.record_fill("KXA", 600, "kalshi-order-kxa", side="yes", price_cents=60, count=10)
+        kalshi.get_positions = AsyncMock(
+            return_value=[{"ticker": "KXA", "position": 10, "market_exposure": 600}]
+        )
+        kalshi.get_orderbook = AsyncMock(return_value=_orderbook(20))
+
+        await execute_ragnarok()
+
+        (fill,) = ledger.recent_fills()
+        assert fill["exit_price_cents"] == 20
+        assert fill["closed"] is True
+        assert fill["pnl_cents"] == -400  # (20 - 60)c x 10, not a settlement guess
+
+    @pytest.mark.asyncio
+    async def test_an_unreadable_book_still_marks_the_row_closed(self, kalshi):
+        """The flatten already happened; a failed price read must not leave
+        the row looking untouched and open to being priced off settlement."""
+        ledger.record_decision("KXB", 0.60, outcome="APPROVED", estimated_probability=0.3)
+        ledger.record_fill("KXB", 600, "kalshi-order-kxb", side="yes", price_cents=60, count=10)
+        kalshi.get_positions = AsyncMock(
+            return_value=[{"ticker": "KXB", "position": 10, "market_exposure": 600}]
+        )
+        kalshi.get_orderbook = AsyncMock(side_effect=RuntimeError("book unreadable"))
+
+        await execute_ragnarok()
+
+        (fill,) = ledger.recent_fills()
+        assert fill["exit_price_cents"] is None
+        assert fill["closed"] is True
+        assert fill["pnl_cents"] is None
+
+    @pytest.mark.asyncio
+    async def test_an_unreadable_book_stays_unpriced_even_after_the_market_settles(self, kalshi):
+        """The exit above leaves exit_price_cents NULL with exited_at set.
+        Once the market later settles, that row must not fall back to the
+        settlement formula -- it is no longer the position settlement
+        priced -- so pnl_cents stays None and realised_edge leaves it out.
+        """
+        ledger.record_decision("KXC", 0.60, outcome="APPROVED", estimated_probability=0.3)
+        ledger.record_fill("KXC", 600, "kalshi-order-kxc", side="yes", price_cents=60, count=10)
+        kalshi.get_positions = AsyncMock(
+            return_value=[{"ticker": "KXC", "position": 10, "market_exposure": 600}]
+        )
+        kalshi.get_orderbook = AsyncMock(side_effect=RuntimeError("book unreadable"))
+
+        await execute_ragnarok()
+        ledger.record_settlement("KXC", settled_yes=True)
+
+        (fill,) = ledger.recent_fills()
+        assert fill["settled_yes"] == 1
+        assert fill["pnl_cents"] is None
+
+        edge = ledger.realised_edge()
+        assert edge["n"] == 0
 
 
 class TestPaperRagnarok:

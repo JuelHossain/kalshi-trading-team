@@ -174,3 +174,73 @@ class TestSettlementCreditsTheBankroll:
         await hand.settle_positions()
 
         assert trading_mode.paper_cash() == after_buy
+
+
+def _orderbook(yes_bid_cents: int) -> dict:
+    """A real orderbook_fp quoting YES at `yes_bid_cents`, NO at its mirror.
+
+    check_exits reads the resting bid on the held side via parse_orderbook,
+    so a self-consistent two-sided book reproduces "the market is trading at
+    X" for either side. Same construction as test_exit_policy.py's _book.
+    """
+    yes = max(1, min(99, yes_bid_cents))
+    no = 100 - yes
+    return {
+        "orderbook_fp": {
+            "yes_dollars": [[f"{yes / 100:.2f}", "100"]],
+            "no_dollars": [[f"{no / 100:.2f}", "100"]],
+        }
+    }
+
+
+class TestAnExitIsPricedFromItsOwnExitNotFromSettlement:
+    """The regression this module exists to close: settle_positions settles
+    every unsettled fill, exited or not, because calibration still needs
+    settled_yes on the row. Before record_exit existed, that meant an
+    exited fill's realised P&L in recent_fills/realised_edge was computed
+    from the settlement outcome the position was no longer exposed to --
+    a take-profit exit reported as the settlement loss, or a stop-loss
+    reported as the settlement win. check_exits -> settle_positions is the
+    exact sequence one paper cycle boundary runs them in.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_yes_take_profit_is_not_reported_as_the_settlement_loss(self, hand):
+        trading_mode.seed_paper_cash(100_000)
+        trading_mode.paper_fill("YTP", "yes", 40, 10, "buy")
+        _approved_fill("YTP", side="yes", price_cents=40, stake=400)
+        hand.kalshi_client.get_positions = AsyncMock(return_value=[])
+        hand.kalshi_client.get_orderbook = AsyncMock(return_value=_orderbook(90))
+        hand.kalshi_client.close_position = AsyncMock(return_value={"order_id": "paper-close"})
+
+        closed = await hand.check_exits()
+        assert closed == 1  # take profit: 90c captures most of the 40->100 move
+
+        hand.kalshi_client.get_market = AsyncMock(
+            return_value={"status": "settled", "result": "no"}
+        )
+        await hand.settle_positions()
+
+        (fill,) = ledger.recent_fills()
+        assert fill["pnl_cents"] == 500  # (90 - 40)c x 10, not the settlement loss
+        assert fill["closed"] is True
+
+    @pytest.mark.asyncio
+    async def test_a_yes_stop_loss_is_not_reported_as_a_settlement_win(self, hand):
+        trading_mode.seed_paper_cash(100_000)
+        trading_mode.paper_fill("YSL", "yes", 60, 10, "buy")
+        _approved_fill("YSL", side="yes", price_cents=60, stake=600)
+        hand.kalshi_client.get_positions = AsyncMock(return_value=[])
+        hand.kalshi_client.get_orderbook = AsyncMock(return_value=_orderbook(20))
+        hand.kalshi_client.close_position = AsyncMock(return_value={"order_id": "paper-close"})
+
+        closed = await hand.check_exits()
+        assert closed == 1  # stop loss: 20c is a decisive loss on a 60c entry
+
+        hand.kalshi_client.get_market = AsyncMock(
+            return_value={"status": "settled", "result": "yes"}
+        )
+        await hand.settle_positions()
+
+        (fill,) = ledger.recent_fills()
+        assert fill["pnl_cents"] == -400  # (20 - 60)c x 10, not a settlement win

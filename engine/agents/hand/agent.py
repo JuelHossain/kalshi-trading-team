@@ -14,6 +14,7 @@ from core.bus import EventBus
 from core.ledger import (
     outcome_from_market,
     record_decision,
+    record_exit,
     record_fill,
     record_settlement,
     unsettled_fill_tickers,
@@ -161,6 +162,15 @@ class HandAgent(BaseAgent):
                     # this is the one place that knows what the exit was
                     # actually worth.
                     trading_mode.adjust_paper_cash(current * abs(int(quantity)))
+                # `current` is the same held-side bid credited above (or, in
+                # live mode, what closing at this decision was worth): the
+                # fill's own exit price, not the settlement outcome the
+                # market has not reached yet. Without this, settle_positions
+                # would go on pricing this fill off however the market
+                # eventually resolves -- a take-profit exit scored as the
+                # settlement loss, or a stop-loss scored as the settlement
+                # win (see core.ledger.record_exit).
+                record_exit(ticker, side, current)
                 record_decision(
                     ticker,
                     current / 100.0,

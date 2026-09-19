@@ -50,6 +50,14 @@ _FILL_COLUMNS = {
     "side": "TEXT",
     "price_cents": "INTEGER",
     "count": "INTEGER",
+    # A position closed early (check_exits, Ragnarok) still sits here with
+    # settled_yes NULL until the market actually resolves. Without its own
+    # exit price, recent_fills and realised_edge had only the settlement
+    # formula to fall back on and scored the trade as though it had been
+    # held to expiry -- a take-profit exit could settle against and be
+    # reported as a loss, or a stop-loss settle for and be reported as a win.
+    "exit_price_cents": "INTEGER",
+    "exited_at": "TEXT",
 }
 
 _SETTLED_STATUSES = {"settled", "finalized", "determined"}
@@ -216,6 +224,86 @@ def record_settlement(ticker: str, settled_yes: bool) -> int:
         return 0
 
 
+@retry_sqlite()
+def record_exit(ticker: str, side: str, price_cents: int | None) -> int:
+    """Record that a fill was closed early, before the market settled.
+
+    check_exits and Ragnarok's closes (safety.py) both flatten a holding
+    ahead of settlement. Without this, the fill row never learns it was
+    exited: unsettled_fill_tickers keeps returning the ticker, the eventual
+    record_settlement call (for calibration's sake) sets settled_yes on it
+    like any other fill, and recent_fills/realised_edge would then price it
+    as though it had ridden to expiry -- a take-profit exit reported as a
+    loss if the market went on to settle against it, or a stop-loss
+    reported as a win if it settled for.
+
+    price_cents is the held side's own best bid at the moment of exit (what
+    a sell would actually fetch), never a close order's marketable-limit
+    price -- see check_exits and CLAUDE.md's one-chokepoint-for-money note.
+    It may be None (the book could not be read); the row is still marked
+    exited so it stops being priced off settlement. recent_fills and
+    realised_edge both treat "exited with no known price" as unpriced --
+    they leave the row out rather than falling back to the settlement
+    formula, which would price a position that was no longer held.
+
+    Only rows not yet settled AND not yet exited are touched (exited_at IS
+    NULL as well as settled_yes IS NULL), so this is safe to call more than
+    once and a row already exited at an unknown price cannot be re-stamped
+    by a later, unrelated exit on the same ticker and side -- e.g. a second
+    entry that gets flattened after the first one's price could not be read.
+
+    Rows written before `side` existed (b111d16) have side NULL and cannot
+    be matched with `side = ?`; defaulting them to "yes" would repeat the
+    same default-to-yes mistake realised_edge's docstring already covers
+    for a stored side. Resolved the same way recent_fills/realised_edge
+    recover a missing side -- _parse_order_id on the fill's own order id --
+    then updated by row id rather than by a blanket equality.
+
+    No LIMIT beyond that: an exit flattens the whole signed holding, which
+    can span more than one still-open fill on that ticker and side. Never
+    raises: this runs on the cycle boundary and the emergency path, neither
+    of which may be taken down by a ledger failure.
+    """
+    if not side:
+        return 0
+    side = side.lower()
+    price = int(price_cents) if price_cents is not None else None
+    exited_at = datetime.now(UTC).isoformat()
+    try:
+        with _connect() as conn:
+            cur = conn.execute(
+                """UPDATE decisions
+                      SET exit_price_cents = ?, exited_at = ?
+                    WHERE ticker = ? AND order_id IS NOT NULL
+                      AND settled_yes IS NULL AND exited_at IS NULL
+                      AND side = ?""",
+                (price, exited_at, ticker, side),
+            )
+            updated = cur.rowcount
+
+            legacy = conn.execute(
+                """SELECT id, order_id, market_price, stake_cents FROM decisions
+                    WHERE ticker = ? AND order_id IS NOT NULL
+                      AND settled_yes IS NULL AND exited_at IS NULL
+                      AND side IS NULL""",
+                (ticker,),
+            ).fetchall()
+            legacy_ids = [
+                row_id
+                for row_id, order_id, market_price, stake_cents in legacy
+                if _parse_order_id(order_id, market_price, stake_cents)[0] == side
+            ]
+            if legacy_ids:
+                conn.executemany(
+                    "UPDATE decisions SET exit_price_cents = ?, exited_at = ? WHERE id = ?",
+                    [(price, exited_at, row_id) for row_id in legacy_ids],
+                )
+                updated += len(legacy_ids)
+            return updated
+    except Exception:
+        return 0
+
+
 def calibration(buckets: int = 5) -> list[dict]:
     """Group settled predictions and compare belief against reality.
 
@@ -300,15 +388,25 @@ def recent_fills(limit: int = 200) -> list[dict]:
     A fill is an APPROVED decision that record_fill attached an order id to.
     record_fill now stores the ticket (side, price_cents, count) directly;
     _parse_order_id is kept only for rows written before those columns
-    existed, or for a caller that did not supply them. Settled rows carry
-    the realised P&L in cents; open rows carry None.
+    existed, or for a caller that did not supply them. A position closed
+    early (record_exit) prices its P&L from its own exit, not from
+    settlement -- otherwise a take-profit exit that the market later settled
+    against would report the settlement loss instead of the profit actually
+    banked, and the reverse for a stop-loss. `closed` is true once a row has
+    either an exit or a settlement, so the Orders panel does not keep
+    showing an exited position as open for however long it takes the market
+    to resolve. A row exited with no known price (exited_at set,
+    exit_price_cents NULL -- the book could not be read at the moment of
+    exit) stays `closed` but its `pnl_cents` stays None even after the
+    market settles, rather than falling back to the settlement formula for
+    a position that was no longer held.
     """
     try:
         with _connect() as conn:
             rows = conn.execute(
                 """SELECT id, decided_at, ticker, market_price, estimated_probability,
                           edge, stake_cents, order_id, settled_yes, settled_at,
-                          side, price_cents, count
+                          side, price_cents, count, exit_price_cents, exited_at
                      FROM decisions
                     WHERE order_id IS NOT NULL
                     ORDER BY id DESC
@@ -334,11 +432,24 @@ def recent_fills(limit: int = 200) -> list[dict]:
             side,
             price_cents,
             count,
+            exit_price_cents,
+            exited_at,
         ) = row
         if side is None or price_cents is None or count is None:
             side, price_cents, count = _parse_order_id(order_id, market_price, stake_cents)
         pnl_cents = None
-        if settled_yes is not None and price_cents and count:
+        if exit_price_cents is not None and price_cents and count:
+            # Both prices are already in the held side's own terms (the bid
+            # check_exits/Ragnarok read for that side), so the sign works
+            # out the same regardless of side -- unlike the settlement
+            # formula below, which has to know which side won.
+            pnl_cents = (exit_price_cents - price_cents) * count
+        elif exited_at is None and settled_yes is not None and price_cents and count:
+            # A row can have exited_at set with exit_price_cents still NULL
+            # (the book could not be read at the moment of exit -- see
+            # record_exit). That row must not fall through to settlement
+            # once the market resolves: it is no longer the position that
+            # settlement priced, so it stays unpriced instead.
             won = bool(settled_yes) if side == "yes" else not bool(settled_yes)
             pnl_cents = (100 - price_cents) * count if won else -price_cents * count
         fills.append(
@@ -356,6 +467,9 @@ def recent_fills(limit: int = 200) -> list[dict]:
                 "edge": edge,
                 "settled_yes": settled_yes,
                 "settled_at": settled_at,
+                "exit_price_cents": exit_price_cents,
+                "exited_at": exited_at,
+                "closed": settled_yes is not None or exited_at is not None,
                 "pnl_cents": pnl_cents,
             }
         )
@@ -405,32 +519,66 @@ def realised_edge() -> dict:
     recent_fills uses -- a legacy PAPER- id encodes its own side correctly, so
     defaulting it to "yes" here (as this used to) flipped those rows' P&L
     exactly like a real order id with no ticket does.
+
+    A row closed early (record_exit) prices off its own exit, not off
+    settlement -- otherwise a stop-loss that the market went on to settle
+    for would be scored as the win it never was. settled_yes is still
+    required for a row to appear here at all, because calibration is what
+    needs it, and an exit does not stop the market from eventually
+    resolving.
+
+    A row can be exited with no known price (the book could not be read at
+    the moment of exit -- see record_exit): exit_price_cents is NULL but
+    exited_at is not. That row is left out of n, expected and realised
+    entirely, the same way recent_fills leaves its pnl_cents unset, rather
+    than falling back to the settlement payoff for a position that was no
+    longer held by the time the market resolved.
     """
     with _connect() as conn:
-        rows = conn.execute(
-            """SELECT market_price, edge, settled_yes, side, price_cents, order_id, stake_cents
+        rows = conn.execute("""SELECT market_price, edge, settled_yes, side, price_cents, order_id,
+                      stake_cents, exit_price_cents, exited_at
                  FROM decisions
                 WHERE settled_yes IS NOT NULL
                   AND outcome = 'APPROVED'
-                  AND edge IS NOT NULL"""
-        ).fetchall()
+                  AND edge IS NOT NULL""").fetchall()
 
     if not rows:
         return {"n": 0, "expected": None, "realised": None}
 
+    n = 0
     total_expected = 0.0
     total_realised = 0.0
-    for market_price, edge, settled_yes, side, price_cents, order_id, stake_cents in rows:
+    for (
+        market_price,
+        edge,
+        settled_yes,
+        side,
+        price_cents,
+        order_id,
+        stake_cents,
+        exit_price_cents,
+        exited_at,
+    ) in rows:
+        if exited_at is not None and exit_price_cents is None:
+            continue
         if side is None:
             side, price_cents, _count = _parse_order_id(order_id, market_price, stake_cents)
         side = side.lower()
         k = (price_cents / 100.0) if price_cents is not None else market_price
-        won = bool(settled_yes) if side == "yes" else not bool(settled_yes)
-        # A contract bought at k returns (1 - k) if its own side wins, else -k.
-        total_realised += (1 - k) if won else -k
+        if exit_price_cents is not None and price_cents is not None:
+            # Both prices are already in the held side's own terms, so no
+            # side branch is needed here -- see recent_fills.
+            total_realised += (exit_price_cents - price_cents) / 100.0
+        else:
+            won = bool(settled_yes) if side == "yes" else not bool(settled_yes)
+            # A contract bought at k returns (1 - k) if its own side wins, else -k.
+            total_realised += (1 - k) if won else -k
         total_expected += edge if side == "yes" else -edge
+        n += 1
 
-    n = len(rows)
+    if n == 0:
+        return {"n": 0, "expected": None, "realised": None}
+
     expected = total_expected / n
     realised = total_realised / n
     return {

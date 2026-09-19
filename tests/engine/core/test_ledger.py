@@ -6,7 +6,14 @@ from the outside to one that is right, until the money is gone.
 """
 
 import pytest
-from core.ledger import calibration, realised_edge, record_decision, record_fill, record_settlement
+from core.ledger import (
+    calibration,
+    realised_edge,
+    record_decision,
+    record_exit,
+    record_fill,
+    record_settlement,
+)
 
 
 class TestRecording:
@@ -142,3 +149,35 @@ class TestRealisedEdgeIsSideAware:
 
         assert result["realised"] == pytest.approx(0.30)  # 1 - 0.70, not -0.70
         assert result["expected"] == pytest.approx(-0.45)
+
+
+class TestRealisedEdgePricesAnExitFromItsOwnExit:
+    """A row closed early must be scored on what the exit actually banked,
+    not on however the market went on to settle -- see record_exit."""
+
+    def test_a_take_profit_is_not_scored_as_the_settlement_loss(self):
+        # Bought YES at 40c, exited at 90c (+0.50), then the market settles
+        # NO -- which would score as -0.40 if this were still priced off
+        # settlement instead of the exit.
+        record_decision("YTP", 0.40, "APPROVED", estimated_probability=0.85)
+        record_fill("YTP", 400, "kalshi-order-ytp", side="yes", price_cents=40, count=10)
+        record_exit("YTP", "yes", 90)
+        record_settlement("YTP", settled_yes=False)
+
+        result = realised_edge()
+
+        assert result["n"] == 1
+        assert result["realised"] == pytest.approx(0.50)
+
+    def test_a_stop_loss_is_not_scored_as_a_settlement_win(self):
+        # Bought YES at 60c, stopped out at 20c (-0.40), then the market
+        # settles YES -- which would score as +0.40 (a loss reported as a
+        # win) if this were still priced off settlement instead of the exit.
+        record_decision("YSL", 0.60, "APPROVED", estimated_probability=0.30)
+        record_fill("YSL", 600, "kalshi-order-ysl", side="yes", price_cents=60, count=10)
+        record_exit("YSL", "yes", 20)
+        record_settlement("YSL", settled_yes=True)
+
+        result = realised_edge()
+
+        assert result["realised"] == pytest.approx(-0.40)

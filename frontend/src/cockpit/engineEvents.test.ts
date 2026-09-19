@@ -197,4 +197,23 @@ describe('orderFromLedger', () => {
     });
     expect(o).toMatchObject({ status: 'open', pnl: null });
   });
+
+  it('reads an early exit as filled even before the market settles', () => {
+    // record_exit priced this fill before settled_yes was ever set; the
+    // panel must not keep showing it as open for however long settlement
+    // takes to catch up.
+    const o = orderFromLedger({
+      id: 9,
+      decided_at: '2026-09-18T02:55:00+00:00',
+      ticker: 'T',
+      side: 'yes',
+      price_cents: 40,
+      count: 10,
+      pnl_cents: 500,
+      settled_yes: null,
+      exited_at: '2026-09-18T03:00:00+00:00',
+      closed: true,
+    });
+    expect(o).toMatchObject({ status: 'filled', pnl: 5 });
+  });
 });
