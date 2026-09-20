@@ -1,6 +1,6 @@
 # Calibration report
 
-_Updated 2026-09-19 16:08 UTC_
+_Updated 2026-09-20 16:36 UTC_
 
 ```
 No settled predictions yet for variant 'blind'.
