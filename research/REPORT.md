@@ -1,19 +1,19 @@
 # Calibration report
 
-_Updated 2026-09-24 17:37 UTC_
+_Updated 2026-09-25 17:36 UTC_
 
 ```
 
 ==============================================================
-  variant: blind    settled markets: 5
+  variant: blind    settled markets: 6
 ==============================================================
 
 Forecast accuracy (lower is better)
-  model  Brier 0.0793   log loss 0.2700
-  market Brier 0.0855   log loss 0.2897
+  model  Brier 0.0699   log loss 0.2521
+  market Brier 0.0718   log loss 0.2517
 
 Paired difference (market Brier minus model Brier)
-  mean +0.0062  stderr 0.0043  t +1.42
+  mean +0.0020  stderr 0.0055  t +0.36
 
 Calibration of the model
   bucket             n   predicted   realised
@@ -21,12 +21,13 @@ Calibration of the model
   0.2 - 0.4          1       0.240      0.000
   0.4 - 0.6          1       0.480      1.000
   0.6 - 0.8          1       0.740      1.000
+  0.8 - 1.0          1       0.850      1.000
 
 Hypothetical P&L  (edge >= 0.10, confidence >= 0.00)
   no signals cleared the thresholds
 
 --------------------------------------------------------------
-  VERDICT: too early. 5 settled, want 100+.
+  VERDICT: too early. 6 settled, want 100+.
 --------------------------------------------------------------
 
 ```
