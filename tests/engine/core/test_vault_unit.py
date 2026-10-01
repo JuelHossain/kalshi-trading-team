@@ -93,6 +93,48 @@ class TestPrincipalLock:
         vault.lock_principal()
         assert vault.is_locked is True
 
+    def test_lock_stays_latched_when_the_balance_falls_back_below_threshold(self):
+        """_check_lock must OR the day's profit into the mode's own latch,
+        not overwrite self.is_locked with a fresh `daily_profit >= threshold`
+        check on every call.
+
+        Regression: `locked = self._paper_locked if is_paper_trading else
+        self._live_locked` seeds `locked` from the latch that already
+        protects the principal. A change that instead starts `locked` at
+        False every call would unlock the vault the moment the balance dips
+        back under start-of-day + threshold -- silently undoing a lock that
+        was already protecting the principal, in live mode real money.
+        Checked for both modes, since each latches independently.
+        """
+        for is_paper in (False, True):
+            v = RecursiveVault(test_mode=True)
+            v.DAILY_PROFIT_THRESHOLD_CENTS = 5000
+            asyncio.run(v.initialize(30000))
+            asyncio.run(v.update_balance(30000, is_paper_trading=is_paper))
+            asyncio.run(v.update_balance(36000, is_paper_trading=is_paper))  # $60 profit: locks
+            assert v.is_locked is True, is_paper
+
+            asyncio.run(v.update_balance(31000, is_paper_trading=is_paper))  # back to $10
+            assert v.is_locked is True, f"lock did not stay latched, is_paper_trading={is_paper}"
+
+    def test_manual_lock_survives_the_next_same_mode_refresh(self):
+        """lock_principal must latch the mode-specific flag _check_lock
+        reads (_live_locked / _paper_locked), not only self.is_locked --
+        otherwise the very next update_balance for the same mode reads the
+        still-unset latch and silently undoes a manual lock made mid-cycle,
+        right after a fill (see HandAgent.on_execution_ready). Checked for
+        both modes.
+        """
+        for is_paper in (False, True):
+            v = RecursiveVault(test_mode=True)
+            asyncio.run(v.initialize(30000))
+            asyncio.run(v.update_balance(30000, is_paper_trading=is_paper))
+            v.lock_principal(is_paper_trading=is_paper)
+            assert v.is_locked is True, is_paper
+
+            asyncio.run(v.update_balance(30000, is_paper_trading=is_paper))
+            assert v.is_locked is True, f"manual lock did not survive, is_paper_trading={is_paper}"
+
 
 class TestTradeableCapital:
     """Test tradeable capital calculations."""

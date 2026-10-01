@@ -33,6 +33,11 @@ class TestKillSwitchMechanisms:
 class TestRagnarokProtocol:
     """Test emergency Ragnarok liquidation protocol."""
 
+    @pytest.fixture(autouse=True)
+    def _unpinned(self, monkeypatch):
+        """These cover the live flatten; paper-pinned Ragnarok leaves Kalshi alone."""
+        monkeypatch.setenv("IS_PAPER_TRADING", "false")
+
     @pytest.mark.asyncio
     async def test_reports_zero_when_no_active_orders(self, monkeypatch):
         """Nothing to liquidate is a success, not a failure."""

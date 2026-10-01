@@ -119,11 +119,12 @@ def main() -> int:
             _row(BAD, name, f"missing — needed for {needed_for}")
 
     # --- trading mode
-    paper = os.getenv("IS_PAPER_TRADING", "").strip().lower() in ("true", "1", "yes")
-    if paper:
-        _row(OK, "IS_PAPER_TRADING", "true — orders are simulated")
+    raw_paper = os.getenv("IS_PAPER_TRADING", "").strip().lower()
+    if raw_paper in ("false", "0", "no", "off"):
+        _row(WARN, "IS_PAPER_TRADING", "false — live orders are possible")
     else:
-        _row(WARN, "IS_PAPER_TRADING", "not set — the dashboard decides per cycle")
+        # Absent or unrecognised pins paper: the engine fails safe.
+        _row(OK, "IS_PAPER_TRADING", "pinned — orders are simulated")
 
     if args.connect:
         failures += _handshake(env)

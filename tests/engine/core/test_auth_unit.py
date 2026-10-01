@@ -84,8 +84,8 @@ class TestAuthManager:
 
         assert manager.validate_api_key(mock_request) is True
 
-    def test_validate_api_key_from_query_param(self):
-        """API key validation works from query parameter."""
+    def test_a_key_in_the_query_string_is_refused(self):
+        """Query-string keys leak into logs, history and Referer; header only."""
         manager = AuthManager()
         manager.api_key = "test-api-key-123"
 
@@ -93,7 +93,7 @@ class TestAuthManager:
         mock_request.headers = {}
         mock_request.query = {"api_key": "test-api-key-123"}
 
-        assert manager.validate_api_key(mock_request) is True
+        assert manager.validate_api_key(mock_request) is False
 
     def test_validate_api_key_rejects_invalid_key(self):
         """Invalid API keys are rejected."""

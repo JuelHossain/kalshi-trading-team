@@ -733,20 +733,16 @@ class TestSynapsePersistence:
         assert await synapse.errors.size() >= 1
 
     @pytest.mark.asyncio
-    async def test_low_severity_also_persists(self, error_dispatcher_with_synapse, synapse):
-        """Verify LOW severity errors also persist to synapse (non-blocking)."""
+    async def test_low_severity_does_not_persist(self, error_dispatcher_with_synapse, synapse):
+        """LOW must not enter the error box: any row there halts every cycle
+        until /reset, so persisting it latched the engine off."""
         await error_dispatcher_with_synapse.dispatch(
             code="DATA_QUEUE_EMPTY", severity=ErrorSeverity.LOW
         )
 
-        await asyncio.sleep(0.2)  # Give time for non-blocking task
+        await asyncio.sleep(0.2)  # a fire-and-forget push would have landed by now
 
-        # LOW severity still persists but via fire-and-forget
-        assert await synapse.errors.size() >= 1
-
-        error = await synapse.errors.pop()
-        assert error.code == "DATA_QUEUE_EMPTY"
-        assert error.severity == "LOW"
+        assert await synapse.errors.size() == 0
 
     @pytest.mark.asyncio
     async def test_persisted_error_format(self, error_dispatcher_with_synapse, synapse):

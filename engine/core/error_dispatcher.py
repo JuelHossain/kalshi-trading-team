@@ -233,14 +233,14 @@ class ErrorDispatcher:
         if self.event_bus:
             fire_and_forget(self._broadcast_error(error))
 
-        # Log to Synapse if available
-        if self.synapse:
-            if error.severity.value >= ErrorSeverity.HIGH.value:
-                # CRITICAL: Await for High/Critical errors to ensure "Error Box" halts the engine
-                await self._log_to_synapse(error)
-            else:
-                # Non-critical: Fire-and-forget
-                fire_and_forget(self._log_to_synapse(error))
+        # The error box is read in exactly one way: authorize_cycle counts its
+        # rows and refuses every cycle while there are any, until /reset. So
+        # only what should halt the engine goes in -- HIGH and above, awaited
+        # so the halt is in place before the next cycle. MEDIUM and LOW used
+        # to be persisted too, so any one of them latched the engine off; they
+        # still reach the terminal, the cockpit and the ErrorManager.
+        if self.synapse and error.severity.value >= ErrorSeverity.HIGH.value:
+            await self._log_to_synapse(error)
 
         # Hand the error to the policy layer. This is what makes severity mean
         # something: the manager escalates, counts, and can halt the engine.

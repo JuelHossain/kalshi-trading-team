@@ -10,13 +10,15 @@ let mockIsAuthenticated = false;
 let mockAuthMode: 'demo' | 'production' | null = null;
 
 vi.mock('../store/useStore', () => ({
-  useStore: () => ({
-    isAuthenticated: mockIsAuthenticated,
-    authMode: mockAuthMode,
-    setAuthenticated: mockSetAuthenticated,
-    setAuthMode: mockSetAuthMode,
-    logout: mockLogout,
-  }),
+  // Honours the selector, as zustand does.
+  useStore: (selector: (s: Record<string, unknown>) => unknown) =>
+    selector({
+      isAuthenticated: mockIsAuthenticated,
+      authMode: mockAuthMode,
+      setAuthenticated: mockSetAuthenticated,
+      setAuthMode: mockSetAuthMode,
+      logout: mockLogout,
+    }),
   getStoredAuthMode: () => mockAuthMode,
 }));
 
@@ -394,8 +396,10 @@ describe('useAuth Hook', () => {
         await result.current.logout();
       });
 
+      // JSON header required: the engine refuses non-JSON browser writes (CSRF guard).
       expect(mockFetch).toHaveBeenCalledWith('/api/auth/logout', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
       });
     });

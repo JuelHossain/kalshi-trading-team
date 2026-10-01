@@ -38,7 +38,25 @@ def initialize_gemini_client(log_callback=None, bus: EventBus = None) -> tuple:
         return (None, None, None, False)
 
     try:
-        client = genai.Client(api_key=api_key)
+        # Retry transient failures (the SDK default is a single attempt, and
+        # its retry codes cover 408/429/5xx). One 429 used to veto the market
+        # -- or, before the Brain stopped falling back, hand it to an
+        # ungrounded model.
+        from google.genai import types as genai_types
+
+        client = genai.Client(
+            api_key=api_key,
+            http_options=genai_types.HttpOptions(
+                # The SDK default is no timeout at all: a request the server
+                # accepts and never answers blocked the Brain's only
+                # queue-draining loop forever (reproduced against a silent
+                # socket). Timeouts are retried like any transient failure.
+                timeout=45_000,  # ms
+                retry_options=genai_types.HttpRetryOptions(
+                    attempts=3, initial_delay=1.0, max_delay=8.0
+                ),
+            ),
+        )
         openrouter_key = os.environ.get("OPENROUTER_API_KEY")
 
         # Initialize AI client with OpenRouter fallback

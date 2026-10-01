@@ -65,12 +65,21 @@ async def test_live_request_is_forced_to_paper_when_set(engine, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_live_request_is_honoured_when_unset(engine, monkeypatch):
-    """Unset means the request decides, which is the previous behaviour."""
+async def test_live_request_is_honoured_when_explicitly_unpinned(engine, monkeypatch):
+    """IS_PAPER_TRADING=false on the host means the request decides."""
+    eng, seen = engine
+    monkeypatch.setenv("IS_PAPER_TRADING", "false")
+
+    assert await _run(eng, seen, requested=False) is False
+
+
+@pytest.mark.asyncio
+async def test_an_absent_pin_fails_safe(engine, monkeypatch):
+    """A missing or cleared key must not open live trading."""
     eng, seen = engine
     monkeypatch.delenv("IS_PAPER_TRADING", raising=False)
 
-    assert await _run(eng, seen, requested=False) is False
+    assert await _run(eng, seen, requested=False) is True
 
 
 @pytest.mark.asyncio
@@ -95,11 +104,34 @@ async def test_cycle_arms_the_order_path_for_live(engine, monkeypatch):
     """
     from core import trading_mode
 
-    eng, seen = engine
-    monkeypatch.delenv("IS_PAPER_TRADING", raising=False)
+    eng, _seen = engine
+    monkeypatch.setenv("IS_PAPER_TRADING", "false")
     trading_mode.set_live(False)
 
-    assert await _run(eng, seen, requested=False) is False
+    # Arming happens only once authorize_cycle has passed -- it used to run
+    # before it, so a refused cycle could arm real orders
+    # (test_halts_reach_the_hand.py). So this runs an authorised cycle to the
+    # end instead of stopping it at the progress display.
+    class _Progress:
+        def update_phase(self, *_a, **_k):
+            pass
+
+        def complete_phase(self, *_a, **_k):
+            pass
+
+    @contextlib.contextmanager
+    def progress(_cycle, _is_paper):
+        yield _Progress()
+
+    async def authorised(_is_paper_trading=False):
+        return True
+
+    monkeypatch.setattr(eng.display, "cycle_progress", progress)
+    monkeypatch.setattr(eng, "authorize_cycle", authorised)
+    eng.is_processing = False
+
+    await eng.execute_single_cycle(is_paper_trading=False)
+
     assert (
         trading_mode.is_live() is True
     ), "cycle reported LIVE but the order path was left in paper mode"
