@@ -42,6 +42,29 @@ class TestApprovedTradeReachesTheMarket:
         assert placed["count"] >= 1, "order placed for zero contracts"
 
     @pytest.mark.asyncio
+    async def test_the_fill_ticket_reaches_the_ledger(self, cycle):
+        """record_fill must be given the side and price actually traded, not
+        guessed later from the order id -- a real Kalshi order id carries
+        neither, so every live fill's realised P&L used to be computed as
+        though it had bought YES at the YES market price (core/ledger.py's
+        _parse_order_id, before record_fill stored the real ticket)."""
+        from core import ledger
+
+        brain, hand, vault = cycle["brain"], cycle["hand"], cycle["vault"]
+        await vault.initialize(100_000)
+
+        brain.run_debate = _debate()
+        await brain.process_single_opportunity(_opportunity())
+        await hand.on_execution_ready(None)
+
+        placed = cycle["kalshi"].place_order.await_args.kwargs
+        (fill,) = ledger.recent_fills()
+
+        assert fill["side"] == placed["side"]
+        assert fill["price_cents"] == placed["price"]
+        assert fill["count"] == placed["count"]
+
+    @pytest.mark.asyncio
     async def test_execution_ready_is_published_for_the_hand(self, cycle):
         """The Hand listens for this event; without it nothing ever trades."""
         seen = []
@@ -180,6 +203,41 @@ class TestSafetyRulesRefuseTheTrade:
         await hand.on_execution_ready(None)
 
         cycle["kalshi"].place_order.assert_not_awaited()
+
+
+class TestTheProfitLockLatchesTheFillsOwnMode:
+    """A fill's own mode must decide which per-mode latch it locks.
+
+    on_execution_ready calls `self.vault.lock_principal(is_paper_trading=not
+    trading_mode.is_live())`. A plain `lock_principal()` call (default
+    is_paper_trading=False) would set the live flag from a paper fill: the
+    next paper authorize_cycle would then clear self.is_locked (the paper
+    latch it actually reads is still unset), and a later live cycle would
+    start locked for a fill that never happened live.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_paper_fill_locks_the_paper_flag_not_the_live_one(self, cycle):
+        from core import trading_mode
+
+        brain, hand, vault = cycle["brain"], cycle["hand"], cycle["vault"]
+        await vault.initialize(100_000)
+        trading_mode.set_live(False)  # paper mode -- also conftest's default
+
+        # What on_execution_ready's lock check reads is current_balance vs
+        # start_of_day_balance, not the size of this fill -- push the
+        # balance to clear the threshold even after the stake this trade
+        # will confirm (at most MAX_STAKE_CENTS) is deducted from it.
+        vault.current_balance = vault.start_of_day_balance + hand.PROFIT_LOCK_THRESHOLD + 10_000
+
+        brain.run_debate = _debate()
+        await brain.process_single_opportunity(_opportunity())
+        await hand.on_execution_ready(None)
+
+        cycle["kalshi"].place_order.assert_awaited_once()
+        assert vault.is_locked is True
+        assert vault._paper_locked is True, "the paper fill must set the paper latch"
+        assert vault._live_locked is False, "a paper fill must not set the live latch"
 
 
 class TestEveryDecisionIsRecorded:

@@ -50,6 +50,22 @@ _dispatching: contextvars.ContextVar[frozenset[str]] = contextvars.ContextVar(
 )
 
 
+def detached_context() -> contextvars.Context:
+    """A copy of the current Context with no dispatch in progress.
+
+    A task inherits its creator's Context, so a task spawned from inside a
+    subscriber carries that dispatch's topics for its whole life -- long after
+    the dispatch has returned -- and any publish of those topics from it is
+    dropped as re-entrant. A detached task is never awaited by the dispatch
+    that spawned it, so it cannot deadlock it; it must start clean. This is
+    what stalled autopilot: the cycle is detached from REQUEST_CYCLE's
+    dispatch, and the next REQUEST_CYCLE from inside it was dropped.
+    """
+    ctx = contextvars.copy_context()
+    ctx.run(_dispatching.set, frozenset())
+    return ctx
+
+
 class EventBus:
     """
     Asynchronous JSON Message Bus.

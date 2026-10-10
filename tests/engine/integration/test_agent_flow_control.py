@@ -2,9 +2,15 @@
 Test script to verify agent flow control fixes.
 
 This test simulates the full agent lifecycle to ensure:
-1. Senses scans once and goes to standby
-2. Brain processes one opportunity per trigger without self-triggering
-3. Restock mechanism has proper cooldown
+1. Brain does not re-trigger itself; its monitor loop drains the queue
+2. Restock mechanism has proper cooldown
+
+Senses' own scan-once-then-standby invariant, and the rescan that must
+happen once both the stock buffer and the opportunity queue run dry, are
+covered in tests/engine/agents/test_senses_rescan.py; that module uses a
+fake Kalshi client so it can tell "the guard held" from "there was nothing
+to scan" -- this file's former test_senses_guard could not, since it gave
+Senses no client at all and so passed unconditionally either way.
 """
 
 import asyncio
@@ -18,7 +24,6 @@ import pytest
 # because an earlier test had already cached the real module. conftest.py puts
 # the engine source on the path.
 from agents.brain import BrainAgent
-from agents.senses import SensesAgent
 from agents.soul import SoulAgent
 from core.bus import EventBus
 from core.flow_control import should_restock
@@ -59,48 +64,6 @@ async def _settled(read, quiet_for: float = 0.3, timeout: float = 10.0):
             return current
 
     return previous
-
-
-@pytest.mark.asyncio
-async def test_senses_guard():
-    """Test that Senses only scans once and goes to standby"""
-    print("\n" + "=" * 60)
-    print("TEST 1: Senses Initial Scan Guard")
-    print("=" * 60)
-
-    clear_database(os.environ["GHOST_SYNAPSE_DB"])
-
-    bus = EventBus()
-    synapse = Synapse()
-    vault = RecursiveVault()
-
-    # Initialize agents
-    soul = SoulAgent(1, bus, vault=vault, synapse=synapse)
-    senses = SensesAgent(2, bus, kalshi_client=None, synapse=synapse)
-    brain = BrainAgent(3, bus, synapse=synapse)
-
-    await soul.setup()
-    await senses.setup()
-    await brain.setup()
-
-    # First trigger - should queue opportunities
-    print("\n[TEST] First PREFLIGHT_COMPLETE trigger...")
-    await bus.publish("PREFLIGHT_COMPLETE", {}, "TEST")
-
-    opp_size_1 = await _settled(synapse.opportunities.size)
-    print(f"[TEST] Opportunities after first trigger: {opp_size_1}")
-
-    # Second trigger - should NOT queue more
-    print("\n[TEST] Second PREFLIGHT_COMPLETE trigger...")
-    await bus.publish("PREFLIGHT_COMPLETE", {}, "TEST")
-
-    opp_size_2 = await _settled(synapse.opportunities.size)
-    print(f"[TEST] Opportunities after second trigger: {opp_size_2}")
-
-    # Verify guard is working
-    assert (
-        opp_size_1 == opp_size_2
-    ), f"Senses re-queued on a second PREFLIGHT_COMPLETE: {opp_size_1} -> {opp_size_2}"
 
 
 @pytest.mark.asyncio

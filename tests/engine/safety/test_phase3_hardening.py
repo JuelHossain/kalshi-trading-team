@@ -51,22 +51,23 @@ class TestPhase3Hardening:
 
     @pytest.mark.asyncio
     async def test_vault_rollback_on_cancel(self):
-        """Test that cancelling a cycle releases all reservations."""
+        """Test that cancelling a cycle releases all reservations.
+
+        Drives the real cancel_cycle route handler rather than calling
+        vault.release_all_reservations() directly: this test used to do the
+        latter and asserted a value it had just set on the vault itself,
+        never touching cancel_cycle at all, so it could not have caught a
+        cancel_cycle that stopped releasing reservations.
+        """
+        from http_api.routes import cancel_cycle
+
         engine = GhostEngine()
         await engine.vault.initialize(30000)  # $300 balance
         engine.vault.reserve_funds(5000)  # $50 reserved
         assert engine.vault._reserved_funds == 5000
 
-        # Mocking a request object for aiohttp
-        MagicMock()
+        await cancel_cycle(engine)(None)
 
-        # We need to find where cancel_cycle is defined.
-        # In GhostEngine.start_http_server, it's a local function.
-        # However, we can test the vault directly or mock the server call if we can access it.
-        # Simpler: Test the vault's release_all_reservations and then verify it's called in cancel_cycle via source analysis or mocking.
-
-        # Let's test the vault method first
-        engine.vault.release_all_reservations()
         assert engine.vault._reserved_funds == 0
 
     @pytest.mark.asyncio

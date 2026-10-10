@@ -7,11 +7,7 @@ import os
 
 import aiohttp
 from agents.brain.simulation import kelly_fraction
-from core import trading_mode
-from core.constants import (
-    HAND_KELLY_FRACTION,
-    HAND_MAX_STAKE_CENTS,
-)
+from core import constants, trading_mode
 
 
 def parse_orderbook(raw, side: str = "yes") -> dict | None:
@@ -115,7 +111,7 @@ async def snipe_check(
     kalshi_client,
     ticker: str,
     log_callback,
-    max_stake_cents: int = HAND_MAX_STAKE_CENTS,
+    max_stake_cents: int | None = None,
     side: str = "yes",
 ) -> dict:
     """Analyze order book for best entry with zero slippage.
@@ -124,6 +120,8 @@ async def snipe_check(
     is a YES bid at (100 - x). Prices are mirrored rather than fetching a
     second book.
     """
+    if max_stake_cents is None:
+        max_stake_cents = constants.HAND_MAX_STAKE_CENTS
     if not kalshi_client:
         await log_callback("Kalshi client unavailable. Cannot perform snipe check.", level="ERROR")
         return {"valid": False, "reason": "Kalshi client unavailable"}
@@ -173,10 +171,10 @@ def calculate_kelly_stake(
     confidence: float,
     ev: float,
     vault,
-    max_stake_cents: int = HAND_MAX_STAKE_CENTS,
+    max_stake_cents: int | None = None,
     probability: float | None = None,
     price_cents: int | None = None,
-    kelly_factor: float = HAND_KELLY_FRACTION,
+    kelly_factor: float | None = None,
 ) -> int:
     """Stake a fraction of Kelly, sized on the edge.
 
@@ -195,6 +193,10 @@ def calculate_kelly_stake(
     Returns 0 rather than guessing when the probability or price is missing,
     so a wiring mistake cannot silently produce a mis-sized live order.
     """
+    if max_stake_cents is None:
+        max_stake_cents = constants.HAND_MAX_STAKE_CENTS
+    if kelly_factor is None:
+        kelly_factor = constants.HAND_KELLY_FRACTION
     if ev <= 0 or probability is None or price_cents is None:
         return 0
 
@@ -202,8 +204,12 @@ def calculate_kelly_stake(
     if fraction <= 0:
         return 0
 
-    bankroll = vault.get_available_balance()
-    return min(int(bankroll * fraction), max_stake_cents)
+    # Tradeable, not merely available: once the profit lock engages only
+    # house money is sized. Then clamped so no stake can carry the balance
+    # through the hard floor -- the floor used to be checked only against
+    # the balance before the trade.
+    bankroll = vault.get_tradeable_balance()
+    return min(int(bankroll * fraction), max_stake_cents, vault.get_floor_headroom())
 
 
 async def execute_order(
@@ -212,7 +218,7 @@ async def execute_order(
     ticker: str,
     price: int,
     stake: int,
-    max_stake_cents: int = HAND_MAX_STAKE_CENTS,
+    max_stake_cents: int | None = None,
     log_callback=None,
     side: str = "yes",
 ) -> dict:
@@ -221,6 +227,9 @@ async def execute_order(
     `side` is "yes" or "no". `price` is the price of that side, so the
     validation below is unchanged: both sides quote 1-99c.
     """
+
+    if max_stake_cents is None:
+        max_stake_cents = constants.HAND_MAX_STAKE_CENTS
 
     # === PRE-TRADE VALIDATION ===
 
@@ -246,17 +255,22 @@ async def execute_order(
             "error": f"Stake ${stake/100:.2f} exceeds max ${max_stake_cents/100:.2f}",
         }
 
-    # 5. Check available balance
-    available_balance = vault.get_available_balance()
+    # 5. Check available balance (house money only once the profit lock is on)
+    available_balance = vault.get_tradeable_balance()
     if available_balance < stake:
         return {
             "success": False,
             "error": f"Insufficient funds: available=${available_balance/100:.2f}, required=${stake/100:.2f}",
         }
 
-    # 6. Check hard floor
+    # 6. Check hard floor -- after the trade, not just before it
     if vault.current_balance < vault.HARD_FLOOR_CENTS:
         return {"success": False, "error": "Hard floor breach - emergency lockdown active"}
+    if stake > vault.get_floor_headroom():
+        return {
+            "success": False,
+            "error": f"Stake ${stake/100:.2f} would take the balance below the hard floor",
+        }
 
     # === LIVE TRADING ===
     if not kalshi_client:
@@ -278,15 +292,38 @@ async def execute_order(
             price=price,
             count=contract_count,
         )
-
-        # Order placed successfully - confirm the reservation
-        vault.confirm_reservation(stake)
-        return {"success": True, "order_id": result.get("order_id")}
-
     except Exception as e:
         # Order failed - release the reserved funds
         vault.release_reservation(stake)
         return {"success": False, "error": str(e)[:100]}
+
+    result = result or {}
+    order_id = (
+        result.get("order_id")
+        or (result.get("order") or {}).get("order_id")
+        or result.get("client_order_id")
+    )
+
+    # Kalshi V2 says how much filled. Orders are immediate-or-cancel, so the
+    # rest was cancelled: confirm only what filled and release the remainder.
+    # A paper fill carries no fill_count and is always complete.
+    filled = result.get("fill_count")
+    if filled is not None:
+        try:
+            filled_contracts = int(float(filled))
+        except (TypeError, ValueError):
+            filled_contracts = contract_count
+        if filled_contracts <= 0:
+            vault.release_reservation(stake)
+            return {"success": False, "error": "Order did not fill (immediate-or-cancel)"}
+        filled_stake = min(stake, filled_contracts * price)
+        vault.confirm_reservation(filled_stake)
+        if stake > filled_stake:
+            vault.release_reservation(stake - filled_stake)
+        return {"success": True, "order_id": order_id, "stake": filled_stake}
+
+    vault.confirm_reservation(stake)
+    return {"success": True, "order_id": order_id, "stake": stake}
 
 
 async def send_notification(ticker: str, stake: int, result: dict, log_callback=None):

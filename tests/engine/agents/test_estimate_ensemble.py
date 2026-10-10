@@ -145,3 +145,45 @@ class TestTheDisagreementVeto:
         await brain.process_single_opportunity(_opportunity(kalshi_price=0.50))
 
         assert await cycle["synapse"].executions.size() == 1
+
+    @pytest.mark.asyncio
+    async def test_one_surviving_sample_is_not_enough(self, cycle):
+        """With one survivor the spread reads 0.0 and used to pass by default.
+
+        The audit reproduced an APPROVED 0.90 against a 50c market after two
+        of three samples failed.
+        """
+        brain = cycle["brain"]
+        brain.ESTIMATE_SAMPLES = 3
+        brain.run_debate = AsyncMock(
+            return_value={
+                "estimated_probability": 0.90,
+                "confidence": 0.95,
+                "reasoning": "r",
+                "disagreement": 0.0,
+                "samples": 1,
+            }
+        )
+
+        result = await brain.process_single_opportunity(_opportunity(kalshi_price=0.50))
+
+        assert result == "VETOED"
+        assert await cycle["synapse"].executions.size() == 0
+
+    @pytest.mark.asyncio
+    async def test_two_of_three_is_a_quorum(self, cycle):
+        brain = cycle["brain"]
+        brain.ESTIMATE_SAMPLES = 3
+        brain.run_debate = AsyncMock(
+            return_value={
+                "estimated_probability": 0.90,
+                "confidence": 0.95,
+                "reasoning": "r",
+                "disagreement": 0.02,
+                "samples": 2,
+            }
+        )
+
+        await brain.process_single_opportunity(_opportunity(kalshi_price=0.50))
+
+        assert await cycle["synapse"].executions.size() == 1
